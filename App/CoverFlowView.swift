@@ -1,215 +1,392 @@
 import SwiftUI
 
-/// Nostalgic iPod Classic 3D Cover Flow reimagined in Liquid Glass:
-/// 3D perspective carousel with mirrored glass floor reflections, center forward pop,
-/// specular glowing rim, and tap-to-play / tap-to-flip 3D interaction.
-struct CoverFlowView: View {
-  let items: [CoverFlowItem]
-  var cardSize: CGFloat = 200
-  var onSelect: (CoverFlowItem) -> Void
+/// Classic iPod-style Cover Flow, rebuilt: continuous drag with momentum, tightly stacked
+/// side covers at ~70°, glossy floor reflections, iPod scrubber, and tap-to-flip tracklists.
+struct CoverFlowItem: Identifiable, Hashable {
+  let id: String
+  let title: String
+  let subtitle: String
+  let artworkURL: String
+  var album: AlbumShowcase? = nil
+  var track: Track? = nil
+  var localTracks: [Track] = []
+}
 
-  @State private var activeIndex: Int = 0
-  @State private var dragOffset: CGFloat = 0
+struct CoverFlowScreen: View {
+  @ObservedObject private var app = AppModel.shared
+  @ObservedObject private var store = LibraryStore.shared
+  @Environment(\.dismiss) private var dismiss
+  @State private var source: Source = .releases
 
-  struct CoverFlowItem: Identifiable, Hashable {
-    let id: String
-    let title: String
-    let subtitle: String
-    let badge: String
-    let artworkURL: String
-    let track: Track?
-    let album: AlbumShowcase?
+  enum Source: String, CaseIterable, Identifiable {
+    case releases = "Lançamentos"
+    case trending = "Em alta"
+    case library = "Sua biblioteca"
+    var id: String { rawValue }
   }
 
   var body: some View {
-    VStack(spacing: 14) {
-      GeometryReader { geo in
-        let midX = geo.size.width / 2
-        let spacing = cardSize * 0.62
+    ZStack {
+      LinearGradient(colors: [Color(white: 0.10), .black, .black], startPoint: .top, endPoint: .bottom)
+        .ignoresSafeArea()
+      RadialGradient(colors: [Theme.lavender.opacity(0.18), .clear], center: .init(x: 0.5, y: 0.62), startRadius: 10, endRadius: 360)
+        .ignoresSafeArea()
 
-        ZStack {
-          ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
-            let rawDelta = Double(idx - activeIndex) + Double(dragOffset / spacing)
-            let clamped = max(-3.2, min(3.2, rawDelta))
-            let absD = abs(clamped)
-            let isCenter = absD < 0.35
+      VStack(spacing: 14) {
+        HStack {
+          GlassIconButton(systemName: "xmark", size: 40, foreground: .white) { dismiss() }
+          Spacer()
+          Text("Cover Flow")
+            .font(.system(size: 17, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white)
+          Spacer()
+          Color.clear.frame(width: 40, height: 40)
+        }
+        .padding(.horizontal, 20)
 
-            // Classic iPod 3D Cover Flow math: side covers rotate inward ~54°, recede & tuck neatly
-            let angle = clamped == 0 ? 0.0 : -Double(clamped > 0 ? 1 : -1) * min(56.0, absD * 52.0)
-            let xOffset = clamped * Double(spacing) + (clamped == 0 ? 0 : Double(clamped > 0 ? 1 : -1) * Double(cardSize) * 0.14 * min(1, absD))
-            let scale = max(0.72, 1.0 - min(absD, 1.8) * 0.17)
-            let opacity = absD > 2.8 ? 0.0 : max(0.28, 1.0 - absD * 0.26)
-            let z = 100.0 - absD * 10.0
-
-            VStack(spacing: 0) {
-              // Main 3D Cover Card
-              ZStack(alignment: .bottomLeading) {
-                RemoteArtwork(url: item.artworkURL, cornerRadius: 18)
-                  .frame(width: cardSize, height: cardSize)
-
-                // Specular Liquid Glass gloss
-                LinearGradient(
-                  colors: [Color.white.opacity(isCenter ? 0.24 : 0.12), Color.clear, Color.black.opacity(0.22)],
-                  startPoint: .topLeading,
-                  endPoint: .bottomTrailing
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-
-                if isCenter && !item.badge.isEmpty {
-                  Text(item.badge)
-                    .font(Theme.font(10, .bold))
-                    .foregroundStyle(Theme.ink)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(Theme.aurora, in: Capsule())
-                    .padding(10)
-                }
-              }
-              .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                  .stroke(
-                    isCenter
-                      ? LinearGradient(colors: [.white.opacity(0.92), Theme.amber.opacity(0.75), Theme.coral.opacity(0.5)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                      : Theme.glassStroke,
-                    lineWidth: isCenter ? 2.0 : 0.8
-                  )
-              )
-              .shadow(color: isCenter ? Theme.amber.opacity(0.32) : .black.opacity(0.55), radius: isCenter ? 24 : 12, y: isCenter ? 10 : 6)
-
-              // Mirrored iPod Liquid Glass Floor Reflection
-              RemoteArtwork(url: item.artworkURL, cornerRadius: 18)
-                .frame(width: cardSize, height: cardSize * 0.34, alignment: .bottom)
-                .scaleEffect(y: -1)
-                .clipped()
-                .mask(
-                  LinearGradient(
-                    colors: [Color.white.opacity(0.34), Color.white.opacity(0.06), Color.clear],
-                    startPoint: .top,
-                    endPoint: .bottom
-                  )
-                )
-                .opacity(isCenter ? 0.85 : 0.45)
-                .offset(y: 4)
-            }
-            .scaleEffect(scale)
-            .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0), perspective: 0.46)
-            .position(x: midX + CGFloat(xOffset), y: cardSize * 0.62)
-            .opacity(opacity)
-            .zIndex(z)
-            .onTapGesture {
-              if idx == activeIndex {
-                Haptics.medium()
-                onSelect(item)
-              } else {
-                Haptics.selection()
-                withAnimation(.spring(response: 0.38, dampingFraction: 0.80)) {
-                  activeIndex = idx
-                }
-              }
-            }
+        HStack(spacing: 6) {
+          ForEach(Source.allCases) { s in
+            PrismChip(title: s.rawValue, active: source == s) { source = s }
           }
         }
-        .contentShape(Rectangle())
-        .gesture(
-          DragGesture(minimumDistance: 8)
-            .onChanged { value in
-              dragOffset = value.translation.width
-            }
-            .onEnded { value in
-              let threshold = cardSize * 0.24
-              var next = activeIndex
-              if value.predictedEndTranslation.width < -threshold {
-                next = min(items.count - 1, activeIndex + 1)
-              } else if value.predictedEndTranslation.width > threshold {
-                next = max(0, activeIndex - 1)
-              }
-              if next != activeIndex { Haptics.selection() }
-              withAnimation(.spring(response: 0.38, dampingFraction: 0.80)) {
-                activeIndex = next
-                dragOffset = 0
-              }
-            }
-        )
-      }
-      .frame(height: cardSize * 1.42)
 
-      // Focused Cover Title + Subtitle (100% firm, crisp typography below the 3D reflection)
-      if activeIndex >= 0 && activeIndex < items.count {
-        let cur = items[activeIndex]
-        VStack(spacing: 4) {
-          Text(cur.title)
-            .font(Theme.font(17, .bold))
-            .foregroundStyle(Theme.text)
-            .lineLimit(1)
-          Text(cur.subtitle)
-            .font(Theme.font(13, .medium))
-            .foregroundStyle(Theme.muted)
-            .lineLimit(1)
-        }
-        .padding(.horizontal, 28)
-        .onTapGesture {
-          Haptics.medium()
-          onSelect(cur)
-        }
+        CoverFlowCarousel(items: items)
+          .id(source)
+          .frame(maxHeight: .infinity)
       }
+      .padding(.top, 8)
     }
-    .onChange(of: items.count) { _, newCount in
-      if activeIndex >= newCount { activeIndex = max(0, newCount - 1) }
+    .environment(\.colorScheme, .dark)
+  }
+
+  private var items: [CoverFlowItem] {
+    switch source {
+    case .releases:
+      let albums = (app.feed?.newReleases ?? []) + (app.feed?.brazilReleases ?? [])
+      var seen = Set<String>()
+      return albums.compactMap { a in
+        guard seen.insert(a.id).inserted else { return nil }
+        return CoverFlowItem(id: a.id, title: a.title, subtitle: a.artist, artworkURL: a.artworkURL, album: a)
+      }
+    case .trending:
+      return (app.feed?.topBrazil ?? []).map { t in
+        CoverFlowItem(id: t.id, title: t.title, subtitle: t.artist, artworkURL: ArtworkStore.shared.url(for: t), track: t)
+      }
+    case .library:
+      var groups: [String: [Track]] = [:]
+      var order: [String] = []
+      for t in store.favoriteTracks + store.recentTracks + store.playlists.flatMap({ store.tracks(in: $0) }) {
+        let key = (t.album.isEmpty ? t.title : t.album).lowercased() + "|" + LibraryStore.mainArtist(t.artist).lowercased()
+        if groups[key] == nil { order.append(key) }
+        if !(groups[key]?.contains(where: { $0.id == t.id }) ?? false) { groups[key, default: []].append(t) }
+      }
+      return order.compactMap { k in
+        guard let tracks = groups[k], let f = tracks.first else { return nil }
+        return CoverFlowItem(id: k, title: f.album.isEmpty ? f.title : f.album, subtitle: LibraryStore.mainArtist(f.artist),
+                             artworkURL: ArtworkStore.shared.url(for: f), localTracks: tracks)
+      }
     }
   }
 }
 
-/// Full-screen immersive iPod 3D Cover Flow stage (pushed inside NavigationStack -> native swipe-back!).
-struct CoverFlowFullScreenView: View {
-  let items: [CoverFlowView.CoverFlowItem]
-  let onPlay: (CoverFlowView.CoverFlowItem) -> Void
-  @ObservedObject private var player = AudioPlayer.shared
+struct CoverFlowCarousel: View {
+  let items: [CoverFlowItem]
+
+  @State private var pos: Double = 0
+  @State private var dragStart: Double?
+  @State private var flippedId: String?
+  @State private var lastHapticIndex = 0
+
+  var body: some View {
+    GeometryReader { g in
+      let W = g.size.width
+      let C = min(W * 0.60, g.size.height * 0.42)
+      VStack(spacing: 0) {
+        ZStack {
+          ForEach(visibleIndices, id: \.self) { idx in
+            let item = items[idx]
+            CoverFlowCard(item: item, size: C, flipped: flippedId == item.id) {
+              flippedId = nil
+            }
+            .modifier(CoverFlowTransform(delta: Double(idx) - pos, width: W, cardSize: C))
+            .onTapGesture { tap(idx) }
+          }
+        }
+        .frame(width: W, height: C * 1.55)
+        .contentShape(Rectangle())
+        .gesture(drag(spacing: W * 0.16))
+
+        if !items.isEmpty {
+          let cur = items[currentIndex]
+          VStack(spacing: 4) {
+            Text(cur.title)
+              .font(Theme.font(19, .semibold))
+              .foregroundStyle(.white)
+              .lineLimit(1)
+            Text(cur.subtitle)
+              .font(Theme.font(15))
+              .foregroundStyle(.white.opacity(0.6))
+              .lineLimit(1)
+          }
+          .padding(.horizontal, 30)
+          .animation(.none, value: currentIndex)
+          .padding(.top, 6)
+
+          Spacer(minLength: 10)
+
+          scrubber
+            .padding(.horizontal, 30)
+            .padding(.bottom, 24)
+        } else {
+          EmptyStateView(icon: "square.stack.3d.forward.dottedline", title: "Nada por aqui ainda", message: "Curta músicas ou abra os lançamentos para preencher o Cover Flow.")
+        }
+      }
+    }
+  }
+
+  private var currentIndex: Int {
+    guard !items.isEmpty else { return 0 }
+    return min(items.count - 1, max(0, Int(pos.rounded())))
+  }
+
+  private var visibleIndices: [Int] {
+    guard !items.isEmpty else { return [] }
+    let c = currentIndex
+    return Array(max(0, c - 7)...min(items.count - 1, c + 7))
+  }
+
+  private var scrubber: some View {
+    VStack(spacing: 8) {
+      Slider(
+        value: Binding(get: { pos }, set: { v in
+          flippedId = nil
+          pos = v
+          tick()
+        }),
+        in: 0...Double(max(1, items.count - 1)),
+        onEditingChanged: { editing in
+          if !editing { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { pos = pos.rounded() } }
+        }
+      )
+      .tint(.white.opacity(0.85))
+      Text("\(currentIndex + 1) de \(items.count)")
+        .font(Theme.font(12, .medium))
+        .foregroundStyle(.white.opacity(0.45))
+        .monospacedDigit()
+    }
+  }
+
+  private func drag(spacing: CGFloat) -> some Gesture {
+    DragGesture(minimumDistance: 4)
+      .onChanged { v in
+        if dragStart == nil { dragStart = pos; flippedId = nil }
+        let raw = (dragStart ?? 0) - Double(v.translation.width / spacing)
+        pos = rubberBand(raw)
+        tick()
+      }
+      .onEnded { v in
+        let projected = (dragStart ?? pos) - Double(v.predictedEndTranslation.width / spacing)
+        let target = min(Double(items.count - 1), max(0, projected.rounded()))
+        dragStart = nil
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.86)) { pos = target }
+      }
+  }
+
+  private func rubberBand(_ x: Double) -> Double {
+    let maxV = Double(max(0, items.count - 1))
+    if x < 0 { return x * 0.3 }
+    if x > maxV { return maxV + (x - maxV) * 0.3 }
+    return x
+  }
+
+  private func tick() {
+    let i = currentIndex
+    if i != lastHapticIndex {
+      lastHapticIndex = i
+      Haptics.selection()
+    }
+  }
+
+  private func tap(_ idx: Int) {
+    if idx != currentIndex {
+      flippedId = nil
+      withAnimation(.spring(response: 0.5, dampingFraction: 0.86)) { pos = Double(idx) }
+      return
+    }
+    let item = items[idx]
+    if let t = item.track {
+      Haptics.medium()
+      AudioPlayer.shared.play(t, in: items.compactMap(\.track))
+      return
+    }
+    Haptics.medium()
+    withAnimation(.spring(response: 0.6, dampingFraction: 0.82)) {
+      flippedId = flippedId == item.id ? nil : item.id
+    }
+  }
+}
+
+/// Piecewise Cover Flow geometry, animatable on `delta` so in-between frames stay correct.
+struct CoverFlowTransform: ViewModifier, Animatable {
+  var delta: Double
+  let width: CGFloat
+  let cardSize: CGFloat
+
+  var animatableData: Double {
+    get { delta }
+    set { delta = newValue }
+  }
+
+  func body(content: Content) -> some View {
+    let a = abs(delta)
+    let s = delta >= 0 ? 1.0 : -1.0
+    let near = min(a, 1)
+    let gap = Double(width) * 0.30
+    let step = Double(width) * 0.105
+    let x = s * (gap * near + step * max(0, a - 1))
+    let angle = -s * 72 * near
+    let scale = 1 - 0.12 * near
+    return content
+      .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0), anchor: .center, perspective: 0.42)
+      .scaleEffect(scale)
+      .offset(x: x)
+      .zIndex(-a)
+      .opacity(a > 6.5 ? 0 : 1)
+  }
+}
+
+struct CoverFlowCard: View {
+  let item: CoverFlowItem
+  let size: CGFloat
+  let flipped: Bool
+  let onClose: () -> Void
+
+  var body: some View {
+    VStack(spacing: 2) {
+      FlipCard(angle: flipped ? 180 : 0) {
+        front
+      } back: {
+        CoverFlowBack(item: item, size: size, onClose: onClose)
+      }
+      .frame(width: size, height: size)
+      // Floor reflection
+      ArtworkImage(url: item.artworkURL, cornerRadius: 3, maxPixel: 500)
+        .frame(width: size, height: size)
+        .scaleEffect(x: 1, y: -1)
+        .frame(width: size, height: size * 0.45, alignment: .top)
+        .clipped()
+        .mask(LinearGradient(colors: [.white.opacity(0.45), .clear], startPoint: .top, endPoint: .bottom))
+        .opacity(flipped ? 0 : 1)
+    }
+    .animation(.easeInOut(duration: 0.3), value: flipped)
+  }
+
+  private var front: some View {
+    ArtworkImage(url: item.artworkURL, cornerRadius: 3, maxPixel: 700)
+      .frame(width: size, height: size)
+      .overlay(
+        LinearGradient(colors: [.white.opacity(0.16), .clear, .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+      )
+      .shadow(color: .black.opacity(0.6), radius: 14, y: 8)
+  }
+}
+
+struct FlipCard<Front: View, Back: View>: View, Animatable {
+  var angle: Double
+  @ViewBuilder var front: () -> Front
+  @ViewBuilder var back: () -> Back
+
+  var animatableData: Double {
+    get { angle }
+    set { angle = newValue }
+  }
 
   var body: some View {
     ZStack {
-      Theme.bg.ignoresSafeArea()
-      RadialGradient(
-        colors: [player.accentPrimary.opacity(0.32), player.accentSecondary.opacity(0.12), .clear],
-        center: .top,
-        startRadius: 20,
-        endRadius: 520
-      )
-      .ignoresSafeArea()
-
-      VStack(spacing: 22) {
-        VStack(spacing: 4) {
-          Text("COVER FLOW 3D")
-            .font(Theme.font(11, .bold))
-            .tracking(2.6)
-            .foregroundStyle(Theme.amber)
-          Text("Deslize as capas e toque na central para abrir")
-            .font(Theme.font(13, .medium))
-            .foregroundStyle(Theme.muted)
-        }
-        .padding(.top, 12)
-
-        Spacer(minLength: 0)
-
-        CoverFlowView(items: items, cardSize: 238) { item in
-          onPlay(item)
-        }
-
-        if player.currentTrack != nil {
-          AresVisualizerView(
-            style: .ares,
-            isPlaying: player.isPlaying,
-            accentA: player.accentPrimary,
-            accentB: player.accentSecondary,
-            compact: true
-          )
-          .frame(height: 44)
-          .padding(.horizontal, 28)
-        }
-
-        Spacer(minLength: 16)
+      if angle < 90 {
+        front()
+      } else {
+        back().rotation3DEffect(.degrees(180), axis: (0, 1, 0))
       }
     }
-    .navigationTitle("Vitrine 3D")
-    .navigationBarTitleDisplayMode(.inline)
+    .rotation3DEffect(.degrees(angle), axis: (0, 1, 0), perspective: 0.45)
+    .scaleEffect(1 + 0.18 * sin(angle * .pi / 180) * 0.5 + (angle > 90 ? 0.12 : 0))
+  }
+}
+
+struct CoverFlowBack: View {
+  let item: CoverFlowItem
+  let size: CGFloat
+  let onClose: () -> Void
+  @ObservedObject private var player = AudioPlayer.shared
+  @State private var tracks: [Track] = []
+  @State private var loading = true
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HStack(spacing: 10) {
+        ArtworkImage(url: item.artworkURL, cornerRadius: 4, maxPixel: 120)
+          .frame(width: 36, height: 36)
+        VStack(alignment: .leading, spacing: 0) {
+          Text(item.title).font(Theme.font(13, .semibold)).lineLimit(1)
+          Text(item.subtitle).font(Theme.font(11.5)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+        }
+        Spacer(minLength: 0)
+        Button {
+          if let f = tracks.first { player.play(f, in: tracks) }
+        } label: {
+          Image(systemName: "play.fill")
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(Theme.onPrism)
+            .frame(width: 30, height: 30)
+            .background(Circle().fill(Theme.prismDiagonal))
+        }
+        .buttonStyle(.plain)
+      }
+      .padding(10)
+      Divider().overlay(Color.white.opacity(0.15))
+      if loading {
+        ProgressView().tint(.white).frame(maxHeight: .infinity)
+      } else {
+        ScrollView(showsIndicators: false) {
+          LazyVStack(spacing: 0) {
+            ForEach(Array(tracks.enumerated()), id: \.element.id) { i, t in
+              Button {
+                Haptics.light()
+                player.play(t, in: tracks)
+              } label: {
+                HStack(spacing: 8) {
+                  Text("\(i + 1)").font(Theme.font(11.5, .medium)).foregroundStyle(.white.opacity(0.45)).frame(width: 18)
+                  Text(t.title).font(Theme.font(13)).lineLimit(1)
+                    .foregroundStyle(player.currentTrack?.id == t.id ? Theme.rose : .white)
+                  Spacer(minLength: 4)
+                  Text(t.formattedDuration).font(Theme.font(11)).foregroundStyle(.white.opacity(0.45)).monospacedDigit()
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .contentShape(Rectangle())
+              }
+              .buttonStyle(.plain)
+            }
+          }
+        }
+      }
+    }
+    .foregroundStyle(.white)
+    .frame(width: size, height: size)
+    .background(
+      RoundedRectangle(cornerRadius: 6, style: .continuous)
+        .fill(LinearGradient(colors: [Color(white: 0.16), Color(white: 0.07)], startPoint: .top, endPoint: .bottom))
+    )
+    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(.white.opacity(0.18), lineWidth: 0.8))
+    .shadow(color: .black.opacity(0.6), radius: 16, y: 8)
+    .task {
+      if !item.localTracks.isEmpty {
+        tracks = item.localTracks
+      } else if let a = item.album {
+        tracks = await DiscoveryService.shared.albumTracks(a)
+      }
+      loading = false
+    }
   }
 }

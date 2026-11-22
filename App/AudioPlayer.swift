@@ -25,14 +25,18 @@ final class AudioPlayer: ObservableObject {
   @Published var errorToast: String?
 
   // Rich visuals & lyrics state
-  @Published var accentPrimary: Color = Theme.amber
-  @Published var accentSecondary: Color = Theme.coral
+  @Published var accentPrimary: Color = Theme.rose
+  @Published var accentSecondary: Color = Theme.lavender
   @Published var currentAnimatedArtURL: String?
   @Published var lyrics: LyricsBundle?
   @Published var isLoadingLyrics: Bool = false
   @Published var isTranslatingLyrics: Bool = false
   @Published var showTranslation: Bool = false
   @Published var currentBitrateLabel: String = "AAC"
+  @Published var palette: ArtworkPalette = .fallback
+  @Published var currentArtwork: String = ""
+  @Published var contextTitle: String = ""
+  private var varispeed: Float = 1.0
 
   // Sleep timer
   @Published var sleepTimerOption: SleepTimerOption = .off
@@ -64,7 +68,12 @@ final class AudioPlayer: ObservableObject {
 
   // MARK: - Playback Commands
 
-  func play(_ track: Track, in list: [Track]? = nil) {
+  func displayArtwork(for t: Track) -> String {
+    ArtworkStore.shared.url(for: t)
+  }
+
+  func play(_ track: Track, in list: [Track]? = nil, context: String? = nil) {
+    if let context { contextTitle = context } else if list == nil || list?.count == 1 { contextTitle = "" }
     let store = LibraryStore.shared
     store.register(track)
     if let list, !list.isEmpty {
@@ -179,6 +188,49 @@ final class AudioPlayer: ObservableObject {
     }
   }
 
+  /// Endless radio seeded by a track (YouTube Music "radio" mix).
+  func startRadio(from track: Track) {
+    autoplayRadio = true
+    play(track, in: [track], context: "Rádio · \(LibraryStore.mainArtist(track.artist))")
+    AppModel.shared.showToast("Rádio de \(track.title) ligada")
+  }
+
+  func moveQueue(from source: IndexSet, to destination: Int) {
+    guard !queue.isEmpty else { return }
+    let currentId = currentTrack?.id
+    queue.move(fromOffsets: source, toOffset: destination)
+    if let currentId, let idx = queue.firstIndex(where: { $0.id == currentId }) { currentIndex = idx }
+  }
+
+  func removeFromQueue(at offsets: IndexSet) {
+    let currentId = currentTrack?.id
+    let safe = IndexSet(offsets.filter { $0 != currentIndex && $0 < queue.count })
+    queue.remove(atOffsets: safe)
+    if let currentId, let idx = queue.firstIndex(where: { $0.id == currentId }) { currentIndex = idx }
+  }
+
+  /// Turntable pitch fader: real varispeed (tempo + pitch change together, like vinyl).
+  func setVarispeed(_ rate: Float) {
+    varispeed = rate
+    player?.currentItem?.audioTimePitchAlgorithm = abs(rate - 1) < 0.001 ? .timeDomain : .varispeed
+    playbackRate = rate
+    if isPlaying { player?.rate = rate }
+    updateNowPlaying()
+  }
+
+  func reloadLyrics() {
+    guard let track = currentTrack else { return }
+    lyricsTask?.cancel()
+    lyricsTask = Task {
+      self.isLoadingLyrics = true
+      await LyricsService.shared.forgetMiss(for: track)
+      let fetched = await LyricsService.shared.fetchLyrics(for: track)
+      guard !Task.isCancelled, self.currentTrack?.id == track.id else { return }
+      self.lyrics = fetched
+      self.isLoadingLyrics = false
+    }
+  }
+
   func jumpToQueueIndex(_ idx: Int) {
     guard idx >= 0 && idx < queue.count else { return }
     currentIndex = idx
@@ -186,6 +238,8 @@ final class AudioPlayer: ObservableObject {
   }
 
   func setRate(_ rate: Float) {
+    varispeed = 1.0
+    player?.currentItem?.audioTimePitchAlgorithm = .timeDomain
     playbackRate = rate
     if isPlaying { player?.rate = rate }
     updateNowPlaying()
@@ -255,18 +309,25 @@ final class AudioPlayer: ObservableObject {
     lyricsTask?.cancel()
     artTask?.cancel()
 
-    // 1. Dynamic Liquid Glass colors + Apple Music Animated Artwork in parallel
+    currentArtwork = ArtworkStore.shared.url(for: track)
+    nowPlayingArtImage = nil
+
+    // 1. Real album cover (upgrade YouTube thumbnails) + ambient palette + lock-screen art + animated cover
     artTask = Task {
-      if !track.artworkURL.isEmpty {
-        let (c1, c2) = await ArtworkColorExtractor.shared.colors(for: track.artworkURL)
-        guard !Task.isCancelled else { return }
-        withAnimation(.easeInOut(duration: 0.7)) {
-          self.accentPrimary = c1
-          self.accentSecondary = c2
+      await ArtworkStore.shared.ensure(track)
+      guard !Task.isCancelled, self.currentTrack?.id == track.id else { return }
+      let art = ArtworkStore.shared.url(for: track)
+      if art != self.currentArtwork { self.currentArtwork = art }
+      if !art.isEmpty {
+        let pal = await ArtworkColorExtractor.shared.palette(for: art)
+        guard !Task.isCancelled, self.currentTrack?.id == track.id else { return }
+        withAnimation(.easeInOut(duration: 0.8)) {
+          self.palette = pal
+          self.accentPrimary = pal.vibrant
+          self.accentSecondary = pal.vibrant2
         }
-        // Load UIImage for Lock Screen artwork
-        if let u = URL(string: track.artworkURL), let (d, _) = try? await URLSession.shared.data(from: u) {
-          self.nowPlayingArtImage = UIImage(data: d)
+        if let img = await ImagePipeline.shared.image(art, maxPixel: 800), self.currentTrack?.id == track.id {
+          self.nowPlayingArtImage = img
           self.updateNowPlaying()
         }
       }
@@ -284,8 +345,22 @@ final class AudioPlayer: ObservableObject {
     // 2. Synced Karaoke Lyrics (LRCLIB) + optional auto-translation
     lyricsTask = Task {
       self.isLoadingLyrics = true
-      let fetched = await LyricsService.shared.fetchLyrics(for: track)
-      guard !Task.isCancelled else { return }
+      var fetched = await LyricsService.shared.fetchLyrics(for: track)
+      // Second chance: YouTube Music lyrics need the videoId, which resolves in parallel.
+      if fetched == nil, track.videoId == nil {
+        for _ in 0..<16 {
+          guard !Task.isCancelled, self.currentTrack?.id == track.id else { return }
+          if let vid = self.currentTrack?.videoId {
+            var withVid = track
+            withVid.videoId = vid
+            await LyricsService.shared.forgetMiss(for: withVid)
+            fetched = await LyricsService.shared.fetchLyrics(for: withVid)
+            break
+          }
+          try? await Task.sleep(for: .milliseconds(500))
+        }
+      }
+      guard !Task.isCancelled, self.currentTrack?.id == track.id else { return }
       self.lyrics = fetched
       self.isLoadingLyrics = false
       if LibraryStore.shared.autoTranslateLyrics, let fetched {
@@ -344,6 +419,8 @@ final class AudioPlayer: ObservableObject {
 
     let item = AVPlayerItem(asset: asset)
     item.preferredForwardBufferDuration = 12
+    item.audioTimePitchAlgorithm = abs(varispeed - 1) < 0.001 ? .timeDomain : .varispeed
+    AudioSpectrum.shared.attach(to: item)
     let p = AVPlayer(playerItem: item)
     p.automaticallyWaitsToMinimizeStalling = true
     p.volume = LibraryStore.shared.soundProfile == .night ? 0.72 : 1.0

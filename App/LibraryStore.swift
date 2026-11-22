@@ -13,6 +13,9 @@ final class LibraryStore: ObservableObject {
   @Published var playlists: [MusicPlaylist] = []
   @Published var downloadedIds: Set<String> = []
   @Published var searchHistory: [String] = []
+  @Published var followedArtists: [String] = []
+  @Published var playCounts: [String: Int] = [:]
+  @Published var seenReleaseIds: Set<String> = []
 
   // User preferences
   @Published var visualizerStyle: VisualizerStyle = .ares { didSet { save() } }
@@ -31,6 +34,9 @@ final class LibraryStore: ObservableObject {
     var soundProfile: SoundProfile
     var animatedArtEnabled: Bool
     var autoTranslateLyrics: Bool
+    var followedArtists: [String]?
+    var playCounts: [String: Int]?
+    var seenReleaseIds: [String]?
   }
 
   private var storeURL: URL {
@@ -118,7 +124,71 @@ final class LibraryStore: ObservableObject {
     register(track)
     recentIds.removeAll { $0 == track.id }
     recentIds.insert(track.id, at: 0)
-    if recentIds.count > 60 { recentIds = Array(recentIds.prefix(60)) }
+    if recentIds.count > 120 { recentIds = Array(recentIds.prefix(120)) }
+    playCounts[track.id, default: 0] += 1
+    save()
+  }
+
+  // MARK: - Artists (follow + listening stats)
+
+  func isFollowing(_ artist: String) -> Bool {
+    followedArtists.contains { $0.caseInsensitiveCompare(artist) == .orderedSame }
+  }
+
+  func toggleFollow(_ artist: String) {
+    let clean = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !clean.isEmpty else { return }
+    if let idx = followedArtists.firstIndex(where: { $0.caseInsensitiveCompare(clean) == .orderedSame }) {
+      followedArtists.remove(at: idx)
+    } else {
+      followedArtists.insert(clean, at: 0)
+      Haptics.success()
+    }
+    save()
+  }
+
+  /// Tracks ranked by how many times they were played.
+  var mostPlayedTracks: [Track] {
+    playCounts.sorted { $0.value > $1.value }.compactMap { tracksById[$0.key] }
+  }
+
+  /// Artists ranked by plays (main artist only), followed artists first.
+  var topListenedArtists: [String] {
+    var score: [String: Int] = [:]
+    var display: [String: String] = [:]
+    for (id, n) in playCounts {
+      guard let t = tracksById[id] else { continue }
+      let main = Self.mainArtist(t.artist)
+      guard !main.isEmpty, main != "Artista" else { continue }
+      score[main.lowercased(), default: 0] += n
+      display[main.lowercased()] = main
+    }
+    for id in favoriteIds {
+      guard let t = tracksById[id] else { continue }
+      let main = Self.mainArtist(t.artist)
+      guard !main.isEmpty, main != "Artista" else { continue }
+      score[main.lowercased(), default: 0] += 2
+      display[main.lowercased()] = main
+    }
+    let ranked = score.sorted { $0.value > $1.value }.compactMap { display[$0.key] }
+    var out = followedArtists
+    for a in ranked where !out.contains(where: { $0.caseInsensitiveCompare(a) == .orderedSame }) { out.append(a) }
+    return out
+  }
+
+  static func mainArtist(_ s: String) -> String {
+    let seps = [",", " & ", " feat", " ft.", " x ", " e ", " part."]
+    var out = s
+    for sep in seps {
+      if let r = out.range(of: sep, options: .caseInsensitive) { out = String(out[..<r.lowerBound]) }
+    }
+    return out.replacingOccurrences(of: " - Topic", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  func updateArtwork(_ url: String, for trackId: String) {
+    guard var tr = tracksById[trackId], tr.artworkURL != url else { return }
+    tr.artworkURL = url
+    tracksById[trackId] = tr
     save()
   }
 
@@ -221,6 +291,9 @@ final class LibraryStore: ObservableObject {
     soundProfile = snap.soundProfile
     animatedArtEnabled = snap.animatedArtEnabled
     autoTranslateLyrics = snap.autoTranslateLyrics
+    followedArtists = snap.followedArtists ?? []
+    playCounts = snap.playCounts ?? [:]
+    seenReleaseIds = Set(snap.seenReleaseIds ?? [])
   }
 
   func save() {
@@ -234,7 +307,10 @@ final class LibraryStore: ObservableObject {
       visualizerStyle: visualizerStyle,
       soundProfile: soundProfile,
       animatedArtEnabled: animatedArtEnabled,
-      autoTranslateLyrics: autoTranslateLyrics
+      autoTranslateLyrics: autoTranslateLyrics,
+      followedArtists: followedArtists,
+      playCounts: playCounts,
+      seenReleaseIds: Array(seenReleaseIds)
     )
     if let data = try? JSONEncoder().encode(snap) {
       try? data.write(to: storeURL, options: .atomic)

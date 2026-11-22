@@ -40,10 +40,6 @@
 	</dict>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>O Lume Music acessa sua biblioteca do Apple Music apenas quando você toca em Importar para trazer suas playlists e faixas em 1 clique.</string>
-	<key>UIAppFonts</key>
-	<array>
-		<string>manrope.ttf</string>
-	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
@@ -67,7 +63,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>UIUserInterfaceStyle</key>
-	<string>Dark</string>
 </dict>
 </plist>

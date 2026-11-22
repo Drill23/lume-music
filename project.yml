@@ -21,8 +21,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.adriano.lumemusic.ios
-        MARKETING_VERSION: "2.0.0"
-        CURRENT_PROJECT_VERSION: 2
+        MARKETING_VERSION: "3.0.0"
+        CURRENT_PROJECT_VERSION: 3
         TARGETED_DEVICE_FAMILY: '1,2'
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
@@ -34,10 +34,8 @@ targets:
         UIRequiresFullScreen: false
         UILaunchScreen:
           UIColorName: LaunchColor
-        UIUserInterfaceStyle: Dark
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        UIAppFonts: [manrope.ttf]
         UIBackgroundModes: [audio]
         NSAppleMusicUsageDescription: O Lume Music acessa sua biblioteca do Apple Music apenas quando você toca em Importar para trazer suas playlists e faixas em 1 clique.
         ITSAppUsesNonExemptEncryption: false

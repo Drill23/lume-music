@@ -115,17 +115,26 @@ struct LyricsBundle: Codable, Hashable {
 }
 
 enum VisualizerStyle: String, CaseIterable, Codable, Identifiable {
+  // Raw values are persisted in the library snapshot — never rename them.
   case ares = "Ondas Ares"
   case aurora = "Espectro"
   case orb = "Orbe"
   case off = "Desligado"
 
   var id: String { rawValue }
+  var title: String {
+    switch self {
+    case .ares: return "Ondas 3D"
+    case .aurora: return "Espectro"
+    case .orb: return "Orbe"
+    case .off: return "Desligado"
+    }
+  }
   var icon: String {
     switch self {
-    case .ares: return "waveform.path.ecg"
+    case .ares: return "mountain.2.fill"
     case .aurora: return "chart.bar.fill"
-    case .orb: return "sparkles"
+    case .orb: return "circle.hexagongrid.fill"
     case .off: return "eye.slash"
     }
   }
@@ -199,30 +208,31 @@ enum PlayerSurfaceTab: String, CaseIterable, Identifiable {
   var id: String { rawValue }
   var icon: String {
     switch self {
-    case .artwork: return "photo.fill"
-    case .vinyl: return "opticaldisc.fill"
+    case .artwork: return "square.fill"
+    case .vinyl: return "record.circle"
     case .cassette: return "recordingtape"
-    case .waves: return "waveform.path.ecg"
-    case .lyrics: return "quote.bubble.fill"
+    case .waves: return "waveform"
+    case .lyrics: return "quote.bubble"
     }
   }
 }
 
 enum AppTab: String, CaseIterable, Identifiable {
   case home = "Início"
-  case explore = "Explorar"
-  case search = "Buscar"
+  case explore = "Novidades"
   case library = "Biblioteca"
+  case search = "Buscar"
 
   var id: String { rawValue }
   var icon: String {
     switch self {
     case .home: return "house.fill"
-    case .explore: return "sparkles"
+    case .explore: return "square.grid.2x2.fill"
+    case .library: return "square.stack.fill"
     case .search: return "magnifyingglass"
-    case .library: return "music.note.list"
     }
   }
+  static var bar: [AppTab] { [.home, .explore, .library] }
 }
 
 struct MoodCategory: Identifiable, Hashable {
