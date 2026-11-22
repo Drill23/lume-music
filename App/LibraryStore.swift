@@ -177,7 +177,8 @@ final class LibraryStore: ObservableObject {
   }
 
   static func mainArtist(_ s: String) -> String {
-    let seps = [",", " & ", " feat", " ft.", " x ", " e ", " part."]
+    // Keep duo names intact ("Henrique e Juliano", "Jorge & Mateus"); only split real collaborations.
+    let seps = [",", " feat", " ft.", " x ", " part.", " (", " com "]
     var out = s
     for sep in seps {
       if let r = out.range(of: sep, options: .caseInsensitive) { out = String(out[..<r.lowerBound]) }

@@ -311,6 +311,7 @@ struct BottomBar: View {
                 Image(systemName: t.icon)
                   .font(.system(size: 19, weight: .semibold))
                   .symbolEffect(.bounce, value: active)
+                  .frame(height: 24)
                 Text(t.rawValue)
                   .font(Theme.font(10.5, .semibold))
               }

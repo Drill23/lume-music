@@ -231,6 +231,13 @@ actor DiscoveryService {
   }
 
   private func fetchTopGlobal() async -> [Track] {
+    // Deezer's chart/0 follows the caller's country (Brazil on the user's phone), so use the
+    // editorial "Top Worldwide" playlist for the real global chart; chart/0 only as fallback.
+    if let obj = await DiscNet.json("https://api.deezer.com/playlist/3155776842/tracks?limit=50", retries: 1) as? [String: Any],
+       let data = obj["data"] as? [[String: Any]] {
+      let tracks = data.compactMap { Self.deezerTrack($0, fallbackArtist: "") }
+      if !tracks.isEmpty { return tracks }
+    }
     guard let obj = await DiscNet.json("https://api.deezer.com/chart/0/tracks?limit=50") as? [String: Any],
           let data = obj["data"] as? [[String: Any]] else { return [] }
     return data.compactMap { Self.deezerTrack($0, fallbackArtist: "") }

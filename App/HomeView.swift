@@ -506,8 +506,8 @@ struct ReleaseHeroCard: View {
         HStack(spacing: 8) {
           ForEach(Array(strip.enumerated()), id: \.offset) { i, a in
             ArtworkImage(url: a.artworkURL, cornerRadius: 16, maxPixel: 360)
-              .aspectRatio(0.78, contentMode: .fill)
               .frame(maxWidth: .infinity)
+              .frame(height: 124)
               .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
               .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -523,13 +523,15 @@ struct ReleaseHeroCard: View {
         .padding(.horizontal, 14)
         .padding(.bottom, 14)
       }
-      .frame(height: 356)
+      .frame(height: 332)
       .frame(maxWidth: .infinity)
       .background {
         ZStack {
           ArtworkImage(url: album.artworkURL, cornerRadius: 0, maxPixel: 300)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .scaleEffect(1.5)
             .blur(radius: 34)
+            .clipped()
           LinearGradient(colors: [.black.opacity(0.05), .black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
           LinearGradient(colors: [Theme.lavender.opacity(0.18), Theme.rose.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
         }

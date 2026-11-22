@@ -100,8 +100,9 @@ struct CoverFlowCarousel: View {
   var body: some View {
     GeometryReader { g in
       let W = g.size.width
-      let C = min(W * 0.60, g.size.height * 0.42)
+      let C = min(W * 0.58, g.size.height * 0.40)
       VStack(spacing: 0) {
+        Spacer(minLength: 0).frame(maxHeight: 50)
         ZStack {
           ForEach(visibleIndices, id: \.self) { idx in
             let item = items[idx]
@@ -133,6 +134,7 @@ struct CoverFlowCarousel: View {
           .padding(.top, 6)
 
           Spacer(minLength: 10)
+            .frame(maxHeight: 90)
 
           scrubber
             .padding(.horizontal, 30)
@@ -241,8 +243,8 @@ struct CoverFlowTransform: ViewModifier, Animatable {
     let a = abs(delta)
     let s = delta >= 0 ? 1.0 : -1.0
     let near = min(a, 1)
-    let gap = Double(width) * 0.30
-    let step = Double(width) * 0.105
+    let gap = Double(width) * 0.405
+    let step = Double(width) * 0.10
     let x = s * (gap * near + step * max(0, a - 1))
     let angle = -s * 72 * near
     let scale = 1 - 0.12 * near

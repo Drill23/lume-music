@@ -1,4 +1,5 @@
 import AVFoundation
+import NaturalLanguage
 import SwiftUI
 import UIKit
 
@@ -122,7 +123,9 @@ struct SpectrumVisualizer: View {
     let frames = history.frames
     guard !frames.isEmpty else { return }
     let dark = scheme == .dark
-    let lineGrad = Gradient(colors: [palette.vibrant2, palette.vibrant, .white, palette.vibrant, palette.vibrant2])
+    let lineGrad = dark
+      ? Gradient(colors: [Theme.sky, Theme.lavender, .white, Theme.rose, Theme.peach])
+      : Gradient(colors: [Color(hex: 0x3F86D8), Color(hex: 0x7F5AE6), Color(hex: 0xE0457B), Color(hex: 0xEC7A3F)])
 
     for row in stride(from: frames.count - 1, through: 0, by: -1) {
       let z = Double(row) / Double(history.depth)
@@ -144,7 +147,7 @@ struct SpectrumVisualizer: View {
       fill.addLine(to: CGPoint(x: w / 2 + half, y: baseY + 2))
       fill.addLine(to: CGPoint(x: w / 2 - half, y: baseY + 2))
       fill.closeSubpath()
-      ctx.fill(fill, with: .color(dark ? Color.black.opacity(0.55) : Color.white.opacity(0.55)))
+      ctx.fill(fill, with: .color(dark ? Color.black.opacity(0.42) : Color.white.opacity(0.16)))
       var lc = ctx
       lc.opacity = (1 - z) * 0.95 + 0.05
       if row == 0 {
@@ -235,7 +238,7 @@ struct LyricsStage: View {
           Text(src).font(Theme.font(12, .medium)).foregroundStyle(Theme.tertiary)
         }
         Spacer()
-        if player.lyrics != nil {
+        if let lyr = player.lyrics, !LyricsLanguage.isPortuguese(lyr) {
           Button { player.toggleTranslation() } label: {
             HStack(spacing: 5) {
               if player.isTranslatingLyrics {
@@ -508,5 +511,19 @@ struct LoopingVideoLayer: UIViewRepresentable {
       queuePlayer?.removeAllItems()
       queuePlayer = nil
     }
+  }
+}
+
+/// Detects whether lyrics are already in Portuguese (then the translate button is hidden).
+enum LyricsLanguage {
+  private static var cache: [String: Bool] = [:]
+  static func isPortuguese(_ b: LyricsBundle) -> Bool {
+    if let hit = cache[b.trackKey] { return hit }
+    let sample = b.lines.prefix(40).map(\.text).joined(separator: " ")
+    let r = NLLanguageRecognizer()
+    r.processString(sample)
+    let pt = r.dominantLanguage == .portuguese
+    cache[b.trackKey] = pt
+    return pt
   }
 }

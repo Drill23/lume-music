@@ -587,6 +587,35 @@ struct PlayerOptionsSheet: View {
           }
         }
 
+        Section("Estilo do Tocando agora") {
+          HStack(spacing: 8) {
+            ForEach(PlayerStyleOption.all) { o in
+              let active = app.playerStyle == o.style
+              Button {
+                Haptics.selection()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { app.playerStyle = o.style }
+              } label: {
+                VStack(spacing: 6) {
+                  Image(systemName: o.icon).font(.system(size: 19, weight: .semibold))
+                  Text(o.title.replacingOccurrences(of: " clássica", with: ""))
+                    .font(Theme.font(11.5, .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                }
+                .foregroundStyle(active ? Theme.onPrism : Theme.text)
+                .frame(maxWidth: .infinity)
+                .frame(height: 64)
+                .background(
+                  RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(active ? AnyShapeStyle(Theme.prismDiagonal) : AnyShapeStyle(Theme.fill))
+                )
+              }
+              .buttonStyle(.plain)
+            }
+          }
+          .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+        }
+
         Section("Temporizador") {
           Picker(selection: Binding(get: { player.sleepTimerOption }, set: { player.setSleepTimer($0) })) {
             ForEach(SleepTimerOption.allCases) { Text($0.label).tag($0) }
@@ -612,14 +641,6 @@ struct PlayerOptionsSheet: View {
             }
           } label: {
             Label("Perfil de som", systemImage: "slider.vertical.3")
-          }
-        }
-
-        Section("Estilo do Tocando agora") {
-          Picker(selection: $app.playerStyle) {
-            ForEach(PlayerStyleOption.all) { o in Label(o.title, systemImage: o.icon).tag(o.style) }
-          } label: {
-            Label("Estilo da capa", systemImage: "paintpalette")
           }
         }
 

@@ -15,7 +15,7 @@ struct CassetteStage: View {
 
   var body: some View {
     GeometryReader { g in
-      let W = min(g.size.width - 32, 400, (g.size.height - 8) / 1.08)
+      let W = min(g.size.width - 40, 390, (g.size.height - 20) / 1.17)
       VStack(spacing: W * 0.035) {
         deckWindow(W)
         meters(W)
@@ -125,8 +125,8 @@ struct CassetteStage: View {
       let half = max(1, b.count / 2)
       let low = b.prefix(half).reduce(0, +) / Float(half)
       let high = b.suffix(half).reduce(0, +) / Float(half)
-      let l = Double(spectrum.level) * 0.75 + Double(low) * 0.35
-      let r = Double(spectrum.level) * 0.75 + Double(high) * 0.45
+      let l = 0.06 + Double(spectrum.level) * 0.55 + Double(low) * 0.16
+      let r = 0.06 + Double(spectrum.level) * 0.55 + Double(high) * 0.22
       return (min(1, l), min(1, r))
     }
     guard player.isPlaying else { return (0, 0) }
@@ -178,15 +178,15 @@ struct CassetteTape: View {
   var body: some View {
     let w = width
     let h = w / 1.574
-    let hubR = h * 0.105
-    let fullR = h * 0.30
+    let hubR = h * 0.085
+    let fullR = h * 0.25
     let a = fullR * fullR - hubR * hubR
     let rL = sqrt(fullR * fullR - progress * a)
     let rR = sqrt(hubR * hubR + progress * a)
     let vT = 3.456 * hubR * seconds
     let thetaL = -(vT * (2 / a) * (fullR - rL)) * 180 / .pi
     let thetaR = -(vT * (2 / a) * (rR - hubR)) * 180 / .pi
-    let reelDX = w * 0.205
+    let reelDX = w * 0.17
 
     ZStack {
       // Shell (smoked translucent)
@@ -200,7 +200,7 @@ struct CassetteTape: View {
       // Label sticker with album art
       ZStack {
         ArtworkImage(url: artworkURL, cornerRadius: 0, maxPixel: 700, placeholderIcon: sideB ? "person.fill" : "music.note")
-        LinearGradient(colors: [.black.opacity(0.05), .black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
+        LinearGradient(colors: [.clear, .black.opacity(0.18)], startPoint: .top, endPoint: .bottom)
         VStack(spacing: 0) {
           // Handwritten band
           HStack(spacing: w * 0.02) {
@@ -269,9 +269,9 @@ struct CassetteTape: View {
           RoundedRectangle(cornerRadius: h * 0.11, style: .continuous)
             .stroke(Color.white.opacity(0.4), lineWidth: 0.8)
         }
-        .frame(width: w * 0.66, height: h * 0.34)
+        .frame(width: w * 0.56, height: h * 0.27)
         .clipped()
-        .offset(y: -h * 0.02)
+        .offset(y: -h * 0.015)
       }
       .clipShape(RoundedRectangle(cornerRadius: w * 0.02, style: .continuous))
       .frame(width: w * 0.88, height: h * 0.70)
