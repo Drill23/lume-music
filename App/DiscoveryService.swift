@@ -603,11 +603,15 @@ actor DiscoveryService {
     return out
   }
 
-  private static func dayString(daysAgo: Int) -> String {
-    let date = Date().addingTimeInterval(-Double(daysAgo) * 86400)
+  private static let isoDayFormatter: DateFormatter = {
     let f = DateFormatter()
     f.locale = Locale(identifier: "en_US_POSIX")
     f.dateFormat = "yyyy-MM-dd"
-    return f.string(from: date)
+    return f
+  }()
+
+  private static func dayString(daysAgo: Int) -> String {
+    let date = Date().addingTimeInterval(-Double(daysAgo) * 86400)
+    return isoDayFormatter.string(from: date)
   }
 }

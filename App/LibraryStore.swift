@@ -425,6 +425,8 @@ final class LibraryStore: ObservableObject {
     introEnabled = snap.introEnabled ?? true
   }
 
+  private var saveTask: Task<Void, Never>?
+
   func save() {
     let snap = Snapshot(
       tracksById: tracksById,
@@ -452,8 +454,14 @@ final class LibraryStore: ObservableObject {
       cassetteStyle: cassetteStyle,
       introEnabled: introEnabled
     )
-    if let data = try? JSONEncoder().encode(snap) {
-      try? data.write(to: storeURL, options: .atomic)
+    let url = storeURL
+    saveTask?.cancel()
+    saveTask = Task.detached(priority: .utility) {
+      try? await Task.sleep(for: .milliseconds(160))
+      if Task.isCancelled { return }
+      if let data = try? JSONEncoder().encode(snap) {
+        try? data.write(to: url, options: .atomic)
+      }
     }
   }
 }

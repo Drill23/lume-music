@@ -13,95 +13,132 @@ struct TurntableStage: View {
 
   var body: some View {
     GeometryReader { g in
-      let availH = g.size.height - 54
-      let side = min(g.size.width - 28, max(240, availH), 400)
-      VStack(spacing: 10) {
-        Spacer(minLength: 0)
-        TurntableDeck(
-          side: side,
-          artworkURL: player.currentArtwork,
-          isPlaying: player.isPlaying,
-          progress: clock.duration > 0 ? clock.currentTime / clock.duration : 0,
-          finish: store.turntableFinish,
-          edition: store.vinylEdition,
-          is3D: store.turntable3D,
-          onPitchChange: { pitchPercent = $0 * 8.0 }
-        )
-        .frame(width: side, height: side)
+      let availH = max(230, g.size.height - 44)
+      let side = min(g.size.width - 24, availH, 410)
+      ZStack(alignment: .topTrailing) {
+        VStack(spacing: 0) {
+          Spacer(minLength: 20)
+          TurntableDeck(
+            side: side,
+            artworkURL: player.currentArtwork,
+            isPlaying: player.isPlaying,
+            progress: clock.duration > 0 ? clock.currentTime / clock.duration : 0,
+            finish: store.turntableFinish,
+            edition: store.vinylEdition,
+            is3D: store.turntable3D,
+            onPitchChange: { pitchPercent = $0 * 8.0 }
+          )
+          .frame(width: side, height: side)
+          Spacer(minLength: 0)
+        }
+        .frame(width: g.size.width, height: g.size.height)
 
-        controlStrip
-        Spacer(minLength: 0)
+        if abs(pitchPercent) >= 0.2 {
+          Text(String(format: "Pitch %+.1f%%", pitchPercent))
+            .font(Theme.font(11, .bold))
+            .foregroundStyle(Theme.accent)
+            .monospacedDigit()
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .glassCapsule()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            .padding(.trailing, 18)
+            .padding(.bottom, 6)
+        }
+
+        StageStyleOrb(icon: "record.circle", accessibilityLabel: "Personalizar toca-discos") { dismiss in
+          let cols = [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)]
+          VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+              perspectivePill(title: "3D Estúdio", active: store.turntable3D) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { store.turntable3D = true }
+                dismiss()
+              }
+              perspectivePill(title: "Vista Topo", active: !store.turntable3D) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { store.turntable3D = false }
+                dismiss()
+              }
+            }
+
+            sectionHeader("MESA")
+            LazyVGrid(columns: cols, spacing: 6) {
+              ForEach(TurntableFinish.allCases) { f in
+                let active = store.turntableFinish == f
+                orbOptionRow(title: f.rawValue, active: active) {
+                  withAnimation(.easeInOut(duration: 0.25)) { store.turntableFinish = f }
+                  dismiss()
+                }
+              }
+            }
+
+            sectionHeader("EDIÇÃO DO VINIL")
+            LazyVGrid(columns: cols, spacing: 6) {
+              ForEach(VinylEdition.allCases) { ed in
+                let active = store.vinylEdition == ed
+                orbOptionRow(title: ed.rawValue, active: active) {
+                  withAnimation(.easeInOut(duration: 0.25)) { store.vinylEdition = ed }
+                  dismiss()
+                }
+              }
+            }
+          }
+        }
       }
-      .frame(width: g.size.width, height: g.size.height)
     }
   }
 
-  private var controlStrip: some View {
-    HStack(spacing: 8) {
-      Menu {
-        ForEach(TurntableFinish.allCases) { f in
-          Button {
-            Haptics.selection()
-            withAnimation(.easeInOut(duration: 0.25)) { store.turntableFinish = f }
-          } label: {
-            if store.turntableFinish == f { Label(f.rawValue, systemImage: "checkmark") }
-            else { Text(f.rawValue) }
-          }
+  private func sectionHeader(_ text: String) -> some View {
+    Text(text)
+      .font(Theme.font(10, .heavy))
+      .tracking(0.8)
+      .foregroundStyle(Theme.secondary)
+      .padding(.horizontal, 4)
+  }
+
+  private func perspectivePill(title: String, active: Bool, action: @escaping () -> Void) -> some View {
+    Button {
+      Haptics.selection()
+      action()
+    } label: {
+      Text(title)
+        .font(Theme.font(11.5, .bold))
+        .foregroundStyle(active ? Theme.onPrism : Theme.text)
+        .frame(maxWidth: .infinity)
+        .frame(height: 30)
+        .background {
+          RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(active ? AnyShapeStyle(Theme.prismDiagonal) : AnyShapeStyle(Color.white.opacity(0.08)))
         }
-      } label: {
-        Label(store.turntableFinish.rawValue, systemImage: "paintpalette")
-          .font(Theme.font(11.5, .semibold))
-          .foregroundStyle(Theme.text)
-          .padding(.horizontal, 10)
-          .frame(height: 30)
-          .glassCapsule(interactive: true)
-      }
+    }
+    .buttonStyle(.plain)
+  }
 
-      Menu {
-        ForEach(VinylEdition.allCases) { ed in
-          Button {
-            Haptics.selection()
-            withAnimation(.easeInOut(duration: 0.25)) { store.vinylEdition = ed }
-          } label: {
-            if store.vinylEdition == ed { Label(ed.rawValue, systemImage: "checkmark") }
-            else { Text(ed.rawValue) }
-          }
+  private func orbOptionRow(title: String, active: Bool, action: @escaping () -> Void) -> some View {
+    Button {
+      Haptics.selection()
+      action()
+    } label: {
+      HStack {
+        Text(title)
+          .font(Theme.font(11, active ? .bold : .semibold))
+          .foregroundStyle(active ? Theme.onPrism : Theme.text)
+          .lineLimit(1)
+          .minimumScaleFactor(0.85)
+        Spacer(minLength: 2)
+        if active {
+          Image(systemName: "checkmark")
+            .font(.system(size: 9.5, weight: .bold))
+            .foregroundStyle(Theme.onPrism)
         }
-      } label: {
-        Label(store.vinylEdition.rawValue, systemImage: "record.circle")
-          .font(Theme.font(11.5, .semibold))
-          .foregroundStyle(Theme.text)
-          .padding(.horizontal, 10)
-          .frame(height: 30)
-          .glassCapsule(interactive: true)
       }
-
-      Button {
-        Haptics.selection()
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { store.turntable3D.toggle() }
-      } label: {
-        Text(store.turntable3D ? "3D" : "Topo")
-          .font(Theme.font(11.5, .bold))
-          .foregroundStyle(store.turntable3D ? Theme.onPrism : Theme.text)
-          .padding(.horizontal, 11)
-          .frame(height: 30)
-          .background {
-            if store.turntable3D { Capsule().fill(Theme.prismDiagonal) }
-          }
-          .modifier(ConditionalGlassCapsule(enabled: !store.turntable3D))
-      }
-      .buttonStyle(.plain)
-
-      if abs(pitchPercent) >= 0.2 {
-        Text(String(format: "%+.1f%%", pitchPercent))
-          .font(Theme.font(11, .bold))
-          .foregroundStyle(Theme.accent)
-          .monospacedDigit()
-          .padding(.horizontal, 8)
-          .frame(height: 30)
-          .glassCapsule()
+      .padding(.horizontal, 8)
+      .frame(height: 29)
+      .background {
+        RoundedRectangle(cornerRadius: 9, style: .continuous)
+          .fill(active ? AnyShapeStyle(Theme.prismDiagonal) : AnyShapeStyle(Color.white.opacity(0.06)))
       }
     }
+    .buttonStyle(.plain)
   }
 }
 
@@ -142,8 +179,8 @@ struct TurntableDeck: View {
       deckTopSurface
     }
     .frame(width: S, height: S)
-    .rotation3DEffect(.degrees(is3D ? 15 : 0), axis: (x: 1, y: -0.06, z: 0), perspective: 0.58)
-    .shadow(color: .black.opacity(is3D ? 0.48 : 0.35), radius: S * (is3D ? 0.075 : 0.05), y: S * (is3D ? 0.055 : 0.035))
+    .rotation3DEffect(.degrees(is3D ? 10 : 0), axis: (x: 1, y: -0.04, z: 0), perspective: 0.45)
+    .shadow(color: .black.opacity(is3D ? 0.46 : 0.34), radius: S * (is3D ? 0.07 : 0.048), y: S * (is3D ? 0.05 : 0.032))
     .onChange(of: isPlaying) { _, now in
       if !now {
         Task {
@@ -204,11 +241,11 @@ struct TurntableDeck: View {
       }
       .position(x: S * 0.135, y: S * 0.075)
 
-      Text("LUME  DD-1 PRO")
-        .font(.system(size: S * 0.023, weight: .heavy, design: .rounded))
-        .tracking(S * 0.003)
+      Text("LUME DD-1")
+        .font(.system(size: S * 0.020, weight: .heavy, design: .rounded))
+        .tracking(S * 0.002)
         .foregroundStyle(finish.isDarkChassis ? Color.white.opacity(0.45) : Color.black.opacity(0.42))
-        .position(x: S * 0.155, y: S * 0.135)
+        .position(x: S * 0.132, y: S * 0.128)
 
       // Poço do prato
       Circle()
@@ -511,10 +548,16 @@ struct VinylGrooveDisc: View {
         .resizable()
         .frame(width: d, height: d)
         .rotationEffect(.degrees(rotationDeg))
-        .overlay(Circle().stroke(Color.white.opacity(0.16), lineWidth: 1))
+        .overlay(
+          Circle()
+            .stroke(
+              LinearGradient(colors: [.white.opacity(0.22), .clear, .black.opacity(0.35)], startPoint: .topLeading, endPoint: .bottomTrailing),
+              lineWidth: 1.2
+            )
+        )
 
-      // Reflexo especular duplo estacionário (não gira com o disco — igual luz real no vinil)
-      VinylSpecularSheen(diameter: d)
+      // Reflexo especular de estúdio estacionário (não gira com o disco)
+      VinylSpecularSheen(diameter: d, prism: edition == .prismCrystal)
         .allowsHitTesting(false)
     }
   }
@@ -522,29 +565,43 @@ struct VinylGrooveDisc: View {
 
 struct VinylSpecularSheen: View {
   let diameter: CGFloat
+  var prism: Bool = false
+
   var body: some View {
     AngularGradient(
-      stops: [
+      stops: prism ? [
         .init(color: .clear, location: 0.00),
         .init(color: Theme.sky.opacity(0.11), location: 0.06),
-        .init(color: .white.opacity(0.22), location: 0.10),
+        .init(color: .white.opacity(0.20), location: 0.10),
         .init(color: Theme.rose.opacity(0.11), location: 0.14),
         .init(color: .clear, location: 0.22),
         .init(color: .clear, location: 0.50),
         .init(color: Theme.lavender.opacity(0.09), location: 0.56),
-        .init(color: .white.opacity(0.16), location: 0.60),
+        .init(color: .white.opacity(0.14), location: 0.60),
         .init(color: Theme.peach.opacity(0.09), location: 0.64),
         .init(color: .clear, location: 0.72),
         .init(color: .clear, location: 1.00),
+      ] : [
+        .init(color: .clear, location: 0.00),
+        .init(color: .white.opacity(0.04), location: 0.05),
+        .init(color: .white.opacity(0.17), location: 0.095),
+        .init(color: .white.opacity(0.04), location: 0.145),
+        .init(color: .clear, location: 0.21),
+        .init(color: .clear, location: 0.51),
+        .init(color: .white.opacity(0.03), location: 0.56),
+        .init(color: .white.opacity(0.10), location: 0.60),
+        .init(color: .white.opacity(0.03), location: 0.64),
+        .init(color: .clear, location: 0.70),
+        .init(color: .clear, location: 1.00),
       ],
       center: .center,
-      angle: .degrees(-35)
+      angle: .degrees(-36)
     )
     .frame(width: diameter, height: diameter)
     .mask(
       ZStack {
-        Circle().frame(width: diameter * 0.99, height: diameter * 0.99)
-        Circle().frame(width: diameter * 0.36, height: diameter * 0.36).blendMode(.destinationOut)
+        Circle().frame(width: diameter * 0.985, height: diameter * 0.985)
+        Circle().frame(width: diameter * 0.37, height: diameter * 0.37).blendMode(.destinationOut)
       }
       .compositingGroup()
     )
@@ -563,9 +620,11 @@ struct VinylLabel: View {
       ArtworkImage(url: artworkURL, cornerRadius: R * 0.34, maxPixel: 600)
         .frame(width: R * 0.68, height: R * 0.68)
         .clipShape(Circle())
-        .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 2))
+        .overlay(Circle().stroke(Color.black.opacity(0.65), lineWidth: 2))
+        // Anel estampado característico de prensa de vinil no papel do selo
+        .overlay(Circle().stroke(Color.black.opacity(0.22), lineWidth: 1).frame(width: R * 0.44, height: R * 0.44))
         .overlay(
-          Circle().fill(RadialGradient(colors: [.clear, .clear, .black.opacity(0.30)], center: .center, startRadius: 0, endRadius: R * 0.34))
+          Circle().fill(RadialGradient(colors: [.clear, .clear, .black.opacity(0.32)], center: .center, startRadius: 0, endRadius: R * 0.34))
         )
         .overlay(alignment: .bottom) {
           Text(rpmText)
@@ -576,10 +635,12 @@ struct VinylLabel: View {
             .padding(.bottom, R * 0.048)
         }
 
+      // Eixo metálico torneado central
       Circle()
-        .fill(RadialGradient(colors: [Color(white: 0.98), Color(white: 0.6), Color(white: 0.28)], center: UnitPoint(x: 0.35, y: 0.35), startRadius: 0, endRadius: R * 0.035))
-        .frame(width: R * 0.064, height: R * 0.064)
-        .shadow(color: .black.opacity(0.55), radius: 1.5, y: 1)
+        .fill(RadialGradient(colors: [Color(white: 0.98), Color(white: 0.56), Color(white: 0.22)], center: UnitPoint(x: 0.35, y: 0.35), startRadius: 0, endRadius: R * 0.036))
+        .frame(width: R * 0.066, height: R * 0.066)
+        .overlay(Circle().stroke(Color.black.opacity(0.45), lineWidth: 0.7))
+        .shadow(color: .black.opacity(0.6), radius: 1.5, y: 1)
     }
   }
 }

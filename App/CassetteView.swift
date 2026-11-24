@@ -34,17 +34,64 @@ struct CassetteStage: View {
 
   var body: some View {
     GeometryReader { g in
-      let availH = g.size.height - 54
-      let W = min(g.size.width - 36, 385, max(220, availH) / 1.17)
-      VStack(spacing: W * 0.034) {
-        Spacer(minLength: 0)
-        deckWindow(W)
-        meters(W)
-        keys(W)
-        styleStrip
-        Spacer(minLength: 0)
+      let availH = max(210, g.size.height - 62)
+      let W = min(g.size.width - 36, 380, availH / 1.07)
+      ZStack(alignment: .topTrailing) {
+        VStack(spacing: W * 0.032) {
+          Spacer(minLength: 26)
+          freeCassette(W)
+          meters(W)
+          keys(W)
+          Spacer(minLength: 0)
+        }
+        .frame(width: g.size.width, height: g.size.height)
+
+        StageStyleOrb(icon: "recordingtape", accessibilityLabel: "Estilo da fita K7") { dismiss in
+          VStack(alignment: .leading, spacing: 6) {
+            Text("ESTILO DA FITA K7")
+              .font(Theme.font(10.5, .heavy))
+              .tracking(0.8)
+              .foregroundStyle(Theme.secondary)
+              .padding(.horizontal, 6)
+              .padding(.bottom, 2)
+
+            ForEach(CassetteStyle.allCases) { st in
+              let active = store.cassetteStyle == st
+              Button {
+                Haptics.selection()
+                withAnimation(.easeInOut(duration: 0.25)) { store.cassetteStyle = st }
+                dismiss()
+              } label: {
+                HStack(spacing: 8) {
+                  Circle()
+                    .fill(swatchColor(for: st))
+                    .frame(width: 12, height: 12)
+                    .overlay(Circle().stroke(Color.white.opacity(0.45), lineWidth: 0.7))
+                  Text(st.rawValue)
+                    .font(Theme.font(12.5, active ? .bold : .semibold))
+                    .foregroundStyle(active ? Theme.onPrism : Theme.text)
+                  Spacer(minLength: 4)
+                  if active {
+                    Image(systemName: "checkmark")
+                      .font(.system(size: 11, weight: .bold))
+                      .foregroundStyle(Theme.onPrism)
+                  }
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .background {
+                  if active {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.prismDiagonal)
+                  } else {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.06))
+                  }
+                }
+              }
+              .buttonStyle(.plain)
+            }
+          }
+        }
       }
-      .frame(width: g.size.width, height: g.size.height)
     }
     .onAppear { anchor() }
     .onChange(of: clock.currentTime) { _, _ in anchor() }
@@ -57,115 +104,47 @@ struct CassetteStage: View {
     anchorDate = Date()
   }
 
-  private var styleStrip: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: 6) {
-        ForEach(CassetteStyle.allCases) { st in
-          let active = store.cassetteStyle == st
-          Button {
-            Haptics.selection()
-            withAnimation(.easeInOut(duration: 0.25)) { store.cassetteStyle = st }
-          } label: {
-            Text(st.rawValue)
-              .font(Theme.font(11, .semibold))
-              .foregroundStyle(active ? Theme.onPrism : Theme.text)
-              .padding(.horizontal, 10)
-              .frame(height: 28)
-              .background {
-                if active { Capsule().fill(Theme.prismDiagonal) }
-              }
-              .modifier(ConditionalGlassCapsule(enabled: !active))
-          }
-          .buttonStyle(.plain)
-        }
-      }
-      .padding(.horizontal, 20)
+  private func swatchColor(for style: CassetteStyle) -> Color {
+    switch style {
+    case .smokedStudio: return Color(white: 0.22)
+    case .crystalClear: return Color.white.opacity(0.75)
+    case .metallicChrome: return Color(white: 0.68)
+    case .vintageCream: return Color(red: 0.92, green: 0.87, blue: 0.76)
     }
-    .scrollClipDisabled()
   }
 
-  // MARK: Janela do deck + Fita
+  // MARK: Fita K7 inteira em primeiro plano
 
-  private func deckWindow(_ W: CGFloat) -> some View {
-    let H = W * 0.70
-    return ZStack {
-      // Espessura 3D sutil sob a porta
-      RoundedRectangle(cornerRadius: W * 0.07, style: .continuous)
-        .fill(Color(white: 0.35))
-        .offset(y: W * 0.015)
-
-      BrushedPanel(cornerRadius: W * 0.07, dark: false).equatable()
-      // Recesso
-      RoundedRectangle(cornerRadius: W * 0.045, style: .continuous)
-        .fill(Color.black.opacity(0.88))
-        .padding(W * 0.045)
-        .shadow(color: .white.opacity(0.65), radius: 0, x: 0.8, y: 1)
-
-      TimelineView(.animation(paused: !player.isPlaying)) { tl in
-        let t = player.isPlaying ? anchorTime + tl.date.timeIntervalSince(anchorDate) : anchorTime
-        let p = clock.duration > 1 ? min(1, max(0, t / clock.duration)) : 0
-        CassetteFlipWrapper(angle: sideB ? 180 : 0) {
-          CassetteTape(
-            width: W * 0.80,
-            title: track.title,
-            artist: track.artist,
-            artworkURL: player.currentArtwork,
-            sideB: false,
-            progress: p,
-            seconds: max(1, clock.duration),
-            style: store.cassetteStyle
-          )
-        } back: {
-          CassetteTape(
-            width: W * 0.80,
-            title: track.title,
-            artist: track.artist,
-            artworkURL: art.photo(for: track.artist) ?? player.currentArtwork,
-            sideB: true,
-            progress: p,
-            seconds: max(1, clock.duration),
-            style: store.cassetteStyle
-          )
-        }
-      }
-      .animation(.spring(response: 0.65, dampingFraction: 0.82), value: sideB)
-
-      // Porta de vidro fumê com reflexo
-      RoundedRectangle(cornerRadius: W * 0.045, style: .continuous)
-        .fill(
-          LinearGradient(
-            stops: [
-              .init(color: .white.opacity(0.18), location: 0),
-              .init(color: .white.opacity(0.03), location: 0.35),
-              .init(color: .clear, location: 0.55),
-              .init(color: .white.opacity(0.08), location: 0.82),
-              .init(color: .clear, location: 1),
-            ],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-          )
+  private func freeCassette(_ W: CGFloat) -> some View {
+    TimelineView(.animation(paused: !player.isPlaying)) { tl in
+      let t = player.isPlaying ? anchorTime + tl.date.timeIntervalSince(anchorDate) : anchorTime
+      let p = clock.duration > 1 ? min(1, max(0, t / clock.duration)) : 0
+      CassetteFlipWrapper(angle: sideB ? 180 : 0) {
+        CassetteTape(
+          width: W,
+          title: track.title,
+          artist: track.artist,
+          artworkURL: player.currentArtwork,
+          sideB: false,
+          progress: p,
+          seconds: max(1, clock.duration),
+          style: store.cassetteStyle
         )
-        .overlay(RoundedRectangle(cornerRadius: W * 0.045, style: .continuous).stroke(Color.white.opacity(0.20), lineWidth: 0.8))
-        .padding(W * 0.045)
-        .allowsHitTesting(false)
-
-      HStack {
-        Text("LUME · CrO₂ STEREO DECK")
-          .font(.system(size: W * 0.021, weight: .heavy, design: .rounded))
-          .tracking(1.1)
-          .foregroundStyle(Color.black.opacity(0.45))
-          .shadow(color: .white.opacity(0.75), radius: 0, x: 0.5, y: 0.6)
-        Spacer()
-        Text("DOLBY NR")
-          .font(.system(size: W * 0.019, weight: .bold, design: .rounded))
-          .tracking(0.8)
-          .foregroundStyle(Color.black.opacity(0.38))
+      } back: {
+        CassetteTape(
+          width: W,
+          title: track.title,
+          artist: track.artist,
+          artworkURL: art.photo(for: track.artist) ?? player.currentArtwork,
+          sideB: true,
+          progress: p,
+          seconds: max(1, clock.duration),
+          style: store.cassetteStyle
+        )
       }
-      .padding(.horizontal, W * 0.08)
-      .frame(maxHeight: .infinity, alignment: .bottom)
-      .padding(.bottom, W * 0.013)
     }
-    .frame(width: W, height: H)
-    .shadow(color: .black.opacity(0.38), radius: W * 0.045, y: W * 0.028)
+    .animation(.spring(response: 0.65, dampingFraction: 0.82), value: sideB)
+    .shadow(color: .black.opacity(0.45), radius: W * 0.045, y: W * 0.03)
     .onTapGesture { Haptics.medium(); player.togglePlayPause() }
   }
 
@@ -533,14 +512,17 @@ struct BrushedPanel: View, Equatable {
 
   var body: some View {
     let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    Image(uiImage: LumeTextures.shared.brushedSurface(styleId: dark ? 1 : 0))
-      .resizable()
-      .scaledToFill()
-      .clipShape(shape)
-      .overlay(
-        shape.stroke(LinearGradient(colors: [.white.opacity(dark ? 0.3 : 0.95), .black.opacity(0.28)], startPoint: .zero, endPoint: .bottomTrailing), lineWidth: 1.2)
-      )
-      .drawingGroup()
+    GeometryReader { g in
+      Image(uiImage: LumeTextures.shared.brushedSurface(styleId: dark ? 1 : 0))
+        .resizable()
+        .scaledToFill()
+        .frame(width: g.size.width, height: g.size.height)
+        .clipShape(shape)
+        .overlay(
+          shape.stroke(LinearGradient(colors: [.white.opacity(dark ? 0.3 : 0.90), .black.opacity(0.28)], startPoint: .zero, endPoint: .bottomTrailing), lineWidth: 1.1)
+        )
+    }
+    .drawingGroup()
   }
 }
 

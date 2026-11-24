@@ -17,6 +17,7 @@ actor MusicEngine {
   }
 
   private var streamCache: [String: ResolvedStream] = [:]
+  private var videoIdCache: [String: String] = [:]
   private var animatedCache: [String: String] = [:] // key -> m3u8 URL or "" for none
   private var animatedLoaded = false
 
@@ -302,9 +303,11 @@ actor MusicEngine {
 
   func resolveVideoId(for track: Track) async -> String? {
     if let vid = track.videoId, vid.count == 11 { return vid }
+    if let cached = videoIdCache[track.id] { return cached }
     let hits = await searchSongs(query: track.searchQuery, limit: 5)
-    if let best = hits.first(where: { $0.videoId != nil }) {
-      return best.videoId
+    if let best = hits.first(where: { $0.videoId != nil }), let vid = best.videoId {
+      videoIdCache[track.id] = vid
+      return vid
     }
     return nil
   }

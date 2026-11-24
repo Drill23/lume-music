@@ -13,10 +13,10 @@ struct WavesStage: View {
   private var style: VisualizerStyle { store.visualizerStyle == .off ? .ares : store.visualizerStyle }
 
   var body: some View {
-    VStack(spacing: 8) {
+    ZStack(alignment: .topTrailing) {
       SpectrumVisualizer(style: style, palette: player.palette, artworkURL: player.currentArtwork, isPlaying: player.isPlaying)
         .padding(.horizontal, 8)
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .onTapGesture {
           Haptics.selection()
@@ -25,32 +25,46 @@ struct WavesStage: View {
           withAnimation(.easeInOut(duration: 0.32)) { store.visualizerStyle = order[(i + 1) % order.count] }
         }
 
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 6) {
+      StageStyleOrb(icon: "waveform", accessibilityLabel: "Estilo das ondas") { dismiss in
+        VStack(alignment: .leading, spacing: 5) {
+          Text("VISUALIZADOR")
+            .font(Theme.font(10, .heavy))
+            .tracking(0.8)
+            .foregroundStyle(Theme.secondary)
+            .padding(.horizontal, 6)
+            .padding(.bottom, 2)
+
           ForEach(VisualizerStyle.activeStyles) { st in
             let active = style == st
             Button {
               Haptics.selection()
               withAnimation(.easeInOut(duration: 0.3)) { store.visualizerStyle = st }
+              dismiss()
             } label: {
-              HStack(spacing: 4) {
-                Image(systemName: st.icon).font(.system(size: 11, weight: .semibold))
-                Text(st.title).font(Theme.font(11.5, .semibold))
+              HStack(spacing: 8) {
+                Image(systemName: st.icon)
+                  .font(.system(size: 11.5, weight: .semibold))
+                  .frame(width: 16)
+                Text(st.title)
+                  .font(Theme.font(12, active ? .bold : .semibold))
+                Spacer(minLength: 4)
+                if active {
+                  Image(systemName: "checkmark")
+                    .font(.system(size: 10.5, weight: .bold))
+                }
               }
               .foregroundStyle(active ? Theme.onPrism : Theme.text)
               .padding(.horizontal, 10)
-              .frame(height: 28)
+              .frame(height: 32)
               .background {
-                if active { Capsule().fill(Theme.prismDiagonal) }
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                  .fill(active ? AnyShapeStyle(Theme.prismDiagonal) : AnyShapeStyle(Color.white.opacity(0.06)))
               }
-              .modifier(ConditionalGlassCapsule(enabled: !active))
             }
             .buttonStyle(.plain)
           }
         }
-        .padding(.horizontal, 20)
       }
-      .scrollClipDisabled()
     }
   }
 }

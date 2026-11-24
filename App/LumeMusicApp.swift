@@ -22,6 +22,7 @@ struct LumeMusicApp: App {
       }
       .background(Theme.canvas.ignoresSafeArea())
       .preferredColorScheme(scheme)
+      .task { LumeTextures.shared.prewarmInBackground() }
     }
   }
 

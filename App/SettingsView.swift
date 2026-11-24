@@ -185,7 +185,7 @@ struct SettingsView: View {
     let v = info?["CFBundleShortVersionString"] as? String
     let b = info?["CFBundleVersion"] as? String
     if let v, let b { return "\(v) (\(b))" }
-    return "4.1.0 (5)"
+    return "4.2.0 (6)"
   }
 
   private func clearCache() {

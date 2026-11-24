@@ -85,20 +85,28 @@ enum Theme {
     return String(format: "%d:%02d", s / 60, s % 60)
   }
 
-  static func shortDate(_ iso: String?) -> String {
-    guard let iso, iso.count >= 10 else { return "" }
+  private static let isoDayFormatter: DateFormatter = {
     let f = DateFormatter()
     f.locale = Locale(identifier: "en_US_POSIX")
     f.dateFormat = "yyyy-MM-dd"
-    guard let d = f.date(from: String(iso.prefix(10))) else { return "" }
+    return f
+  }()
+
+  private static let brShortMonthFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "pt_BR")
+    f.dateFormat = "d MMM"
+    return f
+  }()
+
+  static func shortDate(_ iso: String?) -> String {
+    guard let iso, iso.count >= 10,
+          let d = isoDayFormatter.date(from: String(iso.prefix(10))) else { return "" }
     let days = Calendar.current.dateComponents([.day], from: d, to: Date()).day ?? 99
     if days <= 0 { return "Hoje" }
     if days == 1 { return "Ontem" }
     if days < 7 { return "Há \(days) dias" }
-    let out = DateFormatter()
-    out.locale = Locale(identifier: "pt_BR")
-    out.dateFormat = "d MMM"
-    return out.string(from: d).replacingOccurrences(of: ".", with: "")
+    return brShortMonthFormatter.string(from: d).replacingOccurrences(of: ".", with: "")
   }
 }
 

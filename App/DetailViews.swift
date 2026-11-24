@@ -26,16 +26,24 @@ enum DetailFormat {
   }
 
   /// "21 de novembro de 2026" a partir de "2026-11-21".
-  static func longDate(_ iso: String?) -> String? {
-    guard let iso, iso.count >= 10 else { return nil }
+  private static let isoDayFormatter: DateFormatter = {
     let f = DateFormatter()
     f.locale = Locale(identifier: "en_US_POSIX")
     f.dateFormat = "yyyy-MM-dd"
-    guard let d = f.date(from: String(iso.prefix(10))) else { return nil }
-    let out = DateFormatter()
-    out.locale = Locale(identifier: "pt_BR")
-    out.dateFormat = "d 'de' MMMM 'de' yyyy"
-    return out.string(from: d)
+    return f
+  }()
+
+  private static let brLongFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "pt_BR")
+    f.dateFormat = "d 'de' MMMM 'de' yyyy"
+    return f
+  }()
+
+  static func longDate(_ iso: String?) -> String? {
+    guard let iso, iso.count >= 10,
+          let d = isoDayFormatter.date(from: String(iso.prefix(10))) else { return nil }
+    return brLongFormatter.string(from: d)
   }
 }
 

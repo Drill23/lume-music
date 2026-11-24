@@ -1,6 +1,13 @@
-# Lume Music 4.1.0
+# Lume Music 4.2.0
 
-Aplicativo nativo de música para iPhone e iPad construído em **SwiftUI** com estética **Prisma Liquid Glass** (iOS 18–26+), texturas procedurais GPU a 120Hz, combinando o melhor de **Apple Music**, **Spotify** e **Amazon Music** com visualizadores musicais exclusivos.
+Aplicativo nativo de música para iPhone e iPad construído em **SwiftUI** com estética **Prisma Liquid Glass** (iOS 18–26+), texturas procedurais pré-aquecidas em disco e GPU a 120Hz, combinando o melhor de **Apple Music**, **Spotify** e **Amazon Music** com palcos analógicos e visualizadores exclusivos.
+
+## Destaques da versão 4.2.0
+
+- **Fita K7 Livre em Primeiro Plano:** Fita cassete exibida por inteiro (sem estojo recortando a arte), painel `BrushedPanel` com geometria corrigida (`GeometryReader` isolado), VU meters balísticos com LED `PEAK` e flip 3D Lado A / Lado B.
+- **Toca-Discos Fotorrealista:** Vinil 180g redesenhado em 768×768 com 118 sulcos concêntricos livres de moiré, reflexo especular neutro de estúdio, anel prensado no selo de papel, eixo metálico torneado e perspectiva 3D natural de 10°.
+- **Orbe Retrátil de Estilos (`StageStyleOrb`):** Seletor circular compacto no canto superior direito dos palcos *Vinil*, *K7* e *Ondas* que abre as opções de acabamento/estilo sob demanda e retrai automaticamente ao selecionar ou tocar fora, mantendo toda a tela livre de barras e sobreposições.
+- **Otimizações de Velocidade:** Cache em disco (`Caches/LumeTextures`) com pré-aquecimento em background no lançamento, formatadores de data estáticos em cache, cache de `videoId` no `MusicEngine` e persistência assíncrona com debounce no `LibraryStore`.
 
 ## Destaques da versão 4.1.0 ("Masterpiece Edition")
 
