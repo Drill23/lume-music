@@ -212,11 +212,16 @@ struct RootView: View {
       Theme.canvas.ignoresSafeArea()
 
       ForEach(AppTab.allCases) { t in
+        let active = app.tab == t
+        let diff = tabOrder(t) - tabOrder(app.tab)
         tabStack(t)
-          .opacity(app.tab == t ? 1 : 0)
-          .allowsHitTesting(app.tab == t)
-          .accessibilityHidden(app.tab != t)
+          .opacity(active ? 1 : 0)
+          .offset(x: active ? 0 : (diff < 0 ? -16 : 16))
+          .scaleEffect(active ? 1 : 0.988)
+          .allowsHitTesting(active)
+          .accessibilityHidden(!active)
       }
+      .animation(.spring(response: 0.30, dampingFraction: 0.90), value: app.tab)
 
       BottomBar()
 
@@ -261,6 +266,15 @@ struct RootView: View {
   }
 
   private var bottomInset: CGFloat { player.currentTrack != nil ? 150 : 92 }
+
+  private func tabOrder(_ t: AppTab) -> Int {
+    switch t {
+    case .home: return 0
+    case .explore: return 1
+    case .library: return 2
+    case .search: return 3
+    }
+  }
 
   @ViewBuilder
   private func tabStack(_ t: AppTab) -> some View {
@@ -450,16 +464,9 @@ struct MiniPlayer: View {
     .padding(.trailing, 10)
     .frame(height: 60)
     .overlay(alignment: .bottom) {
-      GeometryReader { g in
-        let frac = player.duration > 0 ? min(1, player.currentTime / player.duration) : 0
-        Capsule().fill(Theme.text.opacity(0.10))
-          .overlay(alignment: .leading) {
-            Capsule().fill(Theme.prism).frame(width: g.size.width * frac)
-          }
-      }
-      .frame(height: 2.5)
-      .padding(.horizontal, 26)
-      .padding(.bottom, 3)
+      MiniPlayerProgressBar()
+        .padding(.horizontal, 26)
+        .padding(.bottom, 3)
     }
     .glassCapsule(interactive: true)
     .contentShape(Capsule())
@@ -477,5 +484,20 @@ struct MiniPlayer: View {
     .accessibilityElement(children: .combine)
     .accessibilityLabel("Tocando agora: \(track.title), \(track.artist)")
     .accessibilityAddTraits(.isButton)
+  }
+}
+
+private struct MiniPlayerProgressBar: View {
+  @ObservedObject private var clock = PlaybackClock.shared
+
+  var body: some View {
+    GeometryReader { g in
+      let frac = clock.duration > 0 ? min(1, clock.currentTime / clock.duration) : 0
+      Capsule().fill(Theme.text.opacity(0.10))
+        .overlay(alignment: .leading) {
+          Capsule().fill(Theme.prism).frame(width: g.size.width * frac)
+        }
+    }
+    .frame(height: 2.5)
   }
 }

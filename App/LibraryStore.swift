@@ -27,6 +27,11 @@ final class LibraryStore: ObservableObject {
   @Published var crossfadeSeconds: Double = 0 { didSet { save() } }
   @Published var offlineMode: Bool = false { didSet { save() } }
   @Published var autoDownloadFavorites: Bool = false { didSet { save() } }
+  @Published var turntableFinish: TurntableFinish = .obsidian { didSet { save() } }
+  @Published var vinylEdition: VinylEdition = .classicBlack { didSet { save() } }
+  @Published var turntable3D: Bool = true { didSet { save() } }
+  @Published var cassetteStyle: CassetteStyle = .smokedStudio { didSet { save() } }
+  @Published var introEnabled: Bool = true { didSet { save() } }
   @Published var totalListeningSeconds: Double = 0
 
   struct ReplaySummary {
@@ -58,6 +63,11 @@ final class LibraryStore: ObservableObject {
     var offlineMode: Bool?
     var autoDownloadFavorites: Bool?
     var totalListeningSeconds: Double?
+    var turntableFinish: TurntableFinish?
+    var vinylEdition: VinylEdition?
+    var turntable3D: Bool?
+    var cassetteStyle: CassetteStyle?
+    var introEnabled: Bool?
   }
 
   private var storeURL: URL {
@@ -408,6 +418,11 @@ final class LibraryStore: ObservableObject {
     offlineMode = snap.offlineMode ?? false
     autoDownloadFavorites = snap.autoDownloadFavorites ?? false
     totalListeningSeconds = snap.totalListeningSeconds ?? 0
+    turntableFinish = snap.turntableFinish ?? .obsidian
+    vinylEdition = snap.vinylEdition ?? .classicBlack
+    turntable3D = snap.turntable3D ?? true
+    cassetteStyle = snap.cassetteStyle ?? .smokedStudio
+    introEnabled = snap.introEnabled ?? true
   }
 
   func save() {
@@ -430,7 +445,12 @@ final class LibraryStore: ObservableObject {
       crossfadeSeconds: crossfadeSeconds,
       offlineMode: offlineMode,
       autoDownloadFavorites: autoDownloadFavorites,
-      totalListeningSeconds: totalListeningSeconds
+      totalListeningSeconds: totalListeningSeconds,
+      turntableFinish: turntableFinish,
+      vinylEdition: vinylEdition,
+      turntable3D: turntable3D,
+      cassetteStyle: cassetteStyle,
+      introEnabled: introEnabled
     )
     if let data = try? JSONEncoder().encode(snap) {
       try? data.write(to: storeURL, options: .atomic)

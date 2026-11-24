@@ -379,34 +379,36 @@ struct GlassButton: View {
   }
 }
 
-/// The Lume mark: a tiny glossy record catching a prism reflection.
+/// O novo emblema do Lume: disco escultural em vidro líquido com microssulcos, anel prismático e brilho diagonal.
 struct PrismMark: View {
   var size: CGFloat = 32
 
   var body: some View {
     ZStack {
       Circle().fill(
-        RadialGradient(colors: [Color(white: 0.16), Color(white: 0.04)], center: .center, startRadius: 0, endRadius: size * 0.5)
+        RadialGradient(colors: [Color(white: 0.18), Color(white: 0.06), Color(white: 0.02)], center: .center, startRadius: 0, endRadius: size * 0.5)
       )
-      Circle()
-        .fill(Theme.prismAngular)
-        .opacity(0.85)
-        .mask(
-          Circle().stroke(lineWidth: size * 0.20).padding(size * 0.16)
-        )
-        .blur(radius: size * 0.02)
-      ForEach(0..<3, id: \.self) { i in
+      ForEach(0..<4, id: \.self) { i in
         Circle()
-          .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
-          .padding(size * (0.10 + CGFloat(i) * 0.075))
+          .stroke(Color.white.opacity(0.09), lineWidth: 0.5)
+          .padding(size * (0.08 + CGFloat(i) * 0.06))
       }
+      // Anel prismático incrustado com brilho suave
       Circle()
-        .fill(LinearGradient(colors: [.white.opacity(0.95), .white.opacity(0.7)], startPoint: .top, endPoint: .bottom))
-        .frame(width: size * 0.26, height: size * 0.26)
-      Circle().fill(Color(white: 0.08)).frame(width: size * 0.07, height: size * 0.07)
+        .stroke(Theme.prismAngular, lineWidth: size * 0.09)
+        .padding(size * 0.25)
+        .shadow(color: Theme.rose.opacity(0.45), radius: size * 0.08)
+      // Selo central metálico fosco
       Circle()
-        .trim(from: 0.55, to: 0.8)
-        .stroke(Color.white.opacity(0.55), style: StrokeStyle(lineWidth: size * 0.035, lineCap: .round))
+        .fill(LinearGradient(colors: [Color(white: 0.94), Color(white: 0.72)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .frame(width: size * 0.30, height: size * 0.30)
+        .overlay(Circle().stroke(Color.white.opacity(0.6), lineWidth: 0.5))
+      // Furo spindle
+      Circle().fill(Color(white: 0.08)).frame(width: size * 0.08, height: size * 0.08)
+      // Reflexo especular diagonal
+      Circle()
+        .trim(from: 0.55, to: 0.80)
+        .stroke(Color.white.opacity(0.55), style: StrokeStyle(lineWidth: size * 0.032, lineCap: .round))
         .padding(size * 0.06)
     }
     .frame(width: size, height: size)

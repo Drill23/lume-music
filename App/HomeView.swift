@@ -33,7 +33,8 @@ struct HomeView: View {
         chips
         if let feed = app.feed {
           content(feed)
-            .transition(.opacity)
+            .id(filter)
+            .transition(.opacity.combined(with: .scale(scale: 0.99)))
         } else {
           skeleton
         }
@@ -44,7 +45,7 @@ struct HomeView: View {
           .padding(.top, 6)
       }
       .padding(.top, 6)
-      .animation(.easeInOut(duration: 0.25), value: filter)
+      .animation(.spring(response: 0.28, dampingFraction: 0.88), value: filter)
     }
     .background(homeBackdrop)
     .refreshable {

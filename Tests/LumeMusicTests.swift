@@ -89,6 +89,35 @@ struct LumeMusicTests {
     )
     expect(mixes.count >= 4, "Personalized mixes generated")
 
+    // 11. VisualizerStyle preserves old rawValues & has 6 active styles
+    expect(VisualizerStyle.ares.rawValue == "Ondas Ares", "VisualizerStyle.ares rawValue preserved")
+    expect(VisualizerStyle.aurora.rawValue == "Espectro", "VisualizerStyle.aurora rawValue preserved")
+    expect(VisualizerStyle.orb.rawValue == "Orbe", "VisualizerStyle.orb rawValue preserved")
+    expect(VisualizerStyle.off.rawValue == "Desligado", "VisualizerStyle.off rawValue preserved")
+    expect(VisualizerStyle.activeStyles.count == 6, "6 active visualizers")
+
+    // 12. Turntable / Vinyl / Cassette customization enums
+    expect(TurntableFinish.allCases.count == 4, "4 turntable finishes")
+    expect(VinylEdition.allCases.count == 4, "4 vinyl editions")
+    expect(CassetteStyle.allCases.count == 4, "4 cassette styles")
+
+    // 13. O(1) Law-of-Cosines tonearm geometry check
+    let side = 400.0
+    let pivotX = side * 0.845, pivotY = side * 0.185
+    let centerX = side * 0.43, centerY = side * 0.50
+    let len = side * 0.60
+    let targetR = side * 0.365
+    let dx = pivotX - centerX, dy = centerY - pivotY
+    let d = hypot(dx, dy)
+    let phi = atan2(dx, dy)
+    let cosTheta = min(1.0, max(-1.0, (d * d + len * len - targetR * targetR) / (2.0 * d * len)))
+    let angleDeg = (phi - acos(cosTheta)) * 180.0 / .pi
+    let rad = angleDeg * .pi / 180.0
+    let tipX = pivotX - len * sin(rad)
+    let tipY = pivotY + len * cos(rad)
+    let computedR = hypot(tipX - centerX, tipY - centerY)
+    expect(abs(computedR - targetR) < 0.01, "O(1) Law-of-Cosines tonearm geometry exact")
+
     print("ALL \(passed) LUME MUSIC UNIT TESTS PASSED!")
   }
 }

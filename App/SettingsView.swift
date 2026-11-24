@@ -28,6 +28,9 @@ struct SettingsView: View {
         }
         .pickerStyle(.segmented)
         .onChange(of: appearance) { _, _ in Haptics.selection() }
+        Toggle(isOn: $store.introEnabled) {
+          Label("Abertura animada", systemImage: "sparkles")
+        }
       }
       .listRowBackground(Theme.canvasRaised)
 
@@ -65,9 +68,31 @@ struct SettingsView: View {
           Label("Traduzir letras automaticamente", systemImage: "translate")
         }
         Picker(selection: $store.visualizerStyle) {
-          ForEach([VisualizerStyle.ares, .aurora, .orb]) { Text($0.title).tag($0) }
+          ForEach(VisualizerStyle.activeStyles) { Text($0.title).tag($0) }
         } label: {
           Label("Estilo das ondas", systemImage: "waveform")
+        }
+      }
+      .listRowBackground(Theme.canvasRaised)
+
+      Section("Estúdio Vinil & K7") {
+        Picker(selection: $store.turntableFinish) {
+          ForEach(TurntableFinish.allCases) { Text($0.rawValue).tag($0) }
+        } label: {
+          Label("Acabamento do toca-discos", systemImage: "paintpalette")
+        }
+        Picker(selection: $store.vinylEdition) {
+          ForEach(VinylEdition.allCases) { Text($0.rawValue).tag($0) }
+        } label: {
+          Label("Edição do disco", systemImage: "record.circle")
+        }
+        Toggle(isOn: $store.turntable3D) {
+          Label("Perspectiva 3D no Vinil", systemImage: "cube")
+        }
+        Picker(selection: $store.cassetteStyle) {
+          ForEach(CassetteStyle.allCases) { Text($0.rawValue).tag($0) }
+        } label: {
+          Label("Estilo da fita K7", systemImage: "recordingtape")
         }
       }
       .listRowBackground(Theme.canvasRaised)
@@ -160,7 +185,7 @@ struct SettingsView: View {
     let v = info?["CFBundleShortVersionString"] as? String
     let b = info?["CFBundleVersion"] as? String
     if let v, let b { return "\(v) (\(b))" }
-    return "4.0.0 (4)"
+    return "4.1.0 (5)"
   }
 
   private func clearCache() {
@@ -179,6 +204,7 @@ struct SettingsView: View {
 struct PlayerStylePicker: View {
   @ObservedObject private var app = AppModel.shared
   @ObservedObject private var player = AudioPlayer.shared
+  @ObservedObject private var store = LibraryStore.shared
 
   var body: some View {
     ScrollView(.horizontal, showsIndicators: false) {
@@ -261,12 +287,12 @@ struct PlayerStylePicker: View {
       .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.hairline, lineWidth: 0.5))
       .lumeShadow(8, y: 5, opacity: 0.6)
     case .vinyl:
-      RecordDisc(side: 120, artworkURL: art)
+      RecordDisc(side: 120, artworkURL: art, edition: store.vinylEdition)
         .frame(width: 120, height: 120)
         .scaleEffect(0.78)
         .frame(width: 96, height: 92)
     case .cassette:
-      CassetteTape(width: 116, title: "Lume", artist: "Mix", artworkURL: art, sideB: false, progress: 0.35, seconds: 200)
+      CassetteTape(width: 116, title: "Lume", artist: "Mix", artworkURL: art, sideB: false, progress: 0.35, seconds: 200, style: store.cassetteStyle)
     case .waves:
       WavesPreview()
         .frame(width: 112, height: 84)

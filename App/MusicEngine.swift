@@ -309,6 +309,10 @@ actor MusicEngine {
     return nil
   }
 
+  func invalidateStream(videoId: String) {
+    streamCache.removeValue(forKey: videoId)
+  }
+
   func resolveStream(videoId: String) async -> ResolvedStream? {
     if let cached = streamCache[videoId], cached.expiresAt > Date().addingTimeInterval(60) {
       return cached

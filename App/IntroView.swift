@@ -1,74 +1,72 @@
 import SwiftUI
 
-/// Opening — quiet and iOS-like: the Lume record mark resolves out of blur, a prism ring of light
-/// draws around it, the wordmark settles in, and the app zooms in from behind. ~1.4 s, tap to skip.
+/// Abertura cinematográfica a 120Hz (~0.95s, toque para pular):
+/// ondas acústicas concêntricas com brilho prismático irradiam do novo emblema 3D,
+/// o nome Lume surge nítido e o app aparece sem blur pesado.
 struct IntroView: View {
   let done: () -> Void
 
-  @State private var markIn = false
-  @State private var ring: CGFloat = 0
-  @State private var ringFade = false
+  @State private var markScale: CGFloat = 0.72
+  @State private var markOpacity: Double = 0
+  @State private var pulseA: CGFloat = 0.6
+  @State private var pulseAAlpha: Double = 0
+  @State private var pulseB: CGFloat = 0.6
+  @State private var pulseBAlpha: Double = 0
   @State private var sweep: CGFloat = -1
   @State private var wordIn = false
   @State private var leaving = false
-  @State private var finished = false
 
   var body: some View {
     ZStack {
       Theme.canvas.ignoresSafeArea()
-      RadialGradient(colors: [Theme.lavender.opacity(markIn ? 0.22 : 0), Theme.rose.opacity(markIn ? 0.08 : 0), .clear],
-                     center: .center, startRadius: 0, endRadius: 320)
-        .ignoresSafeArea()
+      RadialGradient(
+        colors: [Theme.lavender.opacity(markOpacity * 0.20), Theme.rose.opacity(markOpacity * 0.09), .clear],
+        center: .center, startRadius: 0, endRadius: 340
+      )
+      .ignoresSafeArea()
 
       VStack(spacing: 22) {
         ZStack {
-          // Prism ring of light
+          // Ondas acústicas prismáticas concêntricas
           Circle()
-            .trim(from: 0, to: ring)
-            .stroke(Theme.prismAngular, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-            .frame(width: 150, height: 150)
-            .rotationEffect(.degrees(-90 + Double(ring) * 120))
-            .blur(radius: 0.5)
-            .opacity(ringFade ? 0 : 1)
-          Circle()
-            .trim(from: 0, to: ring)
-            .stroke(Theme.prismAngular, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-            .frame(width: 150, height: 150)
-            .rotationEffect(.degrees(-90 + Double(ring) * 120))
-            .blur(radius: 14)
-            .opacity(ringFade ? 0 : 0.7)
+            .stroke(Theme.prismAngular, lineWidth: 2.5)
+            .frame(width: 146, height: 146)
+            .scaleEffect(pulseA)
+            .opacity(pulseAAlpha)
 
-          PrismMark(size: 104)
+          Circle()
+            .stroke(Theme.prismAngular, lineWidth: 1.6)
+            .frame(width: 146, height: 146)
+            .scaleEffect(pulseB)
+            .opacity(pulseBAlpha)
+
+          PrismMark(size: 112)
             .overlay {
-              // Specular sweep
-              LinearGradient(colors: [.clear, .white.opacity(0.55), .clear], startPoint: .leading, endPoint: .trailing)
-                .frame(width: 40)
-                .rotationEffect(.degrees(20))
-                .offset(x: sweep * 90)
-                .mask(Circle().frame(width: 104, height: 104))
+              LinearGradient(colors: [.clear, .white.opacity(0.6), .clear], startPoint: .leading, endPoint: .trailing)
+                .frame(width: 44)
+                .rotationEffect(.degrees(22))
+                .offset(x: sweep * 96)
+                .mask(Circle().frame(width: 112, height: 112))
                 .blendMode(.plusLighter)
             }
-            .scaleEffect(markIn ? 1 : 0.62)
-            .blur(radius: markIn ? 0 : 14)
-            .opacity(markIn ? 1 : 0)
+            .scaleEffect(markScale)
+            .opacity(markOpacity)
         }
 
-        VStack(spacing: 6) {
+        VStack(spacing: 5) {
           Text("Lume")
-            .font(.system(size: 44, weight: .bold, design: .rounded))
-            .tracking(wordIn ? -0.6 : 6)
+            .font(.system(size: 42, weight: .bold, design: .rounded))
+            .tracking(wordIn ? -0.5 : 3)
             .foregroundStyle(Theme.text)
           Text("MUSIC")
-            .font(Theme.font(12, .semibold))
-            .tracking(wordIn ? 5 : 10)
+            .font(Theme.font(11.5, .bold))
+            .tracking(wordIn ? 5.5 : 8.5)
             .foregroundStyle(Theme.secondary)
         }
         .opacity(wordIn ? 1 : 0)
-        .offset(y: wordIn ? 0 : 10)
-        .blur(radius: wordIn ? 0 : 6)
+        .offset(y: wordIn ? 0 : 8)
       }
-      .scaleEffect(leaving ? 1.18 : 1)
-      .blur(radius: leaving ? 10 : 0)
+      .scaleEffect(leaving ? 1.08 : 1)
       .opacity(leaving ? 0 : 1)
 
       VStack {
@@ -80,7 +78,6 @@ struct IntroView: View {
           .padding(.bottom, 18)
       }
     }
-    .opacity(finished ? 0 : 1)
     .contentShape(Rectangle())
     .onTapGesture { finish(fast: true) }
     .accessibilityLabel("Lume Music")
@@ -88,30 +85,41 @@ struct IntroView: View {
   }
 
   private func run() async {
-    let motion = Theme.motion
-    if !motion {
-      markIn = true; wordIn = true; ring = 1
-      try? await Task.sleep(for: .milliseconds(450))
+    guard Theme.motion else {
+      markScale = 1; markOpacity = 1; wordIn = true
+      try? await Task.sleep(for: .milliseconds(320))
       finish(fast: true)
       return
     }
-    withAnimation(.spring(response: 0.62, dampingFraction: 0.74)) { markIn = true }
-    withAnimation(.easeInOut(duration: 0.9)) { ring = 1 }
-    try? await Task.sleep(for: .milliseconds(260))
-    withAnimation(.easeInOut(duration: 0.7)) { sweep = 1 }
-    withAnimation(.spring(response: 0.7, dampingFraction: 0.86)) { wordIn = true }
-    try? await Task.sleep(for: .milliseconds(820))
-    withAnimation(.easeOut(duration: 0.35)) { ringFade = true }
-    try? await Task.sleep(for: .milliseconds(180))
+    withAnimation(.spring(response: 0.48, dampingFraction: 0.78)) {
+      markScale = 1
+      markOpacity = 1
+    }
+    pulseAAlpha = 0.85
+    withAnimation(.easeOut(duration: 0.75)) {
+      pulseA = 1.48
+      pulseAAlpha = 0
+    }
+    try? await Task.sleep(for: .milliseconds(160))
+    pulseBAlpha = 0.65
+    withAnimation(.easeOut(duration: 0.72)) {
+      pulseB = 1.32
+      pulseBAlpha = 0
+    }
+    withAnimation(.easeInOut(duration: 0.55)) { sweep = 1 }
+    withAnimation(.spring(response: 0.48, dampingFraction: 0.86)) { wordIn = true }
+
+    try? await Task.sleep(for: .milliseconds(620))
     finish(fast: false)
   }
 
   private func finish(fast: Bool) {
     guard !leaving else { return }
-    withAnimation(.easeIn(duration: fast ? 0.22 : 0.42)) { leaving = true }
-    withAnimation(.easeOut(duration: fast ? 0.25 : 0.45).delay(fast ? 0.05 : 0.12)) { finished = true }
+    withAnimation(.easeInOut(duration: fast ? 0.18 : 0.28)) {
+      leaving = true
+    }
     Task {
-      try? await Task.sleep(for: .milliseconds(fast ? 300 : 560))
+      try? await Task.sleep(for: .milliseconds(fast ? 180 : 280))
       done()
     }
   }

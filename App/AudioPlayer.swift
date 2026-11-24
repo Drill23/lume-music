@@ -4,6 +4,15 @@ import MediaPlayer
 import SwiftUI
 import UIKit
 
+/// Relógio isolado de reprodução: evita re-renderizar telas estáticas 7x/s quando o tempo avança.
+@MainActor
+final class PlaybackClock: ObservableObject {
+  static let shared = PlaybackClock()
+  @Published var currentTime: Double = 0
+  @Published var duration: Double = 0
+  private init() {}
+}
+
 /// Main playback controller: native AVPlayer (live HTTP .m4a + offline .m4a),
 /// Lock Screen / AirPods controls, dynamic album color extraction, Apple Music animated artwork,
 /// synced karaoke lyrics + 1-click PT-BR translation, autoplay radio, sleep timer, and visualizer telemetry.
@@ -16,8 +25,14 @@ final class AudioPlayer: ObservableObject {
   @Published var currentIndex: Int = 0
   @Published var isPlaying: Bool = false
   @Published var isLoading: Bool = false
-  @Published var currentTime: Double = 0
-  @Published var duration: Double = 0
+  var currentTime: Double {
+    get { PlaybackClock.shared.currentTime }
+    set { PlaybackClock.shared.currentTime = newValue }
+  }
+  var duration: Double {
+    get { PlaybackClock.shared.duration }
+    set { PlaybackClock.shared.duration = newValue }
+  }
   @Published var shuffleEnabled: Bool = false
   @Published var repeatMode: RepeatMode = .off
   @Published var autoplayRadio: Bool = true
@@ -51,6 +66,8 @@ final class AudioPlayer: ObservableObject {
   private var loadTask: Task<Void, Never>?
   private var lyricsTask: Task<Void, Never>?
   private var artTask: Task<Void, Never>?
+  private var prefetchTask: Task<Void, Never>?
+  private var retriedTrackIds: Set<String> = []
   private var nowPlayingArtImage: UIImage?
   private var radioFetching = false
   private var crossfadeTriggered = false
@@ -323,6 +340,8 @@ final class AudioPlayer: ObservableObject {
     loadTask?.cancel()
     lyricsTask?.cancel()
     artTask?.cancel()
+    prefetchTask?.cancel()
+    retriedTrackIds.remove(track.id)
 
     currentArtwork = ArtworkStore.shared.url(for: track)
     nowPlayingArtImage = nil
@@ -432,6 +451,28 @@ final class AudioPlayer: ObservableObject {
       if self.autoplayRadio && self.queue.count - self.currentIndex <= 2 {
         Task { await self.appendRadio(for: working) }
       }
+      self.scheduleNextTrackPrefetch()
+    }
+  }
+
+  private func scheduleNextTrackPrefetch() {
+    prefetchTask?.cancel()
+    let nextIdx = currentIndex + 1
+    guard nextIdx < queue.count, !LibraryStore.shared.offlineMode else { return }
+    let nextTrack = queue[nextIdx]
+    prefetchTask = Task {
+      try? await Task.sleep(for: .milliseconds(1500))
+      guard !Task.isCancelled else { return }
+      await ArtworkStore.shared.ensure(nextTrack)
+      let art = await MainActor.run { ArtworkStore.shared.url(for: nextTrack) }
+      if !art.isEmpty { _ = await ImagePipeline.shared.image(art, maxPixel: 700) }
+      if !LibraryStore.shared.isDownloaded(nextTrack.id) {
+        if let vid = await MusicEngine.shared.resolveVideoId(for: nextTrack) {
+          await MainActor.run { LibraryStore.shared.updateVideoId(vid, for: nextTrack.id) }
+          _ = await MusicEngine.shared.resolveStream(videoId: vid)
+        }
+      }
+      _ = await LyricsService.shared.fetchLyrics(for: nextTrack)
     }
   }
 
@@ -463,9 +504,25 @@ final class AudioPlayer: ObservableObject {
       if it.status == .failed {
         let msg = it.error?.localizedDescription ?? "Falha ao reproduzir esta faixa."
         Task { @MainActor [weak self] in
-          self?.isLoading = false
-          self?.isPlaying = false
-          self?.errorToast = "Erro no áudio: \(msg)"
+          guard let self else { return }
+          if let vid = track.videoId,
+             !LibraryStore.shared.isDownloaded(track.id),
+             !self.retriedTrackIds.contains(track.id),
+             self.currentTrack?.id == track.id {
+            self.retriedTrackIds.insert(track.id)
+            await MusicEngine.shared.invalidateStream(videoId: vid)
+            if let fresh = await MusicEngine.shared.resolveStream(videoId: vid),
+               self.currentTrack?.id == track.id {
+              let asset = fresh.headers.isEmpty
+                ? AVURLAsset(url: fresh.url)
+                : AVURLAsset(url: fresh.url, options: ["AVURLAssetHTTPHeaderFieldsKey": fresh.headers])
+              self.beginAVPlayback(asset: asset, track: track)
+              return
+            }
+          }
+          self.isLoading = false
+          self.isPlaying = false
+          self.errorToast = "Erro no áudio: \(msg)"
         }
       }
     }

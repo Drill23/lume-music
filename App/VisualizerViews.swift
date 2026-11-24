@@ -9,35 +9,48 @@ struct WavesStage: View {
   let track: Track
   @ObservedObject private var player = AudioPlayer.shared
   @ObservedObject private var store = LibraryStore.shared
-  @State private var hintVisible = true
 
   private var style: VisualizerStyle { store.visualizerStyle == .off ? .ares : store.visualizerStyle }
 
   var body: some View {
-    ZStack(alignment: .bottom) {
+    VStack(spacing: 8) {
       SpectrumVisualizer(style: style, palette: player.palette, artworkURL: player.currentArtwork, isPlaying: player.isPlaying)
         .padding(.horizontal, 8)
+        .frame(maxHeight: .infinity)
         .contentShape(Rectangle())
         .onTapGesture {
           Haptics.selection()
-          let order: [VisualizerStyle] = [.ares, .aurora, .orb]
+          let order = VisualizerStyle.activeStyles
           let i = order.firstIndex(of: style) ?? 0
-          withAnimation(.easeInOut(duration: 0.35)) { store.visualizerStyle = order[(i + 1) % order.count] }
+          withAnimation(.easeInOut(duration: 0.32)) { store.visualizerStyle = order[(i + 1) % order.count] }
         }
-      if hintVisible {
-        Text("\(style.title) · toque para trocar")
-          .font(Theme.font(12.5, .medium))
-          .foregroundStyle(Theme.secondary)
-          .padding(.horizontal, 12)
-          .frame(height: 28)
-          .glassCapsule()
-          .transition(.opacity)
-          .padding(.bottom, 6)
+
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 6) {
+          ForEach(VisualizerStyle.activeStyles) { st in
+            let active = style == st
+            Button {
+              Haptics.selection()
+              withAnimation(.easeInOut(duration: 0.3)) { store.visualizerStyle = st }
+            } label: {
+              HStack(spacing: 4) {
+                Image(systemName: st.icon).font(.system(size: 11, weight: .semibold))
+                Text(st.title).font(Theme.font(11.5, .semibold))
+              }
+              .foregroundStyle(active ? Theme.onPrism : Theme.text)
+              .padding(.horizontal, 10)
+              .frame(height: 28)
+              .background {
+                if active { Capsule().fill(Theme.prismDiagonal) }
+              }
+              .modifier(ConditionalGlassCapsule(enabled: !active))
+            }
+            .buttonStyle(.plain)
+          }
+        }
+        .padding(.horizontal, 20)
       }
-    }
-    .task {
-      try? await Task.sleep(for: .seconds(2.6))
-      withAnimation(.easeOut(duration: 0.6)) { hintVisible = false }
+      .scrollClipDisabled()
     }
   }
 }
@@ -46,13 +59,33 @@ struct WavesStage: View {
 final class RidgeHistory {
   var frames: [[Float]] = []
   var lastPush: Double = 0
-  let depth = 26
+  let depth = 30
 
   func push(_ f: [Float], at t: Double) {
-    guard t - lastPush >= 1.0 / 22 else { return }
+    guard t - lastPush >= 1.0 / 24 else { return }
     lastPush = t
     frames.insert(f, at: 0)
     if frames.count > depth { frames.removeLast(frames.count - depth) }
+  }
+}
+
+/// Peak-hold caps com gravidade para o visualizador Espectro Pro.
+final class PeakHoldState {
+  var peaks: [Double] = Array(repeating: 0, count: 40)
+  var lastT: Double = 0
+
+  func update(_ vals: [Double], at t: Double) -> [Double] {
+    let dt = lastT == 0 ? 0.016 : min(0.08, max(0.004, t - lastT))
+    lastT = t
+    if peaks.count != vals.count { peaks = Array(repeating: 0, count: vals.count) }
+    for i in 0..<vals.count {
+      if vals[i] >= peaks[i] {
+        peaks[i] = vals[i]
+      } else {
+        peaks[i] = max(0, peaks[i] - dt * 0.45)
+      }
+    }
+    return peaks
   }
 }
 
@@ -64,21 +97,25 @@ struct SpectrumVisualizer: View {
 
   @ObservedObject private var spectrum = AudioSpectrum.shared
   @State private var history = RidgeHistory()
+  @State private var peakHold = PeakHoldState()
   @Environment(\.colorScheme) private var scheme
 
   var body: some View {
     ZStack {
-      if style == .orb {
+      if style == .orb || style == .solarRing {
         orbArtwork
       }
-      TimelineView(.animation(minimumInterval: 1 / 45, paused: !isPlaying && !spectrum.isLive)) { tl in
+      TimelineView(.animation(minimumInterval: 1 / 60, paused: !isPlaying && !spectrum.isLive)) { tl in
         let t = tl.date.timeIntervalSinceReferenceDate
         let bands = currentBands(t: t)
         Canvas { ctx, size in
           switch style {
           case .ares, .off: drawRidges(&ctx, size: size, bands: bands, t: t)
-          case .aurora: drawBars(&ctx, size: size, bands: bands)
+          case .aurora: drawBars(&ctx, size: size, bands: bands, t: t)
           case .orb: drawOrb(&ctx, size: size, bands: bands, t: t)
+          case .solarRing: drawSolarRing(&ctx, size: size, bands: bands, t: t)
+          case .oscilloscope: drawOscilloscope(&ctx, size: size, bands: bands, t: t)
+          case .nebula: drawNebula(&ctx, size: size, bands: bands, t: t)
           }
         }
       }
@@ -161,17 +198,18 @@ struct SpectrumVisualizer: View {
     }
   }
 
-  private func drawBars(_ ctx: inout GraphicsContext, size: CGSize, bands: [Float]) {
-    let count = 40
+  private func drawBars(_ ctx: inout GraphicsContext, size: CGSize, bands: [Float], t: Double) {
+    let count = 36
     let vals = resample(bands, count: count, mirror: true)
+    let peaks = peakHold.update(vals, at: t)
     let gap: CGFloat = 4
     let bw = max(2, (size.width - gap * CGFloat(count - 1)) / CGFloat(count))
-    let mid = size.height * 0.56
-    let maxH = size.height * 0.42
+    let mid = size.height * 0.60
+    let maxH = size.height * 0.44
     let grad = Gradient(colors: [.white, palette.vibrant, palette.vibrant2])
     var glow = ctx
     glow.addFilter(.blur(radius: 10))
-    glow.opacity = 0.65
+    glow.opacity = 0.6
     for i in 0..<count {
       let hh = max(3, CGFloat(vals[i]) * maxH)
       let x = CGFloat(i) * (bw + gap)
@@ -179,9 +217,14 @@ struct SpectrumVisualizer: View {
       let shade = GraphicsContext.Shading.linearGradient(grad, startPoint: CGPoint(x: x, y: mid - maxH), endPoint: CGPoint(x: x, y: mid))
       glow.fill(Path(roundedRect: r, cornerRadius: bw / 2), with: shade)
       ctx.fill(Path(roundedRect: r, cornerRadius: bw / 2), with: shade)
+      // Peak-hold cap
+      let ph = max(3, CGFloat(peaks[i]) * maxH)
+      let cap = CGRect(x: x, y: mid - ph - 5, width: bw, height: 2.5)
+      ctx.fill(Path(roundedRect: cap, cornerRadius: 1.25), with: .color(.white.opacity(0.9)))
+      // Reflexo inferior
       var ref = ctx
       ref.opacity = 0.22
-      ref.fill(Path(roundedRect: CGRect(x: x, y: mid + 6, width: bw, height: hh * 0.45), cornerRadius: bw / 2), with: shade)
+      ref.fill(Path(roundedRect: CGRect(x: x, y: mid + 6, width: bw, height: hh * 0.42), cornerRadius: bw / 2), with: shade)
     }
   }
 
@@ -207,6 +250,129 @@ struct SpectrumVisualizer: View {
       glow.stroke(p, with: shade, style: StrokeStyle(lineWidth: 3, lineCap: .round))
       ctx.stroke(p, with: shade, style: StrokeStyle(lineWidth: 2.6, lineCap: .round))
     }
+    // Anel harmônico contra-rotativo externo
+    var ring = Path()
+    for i in 0...72 {
+      let u = Double(i) / 72.0
+      let a = u * 2 * .pi - t * 0.22
+      let v = vals[i % vals.count]
+      let rr = base * (1.28 + 0.12 * v + 0.04 * sin(a * 6 + t * 2))
+      let pt = CGPoint(x: c.x + rr * cos(a), y: c.y + rr * sin(a))
+      if i == 0 { ring.move(to: pt) } else { ring.addLine(to: pt) }
+    }
+    ring.closeSubpath()
+    ctx.stroke(ring, with: .color(.white.opacity(0.35)), lineWidth: 1.4)
+  }
+
+  private func drawSolarRing(_ ctx: inout GraphicsContext, size: CGSize, bands: [Float], t: Double) {
+    let c = CGPoint(x: size.width / 2, y: size.height / 2)
+    let base = min(size.width, size.height) * 0.27
+    let count = 120
+    let vals = resample(bands, count: count / 2)
+    let bass = Double(bands.prefix(4).reduce(0, +)) / 4.0
+    let shade = GraphicsContext.Shading.conicGradient(
+      Gradient(colors: [Theme.peach, Theme.rose, Theme.lavender, Theme.sky, Theme.peach]),
+      center: c
+    )
+    var glow = ctx
+    glow.addFilter(.blur(radius: 7))
+    glow.opacity = 0.65
+
+    for i in 0..<count {
+      let k = i < count / 2 ? i : count - 1 - i
+      let v = vals[k]
+      let a = Double(i) / Double(count) * 2 * .pi + t * 0.18
+      let r0 = base * (1.03 + 0.04 * bass)
+      let r1 = r0 + base * (0.06 + 0.68 * v)
+      var ray = Path()
+      ray.move(to: CGPoint(x: c.x + r0 * cos(a), y: c.y + r0 * sin(a)))
+      ray.addLine(to: CGPoint(x: c.x + r1 * cos(a), y: c.y + r1 * sin(a)))
+      glow.stroke(ray, with: shade, style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+      ctx.stroke(ray, with: shade, style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+    }
+
+    // Partículas orbitais reativas
+    for pIdx in 0..<24 {
+      let a = Double(pIdx) / 24.0 * 2 * .pi - t * (0.25 + Double(pIdx % 3) * 0.08)
+      let rr = base * (1.45 + 0.25 * bass + 0.12 * sin(t * 2 + Double(pIdx)))
+      let pt = CGPoint(x: c.x + rr * cos(a), y: c.y + rr * sin(a))
+      let sz = 2.5 + 3.0 * bass
+      ctx.fill(Path(ellipseIn: CGRect(x: pt.x - sz / 2, y: pt.y - sz / 2, width: sz, height: sz)), with: .color(.white.opacity(0.65)))
+    }
+  }
+
+  private func drawOscilloscope(_ ctx: inout GraphicsContext, size: CGSize, bands: [Float], t: Double) {
+    let w = size.width, h = size.height
+    let mid = h * 0.5
+    // Grade sutil de estúdio
+    for gx in 1..<6 {
+      let x = w * CGFloat(gx) / 6.0
+      var p = Path(); p.move(to: CGPoint(x: x, y: h * 0.14)); p.addLine(to: CGPoint(x: x, y: h * 0.86))
+      ctx.stroke(p, with: .color(Theme.text.opacity(0.06)), lineWidth: 0.8)
+    }
+    var midLine = Path(); midLine.move(to: CGPoint(x: 0, y: mid)); midLine.addLine(to: CGPoint(x: w, y: mid))
+    ctx.stroke(midLine, with: .color(Theme.text.opacity(0.10)), lineWidth: 1)
+
+    let vals = resample(bands, count: 96, mirror: true)
+    let grad = Gradient(colors: [Theme.sky, Theme.lavender, .white, Theme.rose, Theme.peach])
+
+    for layer in 0..<2 {
+      var wave = Path()
+      let phase = layer == 0 ? t * 4.5 : -t * 3.2 + 1.4
+      let ampScale = layer == 0 ? 0.36 : 0.22
+      for i in 0..<vals.count {
+        let u = Double(i) / Double(vals.count - 1)
+        let x = w * CGFloat(u)
+        let env = sin(u * .pi)
+        let carrier = sin(u * .pi * (layer == 0 ? 8.0 : 12.0) + phase)
+        let y = mid + CGFloat(carrier * vals[i] * env * h * ampScale)
+        if i == 0 { wave.move(to: CGPoint(x: x, y: y)) } else { wave.addLine(to: CGPoint(x: x, y: y)) }
+      }
+      if layer == 0 {
+        var glow = ctx
+        glow.addFilter(.blur(radius: 7))
+        glow.opacity = 0.75
+        glow.stroke(wave, with: .linearGradient(grad, startPoint: .zero, endPoint: CGPoint(x: w, y: 0)), style: StrokeStyle(lineWidth: 4.5, lineCap: .round))
+      }
+      ctx.stroke(
+        wave,
+        with: .linearGradient(grad, startPoint: .zero, endPoint: CGPoint(x: w, y: 0)),
+        style: StrokeStyle(lineWidth: layer == 0 ? 2.4 : 1.4, lineCap: .round)
+      )
+    }
+  }
+
+  private func drawNebula(_ ctx: inout GraphicsContext, size: CGSize, bands: [Float], t: Double) {
+    let w = size.width, h = size.height
+    let vals = resample(bands, count: 64)
+    let bass = Double(bands.prefix(4).reduce(0, +)) / 4.0
+    let colors = [palette.vibrant, palette.vibrant2, Theme.sky, Theme.rose]
+
+    for ribbon in 0..<4 {
+      var path = Path()
+      let baseY = h * (0.28 + 0.14 * Double(ribbon))
+      for i in 0..<vals.count {
+        let u = Double(i) / Double(vals.count - 1)
+        let x = w * CGFloat(u)
+        let lift = vals[i] * h * 0.22 * sin(u * .pi)
+        let wave = sin(u * 6.0 + t * (1.2 + Double(ribbon) * 0.35) + Double(ribbon)) * (14 + 28 * bass)
+        let y = baseY - lift + wave
+        if i == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
+      }
+      var glow = ctx
+      glow.addFilter(.blur(radius: 14))
+      glow.opacity = 0.55
+      glow.stroke(path, with: .color(colors[ribbon % colors.count]), style: StrokeStyle(lineWidth: 10, lineCap: .round))
+      ctx.stroke(path, with: .color(.white.opacity(0.65)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+    }
+
+    // Estrelas pulsantes na batida
+    for s in 0..<28 {
+      let sx = w * CGFloat((Double((s * 37) % 100) / 100.0))
+      let sy = h * CGFloat((Double((s * 73 + 19) % 100) / 100.0))
+      let pulse = 1.5 + 3.5 * bass * (0.5 + 0.5 * sin(t * 4 + Double(s)))
+      ctx.fill(Path(ellipseIn: CGRect(x: sx, y: sy, width: pulse, height: pulse)), with: .color(.white.opacity(0.45 + 0.4 * bass)))
+    }
   }
 
   private var orbArtwork: some View {
@@ -229,6 +395,7 @@ struct SpectrumVisualizer: View {
 
 struct LyricsStage: View {
   @ObservedObject private var player = AudioPlayer.shared
+  @ObservedObject private var clock = PlaybackClock.shared
   @State private var lastUserScroll = Date.distantPast
   @State private var shareSnippet: String?
 
@@ -370,7 +537,7 @@ struct LyricsStage: View {
 
   private func activeIndex(_ bundle: LyricsBundle) -> Int {
     guard bundle.synced else { return -1 }
-    let t = player.currentTime + 0.3
+    let t = clock.currentTime + 0.3
     var best = -1
     for (i, l) in bundle.lines.enumerated() {
       if l.time <= t { best = i } else { break }

@@ -1,6 +1,15 @@
-# Lume Music 4.0.0
+# Lume Music 4.1.0
 
-Aplicativo nativo de música para iPhone e iPad construído em **SwiftUI** com estética **Prisma Liquid Glass** (iOS 18–26+), combinando o melhor de **Apple Music**, **Spotify** e **Amazon Music** com visualizadores musicais exclusivos.
+Aplicativo nativo de música para iPhone e iPad construído em **SwiftUI** com estética **Prisma Liquid Glass** (iOS 18–26+), texturas procedurais GPU a 120Hz, combinando o melhor de **Apple Music**, **Spotify** e **Amazon Music** com visualizadores musicais exclusivos.
+
+## Destaques da versão 4.1.0 ("Masterpiece Edition")
+
+- **Novo Ícone & Abertura Cinematográfica:** Ícone 3D minimalista com vinil polido e anel prismático, mais abertura a 120Hz sem engasgos com ondas acústicas concêntricas.
+- **Toca-Discos 3D com Texturas Procedurais GPU:** Chassi em 4 acabamentos (*Obsidian Pro, Prata Estúdio, Nogueira Vintage, Titânio Dourado*), 4 edições de disco (*Preto 180g, Cristal Prisma, Ouro Limitado, Mármore Branco*), profundidade 3D chanfrada com pés isoladores, braço em S com alavanca Cue real e cálculo geométrico O(1).
+- **Deck K7 3D Aprimorado:** 4 estilos de fita (*Fumê Estúdio, Cristal Transparente, Cromo Metálico, Vintage Creme*), flip Lado A/B corrigido sem espelhamento, cabeçote magnético dourado, pinch rollers e VU meters balísticos com LED `PEAK`.
+- **6 Visualizadores em Tempo Real (60fps):** *Ondas 3D*, *Espectro* (com peak-hold caps), *Orbe*, *Anel Solar*, *Osciloscópio* e *Nebulosa* com barra seletora rápida.
+- **Performance & Resiliência:** `PlaybackClock` isolado (zero re-renderização desnecessária da interface), pré-carregamento da próxima faixa (gapless preload) e auto-retry automático de stream expirado.
+- **Transições Fluidas & Compartilhamento:** Troca espacial sedosa entre abas, gestos suaves no player e geração de cartão visual compartilhável da música tocando.
 
 ## Destaques da versão 4.0.0
 

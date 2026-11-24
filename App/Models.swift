@@ -119,6 +119,9 @@ enum VisualizerStyle: String, CaseIterable, Codable, Identifiable {
   case ares = "Ondas Ares"
   case aurora = "Espectro"
   case orb = "Orbe"
+  case solarRing = "Anel Solar"
+  case oscilloscope = "Osciloscópio"
+  case nebula = "Nebulosa"
   case off = "Desligado"
 
   var id: String { rawValue }
@@ -127,6 +130,9 @@ enum VisualizerStyle: String, CaseIterable, Codable, Identifiable {
     case .ares: return "Ondas 3D"
     case .aurora: return "Espectro"
     case .orb: return "Orbe"
+    case .solarRing: return "Anel Solar"
+    case .oscilloscope: return "Osciloscópio"
+    case .nebula: return "Nebulosa"
     case .off: return "Desligado"
     }
   }
@@ -135,9 +141,62 @@ enum VisualizerStyle: String, CaseIterable, Codable, Identifiable {
     case .ares: return "mountain.2.fill"
     case .aurora: return "chart.bar.fill"
     case .orb: return "circle.hexagongrid.fill"
+    case .solarRing: return "sun.max.circle.fill"
+    case .oscilloscope: return "waveform.path.ecg"
+    case .nebula: return "sparkles"
     case .off: return "eye.slash"
     }
   }
+  static var activeStyles: [VisualizerStyle] { [.ares, .aurora, .orb, .solarRing, .oscilloscope, .nebula] }
+}
+
+enum TurntableFinish: String, CaseIterable, Codable, Identifiable {
+  case obsidian = "Obsidian Pro"
+  case silver = "Prata Estúdio"
+  case walnut = "Nogueira Vintage"
+  case gold = "Titânio Dourado"
+
+  var id: String { rawValue }
+  var shaderIndex: Float {
+    switch self {
+    case .silver: return 0
+    case .obsidian: return 1
+    case .walnut: return 2
+    case .gold: return 3
+    }
+  }
+  var isDarkChassis: Bool {
+    switch self {
+    case .obsidian, .walnut: return true
+    case .silver, .gold: return false
+    }
+  }
+}
+
+enum VinylEdition: String, CaseIterable, Codable, Identifiable {
+  case classicBlack = "Preto 180g"
+  case prismCrystal = "Cristal Prisma"
+  case limitedGold = "Ouro Limitado"
+  case whiteMarble = "Mármore Branco"
+
+  var id: String { rawValue }
+  var shaderIndex: Float {
+    switch self {
+    case .classicBlack: return 0
+    case .prismCrystal: return 1
+    case .limitedGold: return 2
+    case .whiteMarble: return 3
+    }
+  }
+}
+
+enum CassetteStyle: String, CaseIterable, Codable, Identifiable {
+  case smokedStudio = "Fumê Estúdio"
+  case crystalClear = "Cristal Transparente"
+  case metallicChrome = "Cromo Metálico"
+  case vintageCream = "Vintage Creme"
+
+  var id: String { rawValue }
 }
 
 enum RepeatMode: String, Codable {

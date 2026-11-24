@@ -47,6 +47,9 @@ struct ExploreView: View {
       }
       .padding(.top, 6)
       .padding(.bottom, 16)
+      .animation(.spring(response: 0.28, dampingFraction: 0.88), value: chartMode)
+      .animation(.spring(response: 0.28, dampingFraction: 0.88), value: artistScope)
+      .animation(.spring(response: 0.28, dampingFraction: 0.88), value: browseGroup)
       .animation(.easeInOut(duration: 0.25), value: app.feed == nil)
     }
     .background(backdrop)

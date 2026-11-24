@@ -40,8 +40,10 @@ struct NowPlayingView: View {
       }
       .offset(y: dragY)
       .scaleEffect(1 - min(dragY, 300) / 3000, anchor: .top)
+      .clipShape(RoundedRectangle(cornerRadius: dragY > 2 ? 38 : 0, style: .continuous))
     }
-    .animation(.spring(response: 0.42, dampingFraction: 0.86), value: mode)
+    .background(Color.black.opacity(dragY > 0 ? max(0.0, 0.55 - Double(dragY) / 500.0) : 0).ignoresSafeArea())
+    .animation(.spring(response: 0.36, dampingFraction: 0.88), value: mode)
     .sheet(isPresented: $showQueue) {
       QueueSheet()
         .presentationDetents([.medium, .large])
@@ -133,16 +135,22 @@ struct NowPlayingView: View {
 
   @ViewBuilder
   private var stage: some View {
-    if let track = player.currentTrack {
-      switch mode {
-      case .artwork: ArtworkStage(track: track)
-      case .vinyl: TurntableStage(track: track)
-      case .cassette: CassetteStage(track: track)
-      case .waves: WavesStage(track: track)
-      case .lyrics: LyricsStage()
+    ZStack {
+      if let track = player.currentTrack {
+        Group {
+          switch mode {
+          case .artwork: ArtworkStage(track: track)
+          case .vinyl: TurntableStage(track: track)
+          case .cassette: CassetteStage(track: track)
+          case .waves: WavesStage(track: track)
+          case .lyrics: LyricsStage()
+          }
+        }
+        .id(mode)
+        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+      } else {
+        EmptyStateView(icon: "music.note", title: "Nada tocando", message: "Escolha uma música para começar.")
       }
-    } else {
-      EmptyStateView(icon: "music.note", title: "Nada tocando", message: "Escolha uma música para começar.")
     }
   }
 
@@ -316,12 +324,13 @@ struct NowPlayingView: View {
 
 struct ProgressScrubber: View {
   @ObservedObject private var player = AudioPlayer.shared
+  @ObservedObject private var clock = PlaybackClock.shared
   @State private var scrubbing = false
   @State private var value: Double = 0
 
   var body: some View {
-    let total = max(1, player.duration)
-    let cur = scrubbing ? value : player.currentTime
+    let total = max(1, clock.duration)
+    let cur = scrubbing ? value : clock.currentTime
     let frac = min(1, max(0, cur / total))
     VStack(spacing: 6) {
       GeometryReader { g in
@@ -637,6 +646,7 @@ struct PlayerOptionsSheet: View {
   @ObservedObject private var store = LibraryStore.shared
   @ObservedObject private var app = AppModel.shared
   @Environment(\.dismiss) private var dismiss
+  @State private var showShareCard = false
 
   var body: some View {
     NavigationStack {
@@ -653,8 +663,11 @@ struct PlayerOptionsSheet: View {
             Button { dismiss(); app.playlistPickerTrack = tr } label: { Label("Adicionar a uma playlist", systemImage: "text.badge.plus") }
             Button { dismiss(); app.navigateFromPlayer(.artist(LibraryStore.mainArtist(tr.artist), nil)) } label: { Label("Ver artista", systemImage: "music.mic") }
             Button { player.startRadio(from: tr); dismiss() } label: { Label("Iniciar rádio desta música", systemImage: "dot.radiowaves.left.and.right") }
+            Button { showShareCard = true } label: {
+              Label("Compartilhar cartão da música", systemImage: "photo.on.rectangle.angled")
+            }
             ShareLink(item: "Ouvindo \(tr.title) — \(tr.artist) no Lume Music 🎧") {
-              Label("Compartilhar", systemImage: "square.and.arrow.up")
+              Label("Compartilhar link", systemImage: "square.and.arrow.up")
             }
           }
         }
@@ -699,7 +712,9 @@ struct PlayerOptionsSheet: View {
         Section("Velocidade") {
           Picker("Velocidade", selection: Binding(get: { player.playbackRate }, set: { player.setRate($0) })) {
             Text("0,75×").tag(Float(0.75))
+            Text("0,85×").tag(Float(0.85))
             Text("1×").tag(Float(1.0))
+            Text("1,15×").tag(Float(1.15))
             Text("1,25×").tag(Float(1.25))
             Text("1,5×").tag(Float(1.5))
           }
@@ -734,7 +749,7 @@ struct PlayerOptionsSheet: View {
           Toggle(isOn: $store.animatedArtEnabled) { Label("Capas animadas", systemImage: "sparkles.tv") }
           Toggle(isOn: $store.autoTranslateLyrics) { Label("Traduzir letras automaticamente", systemImage: "translate") }
           Picker(selection: $store.visualizerStyle) {
-            ForEach([VisualizerStyle.ares, .aurora, .orb]) { Text($0.title).tag($0) }
+            ForEach(VisualizerStyle.activeStyles) { Text($0.title).tag($0) }
           } label: {
             Label("Estilo das ondas", systemImage: "waveform")
           }
@@ -747,7 +762,87 @@ struct PlayerOptionsSheet: View {
       .toolbar {
         ToolbarItem(placement: .confirmationAction) { Button("OK") { dismiss() } }
       }
+      .sheet(isPresented: $showShareCard) {
+        if let tr = player.currentTrack {
+          TrackShareCardSheet(track: tr, artworkURL: player.currentArtwork, palette: player.palette)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+      }
     }
+  }
+}
+
+private struct TrackShareCardSheet: View {
+  let track: Track
+  let artworkURL: String
+  let palette: ArtworkPalette
+  @Environment(\.dismiss) private var dismiss
+  @State private var rendered: UIImage?
+
+  var body: some View {
+    NavigationStack {
+      VStack(spacing: 20) {
+        cardView
+          .shadow(color: .black.opacity(0.4), radius: 24, y: 12)
+        if let rendered {
+          ShareLink(item: Image(uiImage: rendered), preview: SharePreview("\(track.title) — \(track.artist)", image: Image(uiImage: rendered))) {
+            Label("Compartilhar imagem", systemImage: "square.and.arrow.up")
+              .font(Theme.font(16, .bold))
+              .foregroundStyle(Theme.onPrism)
+              .frame(maxWidth: .infinity)
+              .frame(height: 50)
+              .background(Capsule().fill(Theme.prismDiagonal))
+          }
+          .padding(.horizontal, 24)
+        }
+      }
+      .padding()
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(Theme.canvas.ignoresSafeArea())
+      .navigationTitle("Cartão da música")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Fechar") { dismiss() } } }
+      .task {
+        let renderer = ImageRenderer(content: cardView.padding(16))
+        renderer.scale = 3.0
+        rendered = renderer.uiImage
+      }
+    }
+  }
+
+  private var cardView: some View {
+    VStack(spacing: 16) {
+      ArtworkImage(url: artworkURL, cornerRadius: 16, maxPixel: 600)
+        .frame(width: 210, height: 210)
+        .shadow(color: .black.opacity(0.35), radius: 14, y: 8)
+      VStack(spacing: 4) {
+        Text(track.title)
+          .font(.system(size: 20, weight: .bold))
+          .foregroundStyle(.white)
+          .multilineTextAlignment(.center)
+          .lineLimit(2)
+        Text(track.artist)
+          .font(Theme.font(14.5, .medium))
+          .foregroundStyle(.white.opacity(0.82))
+          .lineLimit(1)
+      }
+      HStack {
+        Text("Ouvindo no Lume Music")
+          .font(Theme.font(11.5, .bold))
+          .foregroundStyle(.white.opacity(0.8))
+        Spacer()
+        Image(systemName: "waveform")
+          .foregroundStyle(.white.opacity(0.85))
+      }
+    }
+    .padding(22)
+    .frame(width: 300)
+    .background(
+      RoundedRectangle(cornerRadius: 28, style: .continuous)
+        .fill(LinearGradient(colors: [palette.vibrant, palette.vibrant2, Theme.lavender], startPoint: .topLeading, endPoint: .bottomTrailing))
+    )
+    .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(.white.opacity(0.35), lineWidth: 1))
   }
 }
 
