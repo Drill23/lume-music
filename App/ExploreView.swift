@@ -1,9 +1,38 @@
 import SwiftUI
 
-/// Novidades — lançamentos, paradas e estilos. Raiz da aba (a barra de navegação fica escondida).
+/// Explorar — paradas por país (18 países), mais ouvidas, cantores mais ouvidos (Brasil/Mundo),
+/// 20 gêneros reais, climas, décadas e lançamentos.
 struct ExploreView: View {
   @ObservedObject private var app = AppModel.shared
   @ObservedObject private var player = AudioPlayer.shared
+
+  @State private var selectedCountry: ChartCountry = ChartCountry.all[0]
+  @State private var countryPreview: CountryChartBundle?
+  @State private var loadingCountry = false
+  @State private var chartMode: ChartMode = .brazil
+  @State private var artistScope: ArtistScope = .brazil
+  @State private var browseGroup: BrowseGroup = .brasil
+
+  enum ChartMode: String, CaseIterable, Identifiable {
+    case brazil = "Top 50 Brasil"
+    case world = "Top 50 Mundo"
+    case trending = "Em Alta"
+    var id: String { rawValue }
+  }
+
+  enum ArtistScope: String, CaseIterable, Identifiable {
+    case brazil = "Brasil"
+    case world = "Mundo"
+    var id: String { rawValue }
+  }
+
+  enum BrowseGroup: String, CaseIterable, Identifiable {
+    case brasil = "Gêneros BR"
+    case international = "Internacional"
+    case moods = "Climas"
+    case decades = "Décadas"
+    var id: String { rawValue }
+  }
 
   var body: some View {
     ScrollView(showsIndicators: false) {
@@ -17,13 +46,24 @@ struct ExploreView: View {
         }
       }
       .padding(.top, 6)
+      .padding(.bottom, 16)
       .animation(.easeInOut(duration: 0.25), value: app.feed == nil)
     }
     .background(backdrop)
     .refreshable {
       await app.loadFeed(force: true)
       await app.refreshArtistReleases()
+      await loadCountryPreview(force: true)
     }
+    .task(id: selectedCountry.code) {
+      await loadCountryPreview()
+    }
+  }
+
+  private func loadCountryPreview(force: Bool = false) async {
+    loadingCountry = true
+    countryPreview = await CatalogExplorerService.shared.countryChart(for: selectedCountry, force: force)
+    loadingCountry = false
   }
 
   private var backdrop: some View {
@@ -39,11 +79,11 @@ struct ExploreView: View {
     .ignoresSafeArea()
   }
 
-  // MARK: Header
+  // MARK: Cabeçalho
 
   private var header: some View {
     VStack(alignment: .leading, spacing: 3) {
-      Text("Novidades")
+      Text("Explorar")
         .font(Theme.font(34, .bold))
         .foregroundStyle(Theme.text)
       if let updated = app.feed?.updatedAt {
@@ -60,14 +100,46 @@ struct ExploreView: View {
     let f = RelativeDateTimeFormatter()
     f.locale = Locale(identifier: "pt_BR")
     f.unitsStyle = .full
-    if abs(date.timeIntervalSinceNow) < 60 { return "Atualizado agora" }
-    return "Atualizado " + f.localizedString(for: date, relativeTo: Date())
+    if abs(date.timeIntervalSinceNow) < 60 { return "Paradas atualizadas agora" }
+    return "Paradas atualizadas " + f.localizedString(for: date, relativeTo: Date())
   }
 
-  // MARK: Content
+  // MARK: Conteúdo
 
   @ViewBuilder
   private func content(_ feed: DiscoverFeed) -> some View {
+    // 1. Paradas por País
+    countrySpotlightSection
+
+    // 2. Mais Tocadas (Brasil / Mundo / Em Alta) + Top Álbuns
+    chartsSection(feed)
+
+    let topAlbums = chartMode == .world
+      ? (feed.topAlbumsGlobal ?? feed.newReleases)
+      : (feed.topAlbumsBrazil ?? feed.brazilReleases)
+    if !topAlbums.isEmpty {
+      VStack(alignment: .leading, spacing: 12) {
+        SectionHeader(
+          title: chartMode == .world ? "Álbuns mais ouvidos no Mundo" : "Álbuns mais ouvidos no Brasil",
+          actionLabel: "Ver tudo"
+        ) {
+          app.push(.albums("Álbuns em destaque", topAlbums))
+        }
+        HRow {
+          ForEach(topAlbums.prefix(16)) { a in
+            AlbumTile(album: a, width: 150, showDate: a.releaseDate != nil)
+          }
+        }
+      }
+    }
+
+    // 3. Cantores mais ouvidos (Brasil | Mundo)
+    artistsSpotlight(feed)
+
+    // 4. Gêneros, Climas e Décadas
+    browseCategoriesSection
+
+    // 5. Lançamentos
     if !app.artistReleases.isEmpty {
       VStack(alignment: .leading, spacing: 12) {
         SectionHeader(title: "Dos seus artistas", subtitle: "Lançamentos de quem você ouve", actionLabel: "Ver tudo") {
@@ -82,27 +154,201 @@ struct ExploreView: View {
     }
 
     weekReleases(feed.newReleases.isEmpty ? feed.brazilReleases : feed.newReleases)
+  }
 
-    if !feed.brazilReleases.isEmpty {
-      VStack(alignment: .leading, spacing: 12) {
-        SectionHeader(title: "Novidades do Brasil", actionLabel: "Ver tudo") {
-          app.push(.albums("Novidades do Brasil", feed.brazilReleases))
+  // MARK: Paradas por País
+
+  private var countrySpotlightSection: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      SectionHeader(title: "Paradas por País", subtitle: "Veja o Top 50 ao vivo em qualquer região", actionLabel: "Abrir país") {
+        app.push(.country(selectedCountry))
+      }
+
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) {
+          ForEach(ChartCountry.all) { c in
+            PrismChip(title: "\(c.flag) \(c.name)", active: c.code == selectedCountry.code) {
+              selectedCountry = c
+            }
+          }
         }
-        HRow {
-          ForEach(feed.brazilReleases.prefix(16)) { a in
-            AlbumTile(album: a, width: 150, showDate: a.releaseDate != nil)
+        .padding(.horizontal, 20)
+      }
+      .scrollClipDisabled()
+
+      VStack(alignment: .leading, spacing: 12) {
+        HStack {
+          HStack(spacing: 8) {
+            Text(selectedCountry.flag).font(.system(size: 24))
+            VStack(alignment: .leading, spacing: 1) {
+              Text("Top 50 · \(selectedCountry.name)")
+                .font(Theme.font(17, .bold))
+                .foregroundStyle(Theme.text)
+              Text(selectedCountry.region)
+                .font(Theme.font(12))
+                .foregroundStyle(Theme.secondary)
+            }
+          }
+          Spacer()
+          Button {
+            Haptics.light()
+            app.push(.country(selectedCountry))
+          } label: {
+            Text("Ver Top 50")
+              .font(Theme.font(12.5, .semibold))
+              .foregroundStyle(Theme.onPrism)
+              .padding(.horizontal, 12)
+              .frame(height: 30)
+              .background(Capsule().fill(Theme.prismDiagonal))
+          }
+          .buttonStyle(PressableStyle(scale: 0.95))
+        }
+
+        if loadingCountry && countryPreview == nil {
+          VStack(spacing: 10) {
+            ForEach(0..<4, id: \.self) { _ in
+              HStack(spacing: 12) {
+                SkeletonBlock(width: 44, height: 44, radius: 8)
+                SkeletonBlock(width: 170, height: 14, radius: 6)
+                Spacer()
+              }
+            }
+          }
+        } else if let preview = countryPreview, !preview.topSongs.isEmpty {
+          VStack(spacing: 0) {
+            ForEach(Array(preview.topSongs.prefix(5).enumerated()), id: \.element.id) { idx, tr in
+              TrackRow(track: tr, rank: idx + 1, queue: preview.topSongs)
+            }
           }
         }
       }
+      .padding(16)
+      .glass(24)
+      .padding(.horizontal, 20)
     }
+  }
 
-    chart(title: "Top 50 Brasil", subtitle: "As mais tocadas por aqui", tracks: feed.topBrazil, count: 10)
-    chart(title: "Top 50 Mundo", subtitle: "As mais tocadas no planeta", tracks: feed.topGlobal, count: 10)
-    chart(title: "Em alta", subtitle: "Subindo rápido nas paradas", tracks: feed.trending, count: 8)
+  // MARK: Mais Tocadas
 
+  private func chartsSection(_ feed: DiscoverFeed) -> some View {
+    let tracks: [Track] = {
+      switch chartMode {
+      case .brazil: return feed.topBrazil
+      case .world: return feed.topGlobal
+      case .trending: return feed.trending
+      }
+    }()
+
+    return VStack(alignment: .leading, spacing: 12) {
+      SectionHeader(title: "Mais tocadas", actionLabel: "Ver Top 50") {
+        app.push(.tracks(chartMode.rawValue, tracks))
+      }
+
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) {
+          ForEach(ChartMode.allCases) { m in
+            PrismChip(title: m.rawValue, active: chartMode == m) { chartMode = m }
+          }
+        }
+        .padding(.horizontal, 20)
+      }
+      .scrollClipDisabled()
+
+      if !tracks.isEmpty {
+        VStack(spacing: 0) {
+          ForEach(Array(tracks.prefix(10).enumerated()), id: \.element.id) { idx, tr in
+            TrackRow(track: tr, rank: idx + 1, queue: tracks)
+          }
+        }
+        .padding(.horizontal, 20)
+      }
+    }
+  }
+
+  // MARK: Cantores mais ouvidos
+
+  private func artistsSpotlight(_ feed: DiscoverFeed) -> some View {
+    let list = (artistScope == .world && !(feed.globalTopArtists ?? []).isEmpty)
+      ? (feed.globalTopArtists ?? [])
+      : feed.topArtists
+    return VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        VStack(alignment: .leading, spacing: 1) {
+          Text("Cantores mais ouvidos")
+            .font(Theme.font(21, .bold))
+            .foregroundStyle(Theme.text)
+          Text(artistScope == .brazil ? "Ranking de popularidade no Brasil" : "Ranking global nas plataformas")
+            .font(Theme.font(13))
+            .foregroundStyle(Theme.secondary)
+        }
+        Spacer()
+        HStack(spacing: 4) {
+          ForEach(ArtistScope.allCases) { sc in
+            Button {
+              Haptics.selection()
+              artistScope = sc
+            } label: {
+              Text(sc.rawValue)
+                .font(Theme.font(12, .semibold))
+                .foregroundStyle(artistScope == sc ? Theme.onPrism : Theme.secondary)
+                .padding(.horizontal, 10)
+                .frame(height: 28)
+                .background {
+                  if artistScope == sc { Capsule().fill(Theme.prism) } else { Capsule().fill(Theme.fill) }
+                }
+            }
+            .buttonStyle(.plain)
+          }
+        }
+      }
+      .padding(.horizontal, 20)
+
+      HRow(spacing: 16) {
+        ForEach(Array(list.prefix(20).enumerated()), id: \.element.id) { idx, a in
+          ArtistBubble(name: a.name, pictureURL: a.pictureURL, deezerId: a.deezerId, rank: a.rank ?? (idx + 1))
+        }
+      }
+    }
+  }
+
+  // MARK: Gêneros, Climas & Décadas
+
+  private var browseCategoriesSection: some View {
     VStack(alignment: .leading, spacing: 14) {
-      SectionHeader(title: "Explorar por estilo")
-      MoodGrid()
+      SectionHeader(title: "Gêneros, Climas & Décadas")
+
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) {
+          ForEach(BrowseGroup.allCases) { g in
+            PrismChip(title: g.rawValue, active: browseGroup == g) { browseGroup = g }
+          }
+        }
+        .padding(.horizontal, 20)
+      }
+      .scrollClipDisabled()
+
+      switch browseGroup {
+      case .brasil:
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+          ForEach(MusicGenre.all.filter { $0.group == .brasil }) { g in GenreCard(genre: g) }
+        }
+        .padding(.horizontal, 20)
+      case .international:
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+          ForEach(MusicGenre.all.filter { $0.group == .internacional }) { g in GenreCard(genre: g) }
+        }
+        .padding(.horizontal, 20)
+      case .moods:
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+          ForEach(MoodCategory.activities) { m in MoodCard(mood: m) }
+        }
+        .padding(.horizontal, 20)
+      case .decades:
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+          ForEach(MoodCategory.decades) { m in MoodCard(mood: m) }
+        }
+        .padding(.horizontal, 20)
+      }
     }
   }
 
@@ -126,31 +372,10 @@ struct ExploreView: View {
     }
   }
 
-  @ViewBuilder
-  private func chart(title: String, subtitle: String?, tracks: [Track], count: Int) -> some View {
-    if !tracks.isEmpty {
-      VStack(alignment: .leading, spacing: 8) {
-        SectionHeader(title: title, subtitle: subtitle, actionLabel: "Ver tudo") {
-          app.push(.tracks(title, tracks))
-        }
-        VStack(spacing: 0) {
-          ForEach(Array(tracks.prefix(count).enumerated()), id: \.element.id) { idx, tr in
-            TrackRow(track: tr, rank: idx + 1, queue: tracks)
-          }
-        }
-        .padding(.horizontal, 20)
-      }
-    }
-  }
-
   private var skeleton: some View {
     VStack(alignment: .leading, spacing: 20) {
       SkeletonBlock(width: 200, height: 22, radius: 8).padding(.horizontal, 20)
-      HStack(spacing: 14) {
-        SkeletonBlock(height: 190, radius: 14)
-        SkeletonBlock(height: 190, radius: 14)
-      }
-      .padding(.horizontal, 20)
+      SkeletonBlock(height: 220, radius: 24).padding(.horizontal, 20)
       SkeletonBlock(width: 160, height: 22, radius: 8).padding(.horizontal, 20)
       ForEach(0..<5, id: \.self) { _ in
         HStack(spacing: 12) {
@@ -166,7 +391,7 @@ struct ExploreView: View {
   }
 }
 
-// MARK: - Cartões de estilo (reutilizados na Busca)
+// MARK: - Cartões de estilo / clima (reutilizados)
 
 struct MoodGrid: View {
   var body: some View {
@@ -177,7 +402,6 @@ struct MoodGrid: View {
   }
 }
 
-/// Cartão gradiente no estilo "Navegar" do Apple Music: título embaixo à esquerda e ícone girado saindo pelo canto.
 struct MoodCard: View {
   let mood: MoodCategory
 

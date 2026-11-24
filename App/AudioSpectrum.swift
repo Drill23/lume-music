@@ -32,6 +32,7 @@ final class AudioSpectrum: ObservableObject {
   private var smoothed: [Float]
   private var smoothedLevel: Float = 0
   private var lastTick: UInt64 = 0
+  private var currentEQGains: [Float] = [0, 0, 0, 0, 0]
 
   private static let attackTau: Float = 0.060
   private static let releaseTau: Float = 0.220
@@ -69,6 +70,16 @@ final class AudioSpectrum: ObservableObject {
     generation += 1
     releaseCurrent()
     resetOutputs()
+  }
+
+  /// Atualiza os ganhos do equalizador de 5 bandas em dB: [60 Hz, 230 Hz, 910 Hz, 3.6 kHz, 14 kHz].
+  func setEQGains(_ gains: [Float]) {
+    var normalized = [Float](repeating: 0, count: 5)
+    for i in 0..<min(5, gains.count) {
+      normalized[i] = min(12, max(-12, gains[i]))
+    }
+    currentEQGains = normalized
+    context?.setEQGains(normalized)
   }
 
   // MARK: Tap
@@ -121,6 +132,7 @@ final class AudioSpectrum: ObservableObject {
     mix.inputParameters = [params]
     item.audioMix = mix
 
+    ctx.setEQGains(currentEQGains)
     context = ctx
     lastTick = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
     startTimer()
@@ -250,6 +262,13 @@ private final class SpectrumTapContext: @unchecked Sendable {
   private var pubHasData = false
   private var active = true
 
+  // Equalizador 5 bandas (60, 230, 910, 3600, 14000 Hz)
+  private let eqLock: UnsafeMutablePointer<os_unfair_lock>
+  private let eqGains: UnsafeMutablePointer<Float>
+  private let eqCoeffs: UnsafeMutablePointer<Float>    // 5 bandas * 5 coeficientes (b0,b1,b2,a1,a2)
+  private let eqStates: UnsafeMutablePointer<Float>    // até 4 canais * 5 bandas * 2 estados (z1,z2)
+  private var eqBypass = true
+
   init() {
     let n = SpectrumTapContext.fftSize
     func alloc(_ c: Int) -> UnsafeMutablePointer<Float> {
@@ -273,9 +292,15 @@ private final class SpectrumTapContext: @unchecked Sendable {
     bandPos = alloc(SpectrumTapContext.bands)
     lock = UnsafeMutablePointer<os_unfair_lock>.allocate(capacity: 1)
     lock.initialize(to: os_unfair_lock())
+    eqLock = UnsafeMutablePointer<os_unfair_lock>.allocate(capacity: 1)
+    eqLock.initialize(to: os_unfair_lock())
+    eqGains = alloc(5)
+    eqCoeffs = alloc(25)
+    eqStates = alloc(4 * 5 * 2)
     fftSetup = vDSP_create_fftsetup(SpectrumTapContext.log2n, FFTRadix(kFFTRadix2))!
     vDSP_hann_window(window, vDSP_Length(n), Int32(vDSP_HANN_DENORM))
     computeBands()
+    recomputeEQCoeffs()
   }
 
   deinit {
@@ -284,7 +309,8 @@ private final class SpectrumTapContext: @unchecked Sendable {
     realp.deallocate(); imagp.deallocate(); power.deallocate(); db.deallocate()
     localBands.deallocate(); pubBands.deallocate()
     bandLo.deallocate(); bandHi.deallocate(); bandPos.deallocate()
-    lock.deallocate()
+    eqGains.deallocate(); eqCoeffs.deallocate(); eqStates.deallocate()
+    lock.deallocate(); eqLock.deallocate()
   }
 
   /// Chamado pela main ao soltar o contexto: o tap pode continuar vivo um instante.
@@ -317,7 +343,69 @@ private final class SpectrumTapContext: @unchecked Sendable {
     writeCount = 0
     sinceLast = 0
     ring.update(repeating: 0, count: SpectrumTapContext.ringSize)
+    eqStates.update(repeating: 0, count: 40)
     computeBands()
+    recomputeEQCoeffs()
+  }
+
+  func setEQGains(_ gains: [Float]) {
+    os_unfair_lock_lock(eqLock)
+    for i in 0..<5 { eqGains[i] = i < gains.count ? gains[i] : 0 }
+    recomputeEQCoeffsLocked()
+    os_unfair_lock_unlock(eqLock)
+  }
+
+  private func recomputeEQCoeffs() {
+    os_unfair_lock_lock(eqLock)
+    recomputeEQCoeffsLocked()
+    os_unfair_lock_unlock(eqLock)
+  }
+
+  private func recomputeEQCoeffsLocked() {
+    let freqs: [Double] = [60, 230, 910, 3600, 14000]
+    let fs = max(8000.0, sampleRate)
+    var activeAny = false
+    for b in 0..<5 {
+      let db = Double(eqGains[b])
+      if abs(db) >= 0.05 { activeAny = true }
+      let a = pow(10.0, db / 40.0)
+      let w0 = 2.0 * .pi * min(freqs[b], fs * 0.45) / fs
+      let cosW = cos(w0), sinW = sin(w0)
+      let q = 1.0
+      let alpha = sinW / (2.0 * q)
+      let b0, b1, b2, a0, a1, a2: Double
+      if b == 0 {
+        let twoSqrtAAlpha = 2.0 * sqrt(a) * (sinW / 2.0 * sqrt(2.0))
+        b0 = a * ((a + 1) - (a - 1) * cosW + twoSqrtAAlpha)
+        b1 = 2 * a * ((a - 1) - (a + 1) * cosW)
+        b2 = a * ((a + 1) - (a - 1) * cosW - twoSqrtAAlpha)
+        a0 = (a + 1) + (a - 1) * cosW + twoSqrtAAlpha
+        a1 = -2 * ((a - 1) + (a + 1) * cosW)
+        a2 = (a + 1) + (a - 1) * cosW - twoSqrtAAlpha
+      } else if b == 4 {
+        let twoSqrtAAlpha = 2.0 * sqrt(a) * (sinW / 2.0 * sqrt(2.0))
+        b0 = a * ((a + 1) + (a - 1) * cosW + twoSqrtAAlpha)
+        b1 = -2 * a * ((a - 1) + (a + 1) * cosW)
+        b2 = a * ((a + 1) + (a - 1) * cosW - twoSqrtAAlpha)
+        a0 = (a + 1) - (a - 1) * cosW + twoSqrtAAlpha
+        a1 = 2 * ((a - 1) - (a + 1) * cosW)
+        a2 = (a + 1) - (a - 1) * cosW - twoSqrtAAlpha
+      } else {
+        b0 = 1 + alpha * a
+        b1 = -2 * cosW
+        b2 = 1 - alpha * a
+        a0 = 1 + alpha / a
+        a1 = -2 * cosW
+        a2 = 1 - alpha / a
+      }
+      let base = b * 5
+      eqCoeffs[base + 0] = Float(b0 / a0)
+      eqCoeffs[base + 1] = Float(b1 / a0)
+      eqCoeffs[base + 2] = Float(b2 / a0)
+      eqCoeffs[base + 3] = Float(a1 / a0)
+      eqCoeffs[base + 4] = Float(a2 / a0)
+    }
+    eqBypass = !activeAny
   }
 
   private func computeBands() {
@@ -348,7 +436,9 @@ private final class SpectrumTapContext: @unchecked Sendable {
     guard abl.count > 0 else { return }
 
     switch kind {
-    case .float32: mix(abl, n, Float.self)
+    case .float32:
+      applyEQIfNeeded(abl, n)
+      mix(abl, n, Float.self)
     case .int16: mix(abl, n, Int16.self)
     case .int32: mix(abl, n, Int32.self)
     case .unsupported: return
@@ -359,6 +449,64 @@ private final class SpectrumTapContext: @unchecked Sendable {
     if sinceLast >= SpectrumTapContext.hop && writeCount >= SpectrumTapContext.fftSize {
       sinceLast = 0
       analyze()
+    }
+  }
+
+  @inline(__always)
+  private func applyEQIfNeeded(_ abl: UnsafeMutableAudioBufferListPointer, _ n: Int) {
+    os_unfair_lock_lock(eqLock)
+    let bypass = eqBypass
+    if bypass {
+      os_unfair_lock_unlock(eqLock)
+      return
+    }
+    var coeffs = [Float](repeating: 0, count: 25)
+    for i in 0..<25 { coeffs[i] = eqCoeffs[i] }
+    os_unfair_lock_unlock(eqLock)
+
+    if interleaved {
+      guard let raw = abl[0].mData else { return }
+      let p = raw.assumingMemoryBound(to: Float.self)
+      let c = min(4, max(1, Int(abl[0].mNumberChannels)))
+      for ch in 0..<c {
+        for b in 0..<5 {
+          let cb = b * 5
+          let b0 = coeffs[cb], b1 = coeffs[cb + 1], b2 = coeffs[cb + 2], a1 = coeffs[cb + 3], a2 = coeffs[cb + 4]
+          let st = (ch * 5 + b) * 2
+          var z1 = eqStates[st], z2 = eqStates[st + 1]
+          for f in 0..<n {
+            let idx = f * c + ch
+            let x = p[idx]
+            let y = b0 * x + z1
+            z1 = b1 * x - a1 * y + z2
+            z2 = b2 * x - a2 * y
+            p[idx] = min(1.0, max(-1.0, y))
+          }
+          eqStates[st] = z1
+          eqStates[st + 1] = z2
+        }
+      }
+    } else {
+      let c = min(4, abl.count)
+      for ch in 0..<c {
+        guard let raw = abl[ch].mData else { continue }
+        let p = raw.assumingMemoryBound(to: Float.self)
+        for b in 0..<5 {
+          let cb = b * 5
+          let b0 = coeffs[cb], b1 = coeffs[cb + 1], b2 = coeffs[cb + 2], a1 = coeffs[cb + 3], a2 = coeffs[cb + 4]
+          let st = (ch * 5 + b) * 2
+          var z1 = eqStates[st], z2 = eqStates[st + 1]
+          for f in 0..<n {
+            let x = p[f]
+            let y = b0 * x + z1
+            z1 = b1 * x - a1 * y + z2
+            z2 = b2 * x - a2 * y
+            p[f] = min(1.0, max(-1.0, y))
+          }
+          eqStates[st] = z1
+          eqStates[st + 1] = z2
+        }
+      }
     }
   }
 

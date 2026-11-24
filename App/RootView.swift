@@ -5,10 +5,17 @@ import SwiftUI
 enum LumeRoute: Hashable {
   case album(AlbumShowcase)
   case playlist(String)
+  case remotePlaylist(RemotePlaylist)
   case artist(String, Int?)
   case importHub
   case mood(MoodCategory)
+  case country(ChartCountry)
+  case genre(MusicGenre)
+  case mix(PersonalizedMix)
   case releases
+  case downloads
+  case replay
+  case equalizer
   case settings
   case tracks(String, [Track])
   case albums(String, [AlbumShowcase])
@@ -45,6 +52,14 @@ final class AppModel: ObservableObject {
   @Published var playlistPickerTrack: Track?
   @Published var toast: String?
   @Published var searchFocusToken = 0
+  @Published var searchLyricsToken = 0
+
+  func openLyricsSearch() {
+    tab = .search
+    searchPath = NavigationPath()
+    searchLyricsToken += 1
+    searchFocusToken += 1
+  }
 
   private var lastFeedLoad: Date?
 
@@ -276,10 +291,17 @@ struct RouteView: View {
       switch route {
       case .album(let a): AlbumView(album: a)
       case .playlist(let id): PlaylistView(playlistId: id)
+      case .remotePlaylist(let pl): RemotePlaylistView(playlist: pl)
       case .artist(let name, let dz): ArtistView(name: name, deezerId: dz)
       case .importHub: ImportView()
       case .mood(let m): MoodView(mood: m)
+      case .country(let c): CountryChartView(country: c)
+      case .genre(let g): GenreHubView(genre: g)
+      case .mix(let mix): MixDetailView(mix: mix)
       case .releases: ReleasesView()
+      case .downloads: DownloadsCenterView()
+      case .replay: ReplayView()
+      case .equalizer: EqualizerView()
       case .settings: SettingsView()
       case .tracks(let title, let tracks): TrackListView(title: title, tracks: tracks)
       case .albums(let title, let albums): AlbumGridView(title: title, albums: albums)
@@ -361,10 +383,11 @@ struct MiniPlayer: View {
   let track: Track
   @ObservedObject private var player = AudioPlayer.shared
   @ObservedObject private var app = AppModel.shared
+  @ObservedObject private var store = LibraryStore.shared
   @State private var dragX: CGFloat = 0
 
   var body: some View {
-    HStack(spacing: 12) {
+    HStack(spacing: 10) {
       ArtworkImage(url: player.displayArtwork(for: track), cornerRadius: 10, maxPixel: 160)
         .frame(width: 42, height: 42)
         .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
@@ -384,6 +407,20 @@ struct MiniPlayer: View {
 
       Spacer(minLength: 4)
 
+      let fav = store.isFavorite(track.id)
+      Button {
+        store.toggleFavorite(track)
+      } label: {
+        Image(systemName: fav ? "heart.fill" : "heart")
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundStyle(fav ? Theme.rose : Theme.secondary)
+          .symbolEffect(.bounce, value: fav)
+          .frame(width: 32, height: 38)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(PressableStyle(scale: 0.85))
+      .accessibilityLabel(fav ? "Remover das curtidas" : "Curtir")
+
       Button { player.togglePlayPause() } label: {
         ZStack {
           if player.isLoading {
@@ -395,7 +432,7 @@ struct MiniPlayer: View {
               .contentTransition(.symbolEffect(.replace))
           }
         }
-        .frame(width: 40, height: 40)
+        .frame(width: 36, height: 40)
         .contentShape(Rectangle())
       }
       .buttonStyle(PressableStyle(scale: 0.85))
@@ -404,7 +441,7 @@ struct MiniPlayer: View {
         Image(systemName: "forward.fill")
           .font(.system(size: 18, weight: .semibold))
           .foregroundStyle(Theme.text)
-          .frame(width: 38, height: 40)
+          .frame(width: 34, height: 40)
           .contentShape(Rectangle())
       }
       .buttonStyle(PressableStyle(scale: 0.85))
@@ -417,7 +454,7 @@ struct MiniPlayer: View {
         let frac = player.duration > 0 ? min(1, player.currentTime / player.duration) : 0
         Capsule().fill(Theme.text.opacity(0.10))
           .overlay(alignment: .leading) {
-            Capsule().fill(Theme.text.opacity(0.55)).frame(width: g.size.width * frac)
+            Capsule().fill(Theme.prism).frame(width: g.size.width * frac)
           }
       }
       .frame(height: 2.5)

@@ -177,17 +177,29 @@ struct AlbumView: View {
   }
 
   private var actions: some View {
-    VStack(spacing: 16) {
+    let saved = store.isAlbumSaved(album.id)
+    let downloadedCount = tracks.filter { store.isDownloaded($0.id) }.count
+    let allDownloaded = !tracks.isEmpty && downloadedCount == tracks.count
+    return VStack(spacing: 16) {
       PlayShuffleBar(tracks: tracks, context: album.title)
       HStack(spacing: 14) {
-        GlassIconButton(systemName: "arrow.down.circle", size: 46) { downloadAll() }
-          .accessibilityLabel("Baixar todas")
-        GlassIconButton(systemName: "text.badge.plus", size: 46) { saveToLibrary() }
-          .accessibilityLabel("Salvar na biblioteca")
+        GlassIconButton(systemName: allDownloaded ? "checkmark.circle.fill" : "arrow.down.circle", size: 46, foreground: allDownloaded ? Theme.ok : Theme.text) {
+          downloadAll()
+        }
+        .accessibilityLabel("Baixar todas")
+        GlassIconButton(systemName: saved ? "heart.fill" : "plus.circle", size: 46, foreground: saved ? Theme.rose : Theme.text) {
+          saveToLibrary()
+        }
+        .accessibilityLabel(saved ? "Remover álbum salvo" : "Salvar álbum na biblioteca")
       }
       .glassGroup()
       .disabled(tracks.isEmpty)
       .opacity(tracks.isEmpty ? 0.5 : 1)
+      if downloadedCount > 0 && !allDownloaded {
+        Text("\(downloadedCount) de \(tracks.count) baixadas")
+          .font(Theme.font(12))
+          .foregroundStyle(Theme.secondary)
+      }
     }
     .padding(.horizontal, 20)
     .padding(.top, 20)
@@ -228,18 +240,14 @@ struct AlbumView: View {
   private func downloadAll() {
     let pending = tracks.filter { !store.isDownloaded($0.id) }
     guard !pending.isEmpty else { app.showToast("Todas as músicas já estão baixadas"); return }
-    for t in pending { DownloadManager.shared.download(t) }
+    DownloadManager.shared.downloadBatch(pending)
     app.showToast("Baixando \(DetailFormat.songCount(pending.count))")
   }
 
   private func saveToLibrary() {
-    if store.playlists.contains(where: { $0.name == album.title && $0.sourceBadge == "Álbum" }) {
-      app.showToast("Este álbum já está na sua biblioteca")
-      return
-    }
-    store.createPlaylist(name: album.title, subtitle: album.artist, sourceBadge: "Álbum", artworkURL: album.artworkURL, tracks: tracks)
-    Haptics.success()
-    app.showToast("Álbum salvo na biblioteca")
+    let wasSaved = store.isAlbumSaved(album.id)
+    store.toggleSaveAlbum(album, tracks: tracks)
+    app.showToast(wasSaved ? "Álbum removido dos salvos" : "Álbum salvo na biblioteca")
   }
 }
 
@@ -253,6 +261,15 @@ struct ArtistView: View {
   @ObservedObject private var player = AudioPlayer.shared
   @State private var detail: ArtistDetail?
   @State private var loading = true
+  @State private var expandTop = false
+  @State private var discogFilter: DiscogFilter = .all
+
+  enum DiscogFilter: String, CaseIterable, Identifiable {
+    case all = "Todos"
+    case albums = "Álbuns"
+    case singles = "Singles e EPs"
+    var id: String { rawValue }
+  }
 
   var body: some View {
     ScrollView(showsIndicators: false) {
@@ -317,11 +334,16 @@ struct ArtistView: View {
         startPoint: .top, endPoint: .bottom
       )
       VStack(alignment: .leading, spacing: 4) {
-        Text(d.artist.name)
-          .font(.system(size: 38, weight: .heavy))
-          .foregroundStyle(Theme.text)
-          .lineLimit(2)
-          .minimumScaleFactor(0.7)
+        HStack(spacing: 8) {
+          Text(d.artist.name)
+            .font(.system(size: 36, weight: .heavy))
+            .foregroundStyle(Theme.text)
+            .lineLimit(2)
+            .minimumScaleFactor(0.7)
+          Image(systemName: "checkmark.seal.fill")
+            .font(.system(size: 20))
+            .foregroundStyle(Theme.accent)
+        }
         if let fans = d.artist.fans, fans > 0 {
           Text(DetailFormat.fans(fans))
             .font(Theme.font(14, .medium))
@@ -426,12 +448,13 @@ struct ArtistView: View {
     }
 
     if !d.topTracks.isEmpty {
+      let limit = expandTop ? 20 : 5
       VStack(alignment: .leading, spacing: 8) {
-        SectionHeader(title: "Mais tocadas", actionLabel: d.topTracks.count > 5 ? "Ver tudo" : nil, action: d.topTracks.count > 5 ? {
-          app.push(.tracks("Mais tocadas de \(d.artist.name)", d.topTracks))
+        SectionHeader(title: "Mais tocadas", actionLabel: d.topTracks.count > 5 ? (expandTop ? "Ver menos" : "Ver tudo") : nil, action: d.topTracks.count > 5 ? {
+          withAnimation(.snappy) { expandTop.toggle() }
         } : nil)
         VStack(spacing: 0) {
-          ForEach(Array(d.topTracks.prefix(5).enumerated()), id: \.element.id) { idx, tr in
+          ForEach(Array(d.topTracks.prefix(limit).enumerated()), id: \.element.id) { idx, tr in
             TrackRow(track: tr, rank: idx + 1, queue: d.topTracks)
           }
         }
@@ -440,12 +463,28 @@ struct ArtistView: View {
     }
 
     if !d.albums.isEmpty {
-      VStack(alignment: .leading, spacing: 12) {
-        SectionHeader(title: "Álbuns e singles", actionLabel: "Ver tudo") {
-          app.push(.albums("Álbuns e singles de \(d.artist.name)", d.albums))
+      let filtered = d.albums.filter { alb in
+        switch discogFilter {
+        case .all: return true
+        case .albums: return (alb.kind ?? "Álbum") == "Álbum"
+        case .singles: return alb.kind == "Single" || alb.kind == "EP"
         }
+      }
+      VStack(alignment: .leading, spacing: 12) {
+        SectionHeader(title: "Discografia", actionLabel: "Ver tudo") {
+          app.push(.albums("Discografia · \(d.artist.name)", filtered.isEmpty ? d.albums : filtered))
+        }
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 8) {
+            ForEach(DiscogFilter.allCases) { f in
+              PrismChip(title: f.rawValue, active: discogFilter == f) { discogFilter = f }
+            }
+          }
+          .padding(.horizontal, 20)
+        }
+        .scrollClipDisabled()
         HRow {
-          ForEach(d.albums.prefix(20)) { a in AlbumTile(album: a, width: 150, showDate: true) }
+          ForEach((filtered.isEmpty ? d.albums : filtered).prefix(20)) { a in AlbumTile(album: a, width: 150, showDate: true) }
         }
       }
     }
@@ -551,7 +590,7 @@ struct PlaylistView: View {
             } label: { Label("Renomear", systemImage: "pencil") }
             Button {
               withAnimation(.snappy) { editing.toggle() }
-            } label: { Label(editing ? "Concluir edição" : "Remover músicas", systemImage: editing ? "checkmark" : "minus.circle") }
+            } label: { Label(editing ? "Concluir edição" : "Editar ordem e faixas", systemImage: editing ? "checkmark" : "arrow.up.arrow.down") }
             Divider()
             Button(role: .destructive) { confirmDelete = true } label: { Label("Excluir playlist", systemImage: "trash") }
           } label: {
@@ -647,10 +686,35 @@ struct PlaylistView: View {
                     Image(systemName: "minus.circle.fill")
                       .font(.system(size: 22))
                       .foregroundStyle(Theme.danger)
-                      .frame(width: 36, height: 44)
+                      .frame(width: 34, height: 44)
                   }
                   .accessibilityLabel("Remover da playlist")
                   .transition(.move(edge: .leading).combined(with: .opacity))
+
+                  VStack(spacing: 2) {
+                    Button {
+                      guard idx > 0 else { return }
+                      Haptics.light()
+                      withAnimation(.snappy) { store.reorderPlaylist(pl.id, from: IndexSet(integer: idx), to: idx - 1) }
+                    } label: {
+                      Image(systemName: "chevron.up")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(idx > 0 ? Theme.text : Theme.tertiary)
+                        .frame(width: 24, height: 18)
+                    }
+                    .disabled(idx == 0)
+                    Button {
+                      guard idx + 1 < tracks.count else { return }
+                      Haptics.light()
+                      withAnimation(.snappy) { store.reorderPlaylist(pl.id, from: IndexSet(integer: idx), to: idx + 2) }
+                    } label: {
+                      Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(idx + 1 < tracks.count ? Theme.text : Theme.tertiary)
+                        .frame(width: 24, height: 18)
+                    }
+                    .disabled(idx + 1 >= tracks.count)
+                  }
                 }
                 TrackRow(track: tr, queue: tracks)
               }

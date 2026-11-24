@@ -41,6 +41,7 @@ final class AudioPlayer: ObservableObject {
   // Sleep timer
   @Published var sleepTimerOption: SleepTimerOption = .off
   @Published var sleepRemainingSeconds: Int = 0
+  @Published var sessionHistory: [Track] = []
 
   private var player: AVPlayer?
   private var timeObserver: Any?
@@ -52,10 +53,13 @@ final class AudioPlayer: ObservableObject {
   private var artTask: Task<Void, Never>?
   private var nowPlayingArtImage: UIImage?
   private var radioFetching = false
+  private var crossfadeTriggered = false
+  private var shouldFadeInNext = false
 
   private init() {
     configureAudioSession()
     configureRemoteCommands()
+    AudioSpectrum.shared.setEQGains(LibraryStore.shared.effectiveEQGains)
   }
 
   private func configureAudioSession() {
@@ -247,10 +251,17 @@ final class AudioPlayer: ObservableObject {
 
   func applySoundProfile(_ profile: SoundProfile) {
     LibraryStore.shared.soundProfile = profile
+    AudioSpectrum.shared.setEQGains(LibraryStore.shared.effectiveEQGains)
     if let player {
       player.volume = profile == .night ? 0.72 : 1.0
     }
     Haptics.selection()
+  }
+
+  func applyCustomEQ(_ gains: [Float]) {
+    LibraryStore.shared.customEQGains = gains
+    LibraryStore.shared.soundProfile = .custom
+    AudioSpectrum.shared.setEQGains(gains)
   }
 
   // MARK: - Sleep Timer
@@ -303,7 +314,11 @@ final class AudioPlayer: ObservableObject {
     lyrics = nil
     showTranslation = LibraryStore.shared.autoTranslateLyrics
     currentAnimatedArtURL = track.animatedArtworkURL
+    crossfadeTriggered = false
     LibraryStore.shared.recordPlay(track)
+    sessionHistory.removeAll { $0.id == track.id }
+    sessionHistory.insert(track, at: 0)
+    if sessionHistory.count > 40 { sessionHistory = Array(sessionHistory.prefix(40)) }
 
     loadTask?.cancel()
     lyricsTask?.cancel()
@@ -379,6 +394,13 @@ final class AudioPlayer: ObservableObject {
         return
       }
 
+      if store.offlineMode {
+        self.isLoading = false
+        self.isPlaying = false
+        self.errorToast = "Modo offline ativo. Baixe “\(track.title)” para ouvir sem internet."
+        return
+      }
+
       var working = track
       guard let vid = await MusicEngine.shared.resolveVideoId(for: working) else {
         guard !Task.isCancelled else { return }
@@ -423,8 +445,19 @@ final class AudioPlayer: ObservableObject {
     AudioSpectrum.shared.attach(to: item)
     let p = AVPlayer(playerItem: item)
     p.automaticallyWaitsToMinimizeStalling = true
-    p.volume = LibraryStore.shared.soundProfile == .night ? 0.72 : 1.0
+    let targetVol: Float = LibraryStore.shared.soundProfile == .night ? 0.72 : 1.0
+    p.volume = shouldFadeInNext ? 0.08 : targetVol
     self.player = p
+    if shouldFadeInNext {
+      shouldFadeInNext = false
+      Task { @MainActor [weak self, weak p] in
+        for step in 1...10 {
+          try? await Task.sleep(for: .milliseconds(90))
+          guard let self, let p, self.player === p else { return }
+          p.volume = targetVol * (Float(step) / 10.0)
+        }
+      }
+    }
 
     statusObs = item.observe(\.status, options: [.new]) { [weak self] it, _ in
       if it.status == .failed {
@@ -474,6 +507,26 @@ final class AudioPlayer: ObservableObject {
         }
         if self.sleepTimerOption == .endOfTrack {
           self.sleepRemainingSeconds = max(0, Int(self.duration - self.currentTime))
+        }
+        let xf = LibraryStore.shared.crossfadeSeconds
+        if xf > 0,
+           self.repeatMode != .one,
+           self.sleepTimerOption != .endOfTrack,
+           self.duration > xf + 2,
+           self.isPlaying {
+          let rem = self.duration - self.currentTime
+          let baseVol: Float = LibraryStore.shared.soundProfile == .night ? 0.72 : 1.0
+          if rem <= xf && rem > 0 {
+            let ratio = max(0.05, min(1.0, Float(rem / xf)))
+            pl.volume = baseVol * ratio
+            if rem <= 0.65 && !self.crossfadeTriggered && (self.currentIndex + 1 < self.queue.count || self.repeatMode == .all || self.autoplayRadio) {
+              self.crossfadeTriggered = true
+              self.shouldFadeInNext = true
+              self.nextTrack()
+            }
+          } else if !self.crossfadeTriggered && self.sleepRemainingSeconds == 0 {
+            pl.volume = baseVol
+          }
         }
       }
     }

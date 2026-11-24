@@ -16,12 +16,27 @@ final class LibraryStore: ObservableObject {
   @Published var followedArtists: [String] = []
   @Published var playCounts: [String: Int] = [:]
   @Published var seenReleaseIds: Set<String> = []
+  @Published var savedAlbums: [AlbumShowcase] = []
 
   // User preferences
   @Published var visualizerStyle: VisualizerStyle = .ares { didSet { save() } }
   @Published var soundProfile: SoundProfile = .natural { didSet { save() } }
   @Published var animatedArtEnabled: Bool = true { didSet { save() } }
   @Published var autoTranslateLyrics: Bool = false { didSet { save() } }
+  @Published var customEQGains: [Float] = [0, 0, 0, 0, 0] { didSet { save() } }
+  @Published var crossfadeSeconds: Double = 0 { didSet { save() } }
+  @Published var offlineMode: Bool = false { didSet { save() } }
+  @Published var autoDownloadFavorites: Bool = false { didSet { save() } }
+  @Published var totalListeningSeconds: Double = 0
+
+  struct ReplaySummary {
+    let totalPlays: Int
+    let totalMinutes: Int
+    let uniqueTracks: Int
+    let uniqueArtists: Int
+    let topTracks: [(track: Track, count: Int)]
+    let topArtists: [(name: String, count: Int)]
+  }
 
   private struct Snapshot: Codable {
     var tracksById: [String: Track]
@@ -37,6 +52,12 @@ final class LibraryStore: ObservableObject {
     var followedArtists: [String]?
     var playCounts: [String: Int]?
     var seenReleaseIds: [String]?
+    var savedAlbums: [AlbumShowcase]?
+    var customEQGains: [Float]?
+    var crossfadeSeconds: Double?
+    var offlineMode: Bool?
+    var autoDownloadFavorites: Bool?
+    var totalListeningSeconds: Double?
   }
 
   private var storeURL: URL {
@@ -116,6 +137,9 @@ final class LibraryStore: ObservableObject {
     } else {
       favoriteIds.insert(track.id, at: 0)
       Haptics.success()
+      if autoDownloadFavorites && !isDownloaded(track.id) {
+        DownloadManager.shared.download(track)
+      }
     }
     save()
   }
@@ -126,7 +150,90 @@ final class LibraryStore: ObservableObject {
     recentIds.insert(track.id, at: 0)
     if recentIds.count > 120 { recentIds = Array(recentIds.prefix(120)) }
     playCounts[track.id, default: 0] += 1
+    totalListeningSeconds += track.duration > 0 ? track.duration : 195
     save()
+  }
+
+  var effectiveEQGains: [Float] {
+    soundProfile == .custom ? customEQGains : soundProfile.defaultGains
+  }
+
+  func isAlbumSaved(_ id: String) -> Bool {
+    savedAlbums.contains { $0.id == id }
+  }
+
+  func toggleSaveAlbum(_ album: AlbumShowcase, tracks: [Track] = []) {
+    if let idx = savedAlbums.firstIndex(where: { $0.id == album.id }) {
+      savedAlbums.remove(at: idx)
+    } else {
+      var copy = album
+      if copy.tracks.isEmpty && !tracks.isEmpty { copy.tracks = tracks }
+      for t in copy.tracks { register(t) }
+      savedAlbums.insert(copy, at: 0)
+      Haptics.success()
+    }
+    save()
+  }
+
+  func reorderPlaylist(_ playlistId: String, from: IndexSet, to: Int) {
+    guard let idx = playlists.firstIndex(where: { $0.id == playlistId }) else { return }
+    playlists[idx].trackIds.move(fromOffsets: from, toOffset: to)
+    save()
+  }
+
+  func fileSizeBytes(for trackId: String) -> Int64 {
+    let url = localAudioURL(for: trackId)
+    guard FileManager.default.fileExists(atPath: url.path) else { return 0 }
+    let sz = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+    return Int64(sz)
+  }
+
+  func fileSizeFormatted(for trackId: String) -> String {
+    let bytes = fileSizeBytes(for: trackId)
+    guard bytes > 0 else { return "" }
+    let mb = Double(bytes) / (1024.0 * 1024.0)
+    return String(format: "%.1f MB", mb)
+  }
+
+  func removeAllDownloads() {
+    for id in Array(downloadedIds) {
+      let base = safeName(id)
+      try? FileManager.default.removeItem(at: offlineDir.appendingPathComponent("\(base).mp4"))
+      try? FileManager.default.removeItem(at: offlineDir.appendingPathComponent("\(base).m4a"))
+    }
+    downloadedIds.removeAll()
+    save()
+  }
+
+  var replaySummary: ReplaySummary {
+    let totalPlays = playCounts.values.reduce(0, +)
+    let mins = max(Int((totalListeningSeconds / 60.0).rounded()), totalPlays * 3)
+    let topTracks: [(track: Track, count: Int)] = playCounts
+      .sorted { $0.value > $1.value }
+      .compactMap { k, v in
+        guard let t = tracksById[k] else { return nil }
+        return (t, v)
+      }
+      .prefix(10)
+      .map { $0 }
+
+    var artistScore: [String: (name: String, count: Int)] = [:]
+    for (id, n) in playCounts {
+      guard let t = tracksById[id] else { continue }
+      let main = Self.mainArtist(t.artist)
+      guard !main.isEmpty, main != "Artista" else { continue }
+      let key = main.lowercased()
+      artistScore[key] = (main, (artistScore[key]?.count ?? 0) + n)
+    }
+    let topArtists = artistScore.values.sorted { $0.count > $1.count }.prefix(10).map { ($0.name, $0.count) }
+    return ReplaySummary(
+      totalPlays: totalPlays,
+      totalMinutes: mins,
+      uniqueTracks: playCounts.count,
+      uniqueArtists: artistScore.count,
+      topTracks: topTracks,
+      topArtists: topArtists
+    )
   }
 
   // MARK: - Artists (follow + listening stats)
@@ -295,6 +402,12 @@ final class LibraryStore: ObservableObject {
     followedArtists = snap.followedArtists ?? []
     playCounts = snap.playCounts ?? [:]
     seenReleaseIds = Set(snap.seenReleaseIds ?? [])
+    savedAlbums = snap.savedAlbums ?? []
+    customEQGains = snap.customEQGains ?? [0, 0, 0, 0, 0]
+    crossfadeSeconds = snap.crossfadeSeconds ?? 0
+    offlineMode = snap.offlineMode ?? false
+    autoDownloadFavorites = snap.autoDownloadFavorites ?? false
+    totalListeningSeconds = snap.totalListeningSeconds ?? 0
   }
 
   func save() {
@@ -311,7 +424,13 @@ final class LibraryStore: ObservableObject {
       autoTranslateLyrics: autoTranslateLyrics,
       followedArtists: followedArtists,
       playCounts: playCounts,
-      seenReleaseIds: Array(seenReleaseIds)
+      seenReleaseIds: Array(seenReleaseIds),
+      savedAlbums: savedAlbums,
+      customEQGains: customEQGains,
+      crossfadeSeconds: crossfadeSeconds,
+      offlineMode: offlineMode,
+      autoDownloadFavorites: autoDownloadFavorites,
+      totalListeningSeconds: totalListeningSeconds
     )
     if let data = try? JSONEncoder().encode(snap) {
       try? data.write(to: storeURL, options: .atomic)

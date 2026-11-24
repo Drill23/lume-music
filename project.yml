@@ -21,8 +21,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.adriano.lumemusic.ios
-        MARKETING_VERSION: "3.0.0"
-        CURRENT_PROJECT_VERSION: 3
+        MARKETING_VERSION: "4.0.0"
+        CURRENT_PROJECT_VERSION: 4
         TARGETED_DEVICE_FAMILY: '1,2'
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:

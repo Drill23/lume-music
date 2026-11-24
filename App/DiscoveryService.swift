@@ -24,8 +24,11 @@ struct DiscoverFeed: Codable {
   var brazilReleases: [AlbumShowcase]  // lançamentos/álbuns brasileiros recentes
   var topBrazil: [Track]               // mais tocadas no Brasil
   var topGlobal: [Track]               // mais tocadas no mundo
-  var topArtists: [ArtistInfo]         // cantores mais ouvidos
+  var topArtists: [ArtistInfo]         // cantores mais ouvidos (Brasil)
   var trending: [Track]                // em alta (YouTube Music BR; fallback Apple US)
+  var topAlbumsBrazil: [AlbumShowcase]? = nil
+  var topAlbumsGlobal: [AlbumShowcase]? = nil
+  var globalTopArtists: [ArtistInfo]? = nil
 }
 
 // MARK: - Serviço
@@ -66,8 +69,11 @@ actor DiscoveryService {
     async let tb = fetchTopBrazil()
     async let tg = fetchTopGlobal()
     async let ta = fetchTopArtists()
+    async let gta = fetchGlobalTopArtists()
     async let tr = fetchTrending()
-    let (newR, brR, topBR, topG, topA, trend) = await (nr, br, tb, tg, ta, tr)
+    async let abr = appleAlbums(country: "br")
+    async let aus = appleAlbums(country: "us")
+    let (newR, brR, topBR, topG, topA, gTopA, trend, albBR, albUS) = await (nr, br, tb, tg, ta, gta, tr, abr, aus)
 
     let old = cachedFeed()
     let feed = DiscoverFeed(
@@ -77,7 +83,10 @@ actor DiscoveryService {
       topBrazil: topBR.isEmpty ? (old?.topBrazil ?? []) : topBR,
       topGlobal: topG.isEmpty ? (old?.topGlobal ?? []) : topG,
       topArtists: topA.isEmpty ? (old?.topArtists ?? []) : topA,
-      trending: trend.isEmpty ? (old?.trending ?? []) : trend
+      trending: trend.isEmpty ? (old?.trending ?? []) : trend,
+      topAlbumsBrazil: albBR.isEmpty ? old?.topAlbumsBrazil : Array(albBR.prefix(25)),
+      topAlbumsGlobal: albUS.isEmpty ? old?.topAlbumsGlobal : Array(albUS.prefix(25)),
+      globalTopArtists: gTopA.isEmpty ? old?.globalTopArtists : gTopA
     )
     let anyData = !(feed.newReleases.isEmpty && feed.brazilReleases.isEmpty && feed.topBrazil.isEmpty
       && feed.topGlobal.isEmpty && feed.topArtists.isEmpty && feed.trending.isEmpty)
@@ -253,6 +262,70 @@ actor DiscoveryService {
     }
   }
 
+  /// Cantores mais ouvidos no mundo (YouTube Music Global `ZZ` + fotos em alta via ArtworkResolver).
+  private func fetchGlobalTopArtists() async -> [ArtistInfo] {
+    let body: [String: Any] = [
+      "context": Self.ytContext, "browseId": "FEmusic_charts", "formData": ["selectedValues": ["ZZ"]],
+    ]
+    var names: [String] = []
+    if let obj = await DiscNet.postJSON("https://music.youtube.com/youtubei/v1/browse?prettyPrint=false",
+                                        body: body, headers: Self.ytHeaders) {
+      func walk(_ n: Any) {
+        if let d = n as? [String: Any] {
+          if let r = d["musicResponsiveListItemRenderer"] as? [String: Any],
+             let cols = r["flexColumns"] as? [[String: Any]], let first = cols.first {
+            let runs = ((first["musicResponsiveListItemFlexColumnRenderer"] as? [String: Any])?["text"] as? [String: Any])?["runs"] as? [[String: Any]] ?? []
+            let name = runs.compactMap { $0["text"] as? String }.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty { names.append(name) }
+            return
+          }
+          for v in d.values { walk(v) }
+        } else if let a = n as? [Any] { for v in a { walk(v) } }
+      }
+      walk(obj)
+    }
+    var seen = Set<String>()
+    let unique = names.filter { seen.insert(DiscText.normalize($0)).inserted }.prefix(24)
+    if unique.isEmpty {
+      // Fallback: extrair artistas do Top Global do Apple Music US
+      if let obj = await DiscNet.json("https://rss.marketingtools.apple.com/api/v2/us/music/most-played/40/songs.json", timeout: 5, retries: 1) as? [String: Any],
+         let results = (obj["feed"] as? [String: Any])?["results"] as? [[String: Any]] {
+        let fallbackNames = results.compactMap { $0["artistName"] as? String }
+        return await resolveRankedArtists(Array(fallbackNames.prefix(20)))
+      }
+      return []
+    }
+    return await resolveRankedArtists(Array(unique))
+  }
+
+  private func resolveRankedArtists(_ names: [String]) async -> [ArtistInfo] {
+    var seen = Set<String>()
+    var clean: [(Int, String)] = []
+    for n in names {
+      let main = DiscText.searchArtist(n)
+      let key = DiscText.normalize(main)
+      guard !key.isEmpty, seen.insert(key).inserted else { continue }
+      clean.append((clean.count + 1, main))
+      if clean.count >= 24 { break }
+    }
+    let resolved: [(Int, ArtistInfo)] = await withTaskGroup(of: (Int, ArtistInfo)?.self) { group in
+      for (rank, name) in clean {
+        group.addTask {
+          if let info = await self.resolveArtist(name: name) {
+            var a = info
+            a.rank = rank
+            return (rank, a)
+          }
+          return (rank, ArtistInfo(id: "g_\(DiscText.normalize(name))", name: name, pictureURL: "", deezerId: nil, fans: nil, rank: rank))
+        }
+      }
+      var out: [(Int, ArtistInfo)] = []
+      for await item in group { if let item { out.append(item) } }
+      return out
+    }
+    return resolved.sorted { $0.0 < $1.0 }.map(\.1)
+  }
+
   private func fetchTrending() async -> [Track] {
     var tracks = await fetchYTMTrending()
     if tracks.isEmpty {
@@ -354,40 +427,30 @@ actor DiscoveryService {
 
   private func buildBrazilReleases() async -> [AlbumShowcase] {
     async let apBR = appleAlbums(country: "br")
-    // gêneros brasileiros: Sertanejo, Funk/Rap BR, MPB, Pagode, Axé/Forró (id, quantos artistas)
-    let genres: [(Int, Int)] = [(80, 8), (472, 6), (78, 4), (79, 4), (76, 4)]
-    let lists: [[(Int, String)]] = await withTaskGroup(of: [(Int, String)].self) { group in
-      for (gid, n) in genres {
-        group.addTask {
-          guard let obj = await DiscNet.json("https://api.deezer.com/genre/\(gid)/artists") as? [String: Any],
-                let data = obj["data"] as? [[String: Any]] else { return [] }
-          return data.prefix(n).compactMap { d in
-            guard let id = Self.int(d["id"]), let name = d["name"] as? String else { return nil }
-            return (id, name)
-          }
-        }
-      }
-      var out: [[(Int, String)]] = []
-      for await l in group { out.append(l) }
-      return out
+    async let topBRArtists = fetchTopArtists()
+    let (apple, chartArtists) = await (apBR, topBRArtists)
+    let pairs = chartArtists.prefix(16).compactMap { a -> (Int, String)? in
+      guard let id = a.deezerId else { return nil }
+      return (id, a.name)
     }
-    var seen = Set<Int>()
-    let artists = lists.flatMap { $0 }.filter { seen.insert($0.0).inserted }
-    let deezer = await recentForArtists(artists)
-    let apple = await apBR
+    let deezer = await recentForArtists(pairs)
     let cutoffDz = Self.dayString(daysAgo: 150)
     let cutoffAp = Self.dayString(daysAgo: 90)
     let today = Self.dayString(daysAgo: 0)
     let dzRecent = deezer.filter { ($0.releaseDate ?? "") >= cutoffDz && ($0.releaseDate ?? "") <= today }
-    let brNames = Set(artists.map { DiscText.normalize($0.1) })
-    let brGenres = ["sertanej", "mpb", "pagode", "samba", "funk", "forro", "axe", "brasil", "gospel", "piseiro", "arrocha", "bossa", "tropicalia", "romantic"]
+    let brNames = Set(chartArtists.map { DiscText.normalize($0.name) })
+    let brGenres = ["sertanej", "mpb", "pagode", "samba", "funk", "forro", "axe", "brasil", "gospel", "piseiro", "arrocha", "bossa", "tropicalia"]
     func isBrazilian(_ a: AlbumShowcase) -> Bool {
       let g = DiscText.normalize(a.genre)
-      if brGenres.contains(where: { g.contains($0) }) && !g.contains("romantic") { return true }
+      if brGenres.contains(where: { g.contains($0) }) { return true }
       return DiscText.splitArtists(a.artist).contains { brNames.contains($0) }
     }
     let apRecent = apple.filter { ($0.releaseDate ?? "") >= cutoffAp && ($0.releaseDate ?? "") <= today && isBrazilian($0) }
-    return Array(Self.dedupe(dzRecent + apRecent).sorted { ($0.releaseDate ?? "") > ($1.releaseDate ?? "") }.prefix(40))
+    let combined = Self.dedupe(dzRecent + apRecent).sorted { ($0.releaseDate ?? "") > ($1.releaseDate ?? "") }
+    if combined.isEmpty {
+      return Array(apple.prefix(24))
+    }
+    return Array(combined.prefix(40))
   }
 
   private func appleAlbums(country: String) async -> [AlbumShowcase] {

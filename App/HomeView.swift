@@ -1,18 +1,25 @@
 import SwiftUI
 
-/// Home — editorial, airy, Liquid Glass. Inspired by the Serene mockups: clean header, glass search pill,
-/// prism filter chips, a hero release carousel, tall editorial cards and a prism banner.
+/// Início — vitrine editorial Prisma Liquid Glass inspirada no melhor de Apple Music, Spotify e Amazon Music.
 struct HomeView: View {
   @ObservedObject private var app = AppModel.shared
   @ObservedObject private var store = LibraryStore.shared
   @ObservedObject private var player = AudioPlayer.shared
   @State private var filter: HomeFilter = .all
+  @State private var artistRegion: ArtistRegion = .brazil
 
   enum HomeFilter: String, CaseIterable, Identifiable {
     case all = "Tudo"
+    case forYou = "Para você"
+    case charts = "Paradas"
+    case countries = "Países"
+    case genres = "Gêneros"
     case releases = "Lançamentos"
-    case trending = "Em alta"
     case artists = "Artistas"
+    var id: String { rawValue }
+  }
+
+  enum ArtistRegion: String, CaseIterable, Identifiable {
     case brazil = "Brasil"
     case world = "Mundo"
     var id: String { rawValue }
@@ -46,8 +53,12 @@ struct HomeView: View {
     }
     .onChange(of: app.feed?.topArtists.count) { _, _ in
       if let a = app.feed?.topArtists { ArtworkStore.shared.register(a) }
+      if let g = app.feed?.globalTopArtists { ArtworkStore.shared.register(g) }
     }
-    .onAppear { if let a = app.feed?.topArtists { ArtworkStore.shared.register(a) } }
+    .onAppear {
+      if let a = app.feed?.topArtists { ArtworkStore.shared.register(a) }
+      if let g = app.feed?.globalTopArtists { ArtworkStore.shared.register(g) }
+    }
   }
 
   private var homeBackdrop: some View {
@@ -63,44 +74,89 @@ struct HomeView: View {
     .ignoresSafeArea()
   }
 
-  // MARK: Header
+  private var greeting: String {
+    let hour = Calendar.current.component(.hour, from: Date())
+    if hour < 12 { return "Bom dia" }
+    if hour < 18 { return "Boa tarde" }
+    return "Boa noite"
+  }
+
+  // MARK: Cabeçalho
 
   private var header: some View {
-    HStack(spacing: 12) {
-      LumeWordmark(size: 27)
-      Spacer()
-      GlassIconButton(systemName: "bell", size: 42, badge: app.hasUnseenReleases) {
-        app.push(.releases)
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 10) {
+        LumeWordmark(size: 27)
+        if store.offlineMode {
+          Label("Offline", systemImage: "airplane")
+            .font(Theme.font(11, .semibold))
+            .foregroundStyle(Theme.accent)
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .glassCapsule()
+        }
+        Spacer()
+        GlassIconButton(systemName: "sparkles", size: 40) {
+          app.push(.replay)
+        }
+        .accessibilityLabel("Lume Replay")
+        GlassIconButton(systemName: "bell", size: 40, badge: app.hasUnseenReleases) {
+          app.push(.releases)
+        }
+        .accessibilityLabel("Novidades dos seus artistas")
+        GlassIconButton(systemName: "gearshape", size: 40) {
+          app.push(.settings)
+        }
+        .accessibilityLabel("Ajustes")
       }
-      .accessibilityLabel("Novidades dos seus artistas")
-      GlassIconButton(systemName: "gearshape", size: 42) {
-        app.push(.settings)
-      }
-      .accessibilityLabel("Ajustes")
+      .glassGroup()
+
+      Text(greeting)
+        .font(Theme.font(14, .medium))
+        .foregroundStyle(Theme.secondary)
     }
-    .glassGroup()
     .padding(.horizontal, 20)
   }
 
   private var searchPill: some View {
-    Button {
-      app.select(.search)
-    } label: {
-      HStack(spacing: 10) {
-        Image(systemName: "magnifyingglass")
-          .font(.system(size: 16, weight: .semibold))
-        Text("Músicas, artistas, álbuns e letras")
-          .font(Theme.font(16))
-        Spacer()
-        Image(systemName: "mic.fill")
-          .font(.system(size: 14))
+    HStack(spacing: 10) {
+      Button {
+        app.select(.search)
+      } label: {
+        HStack(spacing: 10) {
+          Image(systemName: "magnifyingglass")
+            .font(.system(size: 16, weight: .semibold))
+          Text("Músicas, artistas, álbuns e trechos")
+            .font(Theme.font(15.5))
+            .lineLimit(1)
+          Spacer()
+        }
+        .foregroundStyle(Theme.secondary)
       }
-      .foregroundStyle(Theme.secondary)
-      .padding(.horizontal, 18)
-      .frame(height: 50)
-      .glassCapsule(interactive: true)
+      .buttonStyle(.plain)
+
+      Button {
+        Haptics.light()
+        app.openLyricsSearch()
+      } label: {
+        HStack(spacing: 4) {
+          Image(systemName: "quote.bubble.fill")
+            .font(.system(size: 12, weight: .semibold))
+          Text("Letra")
+            .font(Theme.font(11.5, .semibold))
+        }
+        .foregroundStyle(Theme.accent)
+        .padding(.horizontal, 10)
+        .frame(height: 30)
+        .background(Capsule().fill(Theme.fillStrong))
+      }
+      .buttonStyle(PressableStyle(scale: 0.94))
+      .accessibilityLabel("Buscar por trecho da letra")
     }
-    .buttonStyle(PressableStyle(scale: 0.98))
+    .padding(.leading, 18)
+    .padding(.trailing, 10)
+    .frame(height: 50)
+    .glassCapsule(interactive: true)
     .padding(.horizontal, 20)
   }
 
@@ -117,24 +173,67 @@ struct HomeView: View {
     .scrollClipDisabled()
   }
 
-  // MARK: Content per filter
+  // MARK: Conteúdo por filtro
 
   @ViewBuilder
   private func content(_ feed: DiscoverFeed) -> some View {
     switch filter {
     case .all:
       VStack(alignment: .leading, spacing: 30) {
+        quickResumeGrid(feed)
         if !app.artistReleases.isEmpty { yourArtistsReleases }
         heroSection(feed.newReleases.isEmpty ? feed.brazilReleases : feed.newReleases)
+        personalizedMixesRow(feed)
         trendingBrazil(feed.topBrazil)
         flowBanner
-        artistsRow(feed.topArtists)
+        countriesRow
+        artistsRow(feed)
         recentSection
         topGrid(title: "Top 50 Mundo", subtitle: "As mais tocadas no planeta agora", tracks: feed.topGlobal)
         coverFlowCard(feed)
+        genresHighlightRow
         albumRow(title: "Novidades do Brasil", albums: feed.brazilReleases)
         topGrid(title: "Em alta", subtitle: "Subindo rápido nas paradas", tracks: feed.trending)
         albumRow(title: "Lançamentos no mundo", albums: Array(feed.newReleases.dropFirst(5)))
+      }
+    case .forYou:
+      VStack(alignment: .leading, spacing: 30) {
+        quickResumeGrid(feed)
+        personalizedMixesRow(feed)
+        flowBanner
+        if !app.artistReleases.isEmpty { yourArtistsReleases }
+        recentSection
+      }
+    case .charts:
+      VStack(alignment: .leading, spacing: 30) {
+        trendingBrazil(feed.topBrazil)
+        topGrid(title: "Top 50 Mundo", subtitle: "Parada global", tracks: feed.topGlobal)
+        topGrid(title: "Em alta", subtitle: "Vídeos e músicas em ascensão", tracks: feed.trending)
+        topList(title: "Top 50 Brasil", tracks: feed.topBrazil)
+      }
+    case .countries:
+      VStack(alignment: .leading, spacing: 24) {
+        SectionHeader(title: "Paradas pelo Mundo", subtitle: "Toque em um país para abrir o Top 50")
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+          ForEach(ChartCountry.all) { c in
+            CountryFlagCard(country: c, width: .infinity)
+          }
+        }
+        .padding(.horizontal, 20)
+      }
+    case .genres:
+      VStack(alignment: .leading, spacing: 24) {
+        SectionHeader(title: "Estilos do Brasil")
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+          ForEach(MusicGenre.all.filter { $0.group == .brasil }) { g in GenreCard(genre: g) }
+        }
+        .padding(.horizontal, 20)
+
+        SectionHeader(title: "Gêneros Internacionais")
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+          ForEach(MusicGenre.all.filter { $0.group == .internacional }) { g in GenreCard(genre: g) }
+        }
+        .padding(.horizontal, 20)
       }
     case .releases:
       VStack(alignment: .leading, spacing: 30) {
@@ -142,33 +241,120 @@ struct HomeView: View {
         heroSection(feed.newReleases)
         albumGrid(feed.newReleases + feed.brazilReleases)
       }
-    case .trending:
-      VStack(alignment: .leading, spacing: 30) {
-        trendingBrazil(feed.topBrazil)
-        topGrid(title: "Top 50 Mundo", subtitle: nil, tracks: feed.topGlobal)
-        topGrid(title: "Em alta", subtitle: nil, tracks: feed.trending)
-      }
     case .artists:
-      artistGrid(feed.topArtists)
-    case .brazil:
-      VStack(alignment: .leading, spacing: 30) {
-        trendingBrazil(feed.topBrazil)
-        albumRow(title: "Novidades do Brasil", albums: feed.brazilReleases)
-        topList(title: "Top 50 Brasil", tracks: feed.topBrazil)
-      }
-    case .world:
-      VStack(alignment: .leading, spacing: 30) {
-        heroSection(feed.newReleases)
-        topList(title: "Top 50 Mundo", tracks: feed.topGlobal)
+      VStack(alignment: .leading, spacing: 20) {
+        artistsHeaderPicker
+        artistGrid(currentArtists(feed))
       }
     }
   }
 
-  // MARK: Sections
+  // MARK: Retomar rápido (estilo Spotify)
+
+  private struct QuickTile: Identifiable {
+    let id: String
+    let title: String
+    let icon: String
+    let artwork: String
+    let action: () -> Void
+  }
+
+  private func buildQuickTiles(_ feed: DiscoverFeed) -> [QuickTile] {
+    var items: [QuickTile] = []
+    if !store.favoriteTracks.isEmpty {
+      items.append(QuickTile(id: "fav", title: "Curtidas", icon: "heart.fill", artwork: store.favoriteTracks.first?.artworkURL ?? "") {
+        app.push(.tracks("Curtidas", store.favoriteTracks))
+      })
+    }
+    if !store.downloadedTracks.isEmpty {
+      items.append(QuickTile(id: "dl", title: "Baixadas", icon: "arrow.down.circle.fill", artwork: store.downloadedTracks.first?.artworkURL ?? "") {
+        app.push(.downloads)
+      })
+    }
+    for pl in store.playlists.prefix(2) {
+      let art = pl.artworkURL.isEmpty ? (store.tracks(in: pl).first?.artworkURL ?? "") : pl.artworkURL
+      items.append(QuickTile(id: "pl_\(pl.id)", title: pl.name, icon: "music.note.list", artwork: art) {
+        app.push(.playlist(pl.id))
+      })
+    }
+    for alb in store.savedAlbums.prefix(2) {
+      items.append(QuickTile(id: "alb_\(alb.id)", title: alb.title, icon: "square.stack.fill", artwork: alb.artworkURL) {
+        app.push(.album(alb))
+      })
+    }
+    if items.count < 4, !store.recentTracks.isEmpty {
+      for tr in store.recentTracks.prefix(4 - items.count) {
+        items.append(QuickTile(id: "rec_\(tr.id)", title: tr.title, icon: "play.fill", artwork: tr.artworkURL) {
+          player.play(tr, in: store.recentTracks)
+        })
+      }
+    }
+    if items.count < 4, let firstBR = feed.topBrazil.first {
+      items.append(QuickTile(id: "top_br", title: "Top 50 Brasil", icon: "chart.bar.fill", artwork: firstBR.artworkURL) {
+        app.push(.tracks("Top 50 Brasil", feed.topBrazil))
+      })
+      if let firstGL = feed.topGlobal.first {
+        items.append(QuickTile(id: "top_gl", title: "Top 50 Mundo", icon: "globe", artwork: firstGL.artworkURL) {
+          app.push(.tracks("Top 50 Mundo", feed.topGlobal))
+        })
+      }
+    }
+    return items
+  }
+
+  @ViewBuilder
+  private func quickResumeGrid(_ feed: DiscoverFeed) -> some View {
+    let items = buildQuickTiles(feed)
+    if !items.isEmpty {
+      LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+        ForEach(items.prefix(6)) { item in
+          Button {
+            Haptics.light()
+            item.action()
+          } label: {
+            HStack(spacing: 10) {
+              Group {
+                if !item.artwork.isEmpty {
+                  ArtworkImage(url: item.artwork, cornerRadius: 10, maxPixel: 160)
+                } else {
+                  ZStack {
+                    Theme.prismDiagonal
+                    Image(systemName: item.icon)
+                      .font(.system(size: 16, weight: .bold))
+                      .foregroundStyle(Theme.onPrism)
+                  }
+                  .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+              }
+              .frame(width: 48, height: 48)
+              Text(item.title)
+                .font(Theme.font(13.5, .semibold))
+                .foregroundStyle(Theme.text)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+              Spacer(minLength: 4)
+            }
+            .padding(6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glass(16, interactive: true)
+          }
+          .buttonStyle(PressableStyle(scale: 0.97))
+        }
+      }
+      .padding(.horizontal, 20)
+    }
+  }
+
+  // MARK: Seções
 
   private var yourArtistsReleases: some View {
     VStack(alignment: .leading, spacing: 12) {
-      SectionHeader(title: "Novidades dos seus artistas", subtitle: "Lançamentos de quem você ouve", actionLabel: "Ver tudo") {
+      let topArtist = store.topListenedArtists.first
+      SectionHeader(
+        title: topArtist.map { "Porque você ouve \($0)" } ?? "Dos seus artistas",
+        subtitle: "Lançamentos recentes de quem você acompanha",
+        actionLabel: "Ver tudo"
+      ) {
         app.push(.releases)
       }
       HRow {
@@ -192,6 +378,27 @@ struct HomeView: View {
   }
 
   @ViewBuilder
+  private func personalizedMixesRow(_ feed: DiscoverFeed) -> some View {
+    let mixes = CatalogExplorerService.buildPersonalizedMixes(
+      mostPlayed: store.mostPlayedTracks,
+      favorites: store.favoriteTracks,
+      recent: store.recentTracks,
+      topArtists: store.topListenedArtists,
+      feed: feed
+    )
+    if !mixes.isEmpty {
+      VStack(alignment: .leading, spacing: 12) {
+        SectionHeader(title: "Feito para você", subtitle: "Mixes atualizados com o seu gosto")
+        HRow(spacing: 14) {
+          ForEach(mixes) { mix in
+            PersonalizedMixCard(mix: mix)
+          }
+        }
+      }
+    }
+  }
+
+  @ViewBuilder
   private func trendingBrazil(_ tracks: [Track]) -> some View {
     if !tracks.isEmpty {
       VStack(alignment: .leading, spacing: 12) {
@@ -207,7 +414,33 @@ struct HomeView: View {
     }
   }
 
-  /// Prism banner (Serene "Special Offer"-style) with a stacked glass shadow card.
+  private var countriesRow: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      SectionHeader(title: "Paradas pelo Mundo", subtitle: "Explore o Top 50 de 18 países", actionLabel: "Ver todos") {
+        filter = .countries
+      }
+      HRow(spacing: 12) {
+        ForEach(ChartCountry.all.prefix(12)) { country in
+          CountryFlagCard(country: country)
+        }
+      }
+    }
+  }
+
+  private var genresHighlightRow: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      SectionHeader(title: "Gêneros & Estilos", subtitle: "Paradas e playlists separadas por estilo", actionLabel: "Ver todos") {
+        filter = .genres
+      }
+      HRow(spacing: 12) {
+        ForEach(MusicGenre.all.prefix(10)) { g in
+          GenreCard(genre: g)
+            .frame(width: 176)
+        }
+      }
+    }
+  }
+
   private var flowBanner: some View {
     Button {
       Haptics.medium()
@@ -261,16 +494,67 @@ struct HomeView: View {
     .padding(.horizontal, 20)
   }
 
-  @ViewBuilder
-  private func artistsRow(_ artists: [ArtistInfo]) -> some View {
-    if !artists.isEmpty {
-      VStack(alignment: .leading, spacing: 12) {
-        SectionHeader(title: "Cantores mais ouvidos", subtitle: "Os nomes do momento nas plataformas", actionLabel: "Ver todos") {
-          app.push(.artists("Cantores mais ouvidos", artists))
+  private func currentArtists(_ feed: DiscoverFeed) -> [ArtistInfo] {
+    if artistRegion == .world, let global = feed.globalTopArtists, !global.isEmpty {
+      return global
+    }
+    return feed.topArtists
+  }
+
+  private var artistsHeaderPicker: some View {
+    HStack {
+      Text("Cantores mais ouvidos")
+        .font(Theme.font(21, .bold))
+        .foregroundStyle(Theme.text)
+      Spacer()
+      HStack(spacing: 4) {
+        ForEach(ArtistRegion.allCases) { r in
+          PrismChip(title: r.rawValue, active: artistRegion == r) { artistRegion = r }
         }
+      }
+    }
+    .padding(.horizontal, 20)
+  }
+
+  @ViewBuilder
+  private func artistsRow(_ feed: DiscoverFeed) -> some View {
+    let list = currentArtists(feed)
+    if !list.isEmpty {
+      VStack(alignment: .leading, spacing: 12) {
+        HStack(spacing: 8) {
+          VStack(alignment: .leading, spacing: 1) {
+            Text("Cantores mais ouvidos")
+              .font(Theme.font(21, .bold))
+              .foregroundStyle(Theme.text)
+            Text(artistRegion == .brazil ? "Destaques no Brasil agora" : "Os maiores nomes no planeta")
+              .font(Theme.font(13))
+              .foregroundStyle(Theme.secondary)
+          }
+          Spacer()
+          HStack(spacing: 4) {
+            ForEach(ArtistRegion.allCases) { r in
+              Button {
+                Haptics.selection()
+                artistRegion = r
+              } label: {
+                Text(r.rawValue)
+                  .font(Theme.font(12, .semibold))
+                  .foregroundStyle(artistRegion == r ? Theme.onPrism : Theme.secondary)
+                  .padding(.horizontal, 10)
+                  .frame(height: 28)
+                  .background {
+                    if artistRegion == r { Capsule().fill(Theme.prism) } else { Capsule().fill(Theme.fill) }
+                  }
+              }
+              .buttonStyle(.plain)
+            }
+          }
+        }
+        .padding(.horizontal, 20)
+
         HRow(spacing: 16) {
-          ForEach(artists.prefix(20)) { a in
-            ArtistBubble(name: a.name, pictureURL: a.pictureURL, deezerId: a.deezerId)
+          ForEach(Array(list.prefix(20).enumerated()), id: \.element.id) { idx, a in
+            ArtistBubble(name: a.name, pictureURL: a.pictureURL, deezerId: a.deezerId, rank: a.rank ?? (idx + 1))
           }
         }
       }
@@ -359,7 +643,9 @@ struct HomeView: View {
 
   private func artistGrid(_ artists: [ArtistInfo]) -> some View {
     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 22) {
-      ForEach(artists) { a in ArtistBubble(name: a.name, pictureURL: a.pictureURL, deezerId: a.deezerId, size: 96) }
+      ForEach(Array(artists.enumerated()), id: \.element.id) { idx, a in
+        ArtistBubble(name: a.name, pictureURL: a.pictureURL, deezerId: a.deezerId, size: 96, rank: a.rank ?? (idx + 1))
+      }
     }
     .padding(.horizontal, 16)
   }
@@ -421,7 +707,7 @@ struct HomeView: View {
   }
 }
 
-// MARK: - Hero release carousel (Serene right-phone card)
+// MARK: - Hero release carousel
 
 struct ReleaseHeroCarousel: View {
   let albums: [AlbumShowcase]

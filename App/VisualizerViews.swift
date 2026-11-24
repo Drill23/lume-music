@@ -230,6 +230,7 @@ struct SpectrumVisualizer: View {
 struct LyricsStage: View {
   @ObservedObject private var player = AudioPlayer.shared
   @State private var lastUserScroll = Date.distantPast
+  @State private var shareSnippet: String?
 
   var body: some View {
     VStack(spacing: 6) {
@@ -238,6 +239,25 @@ struct LyricsStage: View {
           Text(src).font(Theme.font(12, .medium)).foregroundStyle(Theme.tertiary)
         }
         Spacer()
+        if let lyr = player.lyrics, !lyr.lines.isEmpty {
+          Button {
+            Haptics.light()
+            let idx = activeIndex(lyr)
+            let picked = lyr.lines.indices.contains(idx) ? lyr.lines[idx].text : lyr.lines.first?.text ?? ""
+            let next = lyr.lines.indices.contains(idx + 1) ? lyr.lines[idx + 1].text : ""
+            shareSnippet = [picked, next].filter { !$0.isEmpty && $0 != "♪" }.joined(separator: "\n")
+          } label: {
+            HStack(spacing: 4) {
+              Image(systemName: "square.and.arrow.up").font(.system(size: 11.5, weight: .semibold))
+              Text("Cartão").font(Theme.font(12, .semibold))
+            }
+            .foregroundStyle(Theme.text)
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .glassCapsule(interactive: true)
+          }
+          .buttonStyle(.plain)
+        }
         if let lyr = player.lyrics, !LyricsLanguage.isPortuguese(lyr) {
           Button { player.toggleTranslation() } label: {
             HStack(spacing: 5) {
@@ -285,6 +305,16 @@ struct LyricsStage: View {
           .buttonStyle(.plain)
           Spacer()
         }
+      }
+    }
+    .sheet(item: Binding(
+      get: { shareSnippet.map { LyricCardPayload(text: $0) } },
+      set: { shareSnippet = $0?.text }
+    )) { payload in
+      if let tr = player.currentTrack {
+        LyricShareSheet(track: tr, artworkURL: player.currentArtwork, snippet: payload.text)
+          .presentationDetents([.medium, .large])
+          .presentationDragIndicator(.visible)
       }
     }
   }
@@ -525,5 +555,99 @@ enum LyricsLanguage {
     let pt = r.dominantLanguage == .portuguese
     cache[b.trackKey] = pt
     return pt
+  }
+}
+
+private struct LyricCardPayload: Identifiable {
+  let id = UUID()
+  let text: String
+}
+
+private struct LyricShareSheet: View {
+  let track: Track
+  let artworkURL: String
+  let snippet: String
+  @Environment(\.dismiss) private var dismiss
+  @State private var rendered: UIImage?
+
+  var body: some View {
+    NavigationStack {
+      VStack(spacing: 20) {
+        cardView
+          .shadow(color: .black.opacity(0.35), radius: 22, y: 12)
+        if let rendered {
+          ShareLink(item: Image(uiImage: rendered), preview: SharePreview("\(track.title) — \(track.artist)", image: Image(uiImage: rendered))) {
+            Label("Compartilhar imagem", systemImage: "square.and.arrow.up")
+              .font(Theme.font(16, .bold))
+              .foregroundStyle(Theme.onPrism)
+              .frame(maxWidth: .infinity)
+              .frame(height: 50)
+              .background(Capsule().fill(Theme.prismDiagonal))
+          }
+          .padding(.horizontal, 24)
+        } else {
+          ShareLink(item: "“\(snippet)”\n— \(track.title), \(track.artist) · Lume Music") {
+            Label("Compartilhar trecho", systemImage: "square.and.arrow.up")
+              .font(Theme.font(16, .bold))
+              .foregroundStyle(Theme.onPrism)
+              .frame(maxWidth: .infinity)
+              .frame(height: 50)
+              .background(Capsule().fill(Theme.prismDiagonal))
+          }
+          .padding(.horizontal, 24)
+        }
+      }
+      .padding()
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(Theme.canvas.ignoresSafeArea())
+      .navigationTitle("Cartão de letra")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Fechar") { dismiss() } } }
+      .task {
+        let renderer = ImageRenderer(content: cardView.padding(16))
+        renderer.scale = 3.0
+        rendered = renderer.uiImage
+      }
+    }
+  }
+
+  private var cardView: some View {
+    VStack(alignment: .leading, spacing: 18) {
+      HStack(spacing: 12) {
+        ArtworkImage(url: artworkURL, cornerRadius: 10, maxPixel: 300)
+          .frame(width: 52, height: 52)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(track.title)
+            .font(Theme.font(16, .bold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+          Text(track.artist)
+            .font(Theme.font(13.5))
+            .foregroundStyle(.white.opacity(0.8))
+            .lineLimit(1)
+        }
+        Spacer()
+      }
+      Text("“\(snippet)”")
+        .font(.system(size: 22, weight: .bold))
+        .foregroundStyle(.white)
+        .fixedSize(horizontal: false, vertical: true)
+      HStack {
+        Text("Lume Music")
+          .font(Theme.font(11.5, .bold))
+          .foregroundStyle(.white.opacity(0.78))
+        Spacer()
+        Image(systemName: "waveform")
+          .font(.system(size: 13, weight: .bold))
+          .foregroundStyle(.white.opacity(0.8))
+      }
+    }
+    .padding(22)
+    .frame(width: 320)
+    .background(
+      RoundedRectangle(cornerRadius: 26, style: .continuous)
+        .fill(LinearGradient(colors: [Theme.rose, Theme.lavender, Theme.sky], startPoint: .topLeading, endPoint: .bottomTrailing))
+    )
+    .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(.white.opacity(0.35), lineWidth: 1))
   }
 }

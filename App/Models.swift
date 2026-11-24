@@ -164,6 +164,7 @@ enum SoundProfile: String, CaseIterable, Codable, Identifiable {
   case vocal = "Voz & Karaokê"
   case cinema = "Cinema 3D"
   case night = "Modo Noite"
+  case custom = "Personalizado"
 
   var id: String { rawValue }
   var subtitle: String {
@@ -173,6 +174,19 @@ enum SoundProfile: String, CaseIterable, Codable, Identifiable {
     case .vocal: return "Voz em destaque para acompanhar letras"
     case .cinema: return "Palco amplo e espacial"
     case .night: return "Volume suave sem picos bruscos"
+    case .custom: return "Ajuste fino nas 5 bandas do equalizador"
+    }
+  }
+
+  /// Ganho em dB para [60 Hz, 230 Hz, 910 Hz, 3.6 kHz, 14 kHz].
+  var defaultGains: [Float] {
+    switch self {
+    case .natural: return [0, 0, 0, 0, 0]
+    case .bass: return [6.5, 4.0, -0.5, 1.0, 2.5]
+    case .vocal: return [-2.5, -0.5, 4.0, 4.5, 1.5]
+    case .cinema: return [4.5, 1.5, -1.0, 3.0, 4.5]
+    case .night: return [-3.0, 1.0, 2.0, 1.0, -2.5]
+    case .custom: return [0, 0, 0, 0, 0]
     }
   }
 }
@@ -219,7 +233,7 @@ enum PlayerSurfaceTab: String, CaseIterable, Identifiable {
 
 enum AppTab: String, CaseIterable, Identifiable {
   case home = "Início"
-  case explore = "Novidades"
+  case explore = "Explorar"
   case library = "Biblioteca"
   case search = "Buscar"
 
@@ -227,7 +241,7 @@ enum AppTab: String, CaseIterable, Identifiable {
   var icon: String {
     switch self {
     case .home: return "house.fill"
-    case .explore: return "square.grid.2x2.fill"
+    case .explore: return "safari.fill"
     case .library: return "square.stack.fill"
     case .search: return "magnifyingglass"
     }
@@ -235,7 +249,7 @@ enum AppTab: String, CaseIterable, Identifiable {
   static var bar: [AppTab] { [.home, .explore, .library] }
 }
 
-struct MoodCategory: Identifiable, Hashable {
+struct MoodCategory: Identifiable, Hashable, Codable {
   let id: String
   let title: String
   let query: String
@@ -253,4 +267,128 @@ struct MoodCategory: Identifiable, Hashable {
     MoodCategory(id: "lofi", title: "Foco & Lo-Fi", query: "lofi chill beats study focus", icon: "moon.stars.fill", hexA: 0x8B5CF6, hexB: 0x1E3A8A),
     MoodCategory(id: "treino", title: "Treino", query: "workout gym motivation music hits", icon: "flame.fill", hexA: 0xEF4444, hexB: 0xF59E0B),
   ]
+
+  static let activities: [MoodCategory] = [
+    MoodCategory(id: "act_treino", title: "Treino & Academia", query: "workout gym motivation music hits 2026", icon: "flame.fill", hexA: 0xEF4444, hexB: 0xF97316),
+    MoodCategory(id: "act_foco", title: "Foco & Estudo", query: "lofi chill beats study focus instrumental", icon: "brain.head.profile", hexA: 0x6366F1, hexB: 0x1E3A8A),
+    MoodCategory(id: "act_relax", title: "Relaxar & Chill", query: "acoustic chill vibes relax music", icon: "leaf.fill", hexA: 0x10B981, hexB: 0x047857),
+    MoodCategory(id: "act_festa", title: "Festa & Balada", query: "party dance club hits remix 2026", icon: "sparkles", hexA: 0xEC4899, hexB: 0x8B5CF6),
+    MoodCategory(id: "act_estrada", title: "Estrada & Viagem", query: "road trip feel good classics hits", icon: "car.fill", hexA: 0xF59E0B, hexB: 0xD97706),
+    MoodCategory(id: "act_romance", title: "Romântico", query: "romantic love songs brasil internacional", icon: "heart.fill", hexA: 0xF43F5E, hexB: 0xBE123C),
+    MoodCategory(id: "act_dormir", title: "Dormir & Paz", query: "ambient sleep calm piano rain", icon: "moon.stars.fill", hexA: 0x3B82F6, hexB: 0x1E1B4B),
+    MoodCategory(id: "act_cafe", title: "Café da Manhã", query: "bossa nova morning coffee acoustic jazz", icon: "cup.and.saucer.fill", hexA: 0xFB923C, hexB: 0x9A3412),
+  ]
+
+  static let decades: [MoodCategory] = [
+    MoodCategory(id: "dec_80s", title: "Anos 80", query: "80s greatest hits classics", icon: "recordingtape", hexA: 0xEC4899, hexB: 0x4F46E5),
+    MoodCategory(id: "dec_90s", title: "Anos 90", query: "90s greatest hits rock pop brasil", icon: "record.circle", hexA: 0xF97316, hexB: 0x7C2D12),
+    MoodCategory(id: "dec_00s", title: "Anos 2000", query: "2000s hits throwbacks pop rock", icon: "compactdisc", hexA: 0x06B6D4, hexB: 0x1D4ED8),
+    MoodCategory(id: "dec_10s", title: "Anos 2010", query: "2010s biggest pop hits", icon: "music.quarternote.3", hexA: 0x8B5CF6, hexB: 0xDB2777),
+  ]
+}
+
+// MARK: - Paradas por País & Gêneros (estilo Apple Music / Spotify / Amazon Music)
+
+struct ChartCountry: Identifiable, Hashable, Codable {
+  var id: String { code }
+  let code: String          // Apple RSS storefront (ex. "br", "us", "jp")
+  let ytmCode: String       // YouTube Music FEmusic_charts code
+  let name: String
+  let flag: String
+  let region: String
+  let hexA: UInt32
+  let hexB: UInt32
+
+  static let all: [ChartCountry] = [
+    ChartCountry(code: "br", ytmCode: "BR", name: "Brasil", flag: "🇧🇷", region: "América do Sul", hexA: 0x10B981, hexB: 0x047857),
+    ChartCountry(code: "us", ytmCode: "US", name: "Estados Unidos", flag: "🇺🇸", region: "América do Norte", hexA: 0x3B82F6, hexB: 0x1D4ED8),
+    ChartCountry(code: "gb", ytmCode: "GB", name: "Reino Unido", flag: "🇬🇧", region: "Europa", hexA: 0x6366F1, hexB: 0xBE123C),
+    ChartCountry(code: "pt", ytmCode: "PT", name: "Portugal", flag: "🇵🇹", region: "Europa", hexA: 0xEF4444, hexB: 0x059669),
+    ChartCountry(code: "ar", ytmCode: "AR", name: "Argentina", flag: "🇦🇷", region: "América do Sul", hexA: 0x38BDF8, hexB: 0x0284C7),
+    ChartCountry(code: "mx", ytmCode: "MX", name: "México", flag: "🇲🇽", region: "América Latina", hexA: 0x16A34A, hexB: 0xDC2626),
+    ChartCountry(code: "co", ytmCode: "CO", name: "Colômbia", flag: "🇨🇴", region: "América do Sul", hexA: 0xF59E0B, hexB: 0x1D4ED8),
+    ChartCountry(code: "es", ytmCode: "ES", name: "Espanha", flag: "🇪🇸", region: "Europa", hexA: 0xEA580C, hexB: 0xB91C1C),
+    ChartCountry(code: "fr", ytmCode: "FR", name: "França", flag: "🇫🇷", region: "Europa", hexA: 0x2563EB, hexB: 0xE11D48),
+    ChartCountry(code: "de", ytmCode: "DE", name: "Alemanha", flag: "🇩🇪", region: "Europa", hexA: 0xF59E0B, hexB: 0x374151),
+    ChartCountry(code: "it", ytmCode: "IT", name: "Itália", flag: "🇮🇹", region: "Europa", hexA: 0x10B981, hexB: 0xDC2626),
+    ChartCountry(code: "jp", ytmCode: "JP", name: "Japão", flag: "🇯🇵", region: "Ásia", hexA: 0xF43F5E, hexB: 0x9F1239),
+    ChartCountry(code: "kr", ytmCode: "KR", name: "Coreia do Sul", flag: "🇰🇷", region: "Ásia", hexA: 0xEC4899, hexB: 0x4F46E5),
+    ChartCountry(code: "ng", ytmCode: "NG", name: "Nigéria", flag: "🇳🇬", region: "África", hexA: 0x059669, hexB: 0x065F46),
+    ChartCountry(code: "in", ytmCode: "IN", name: "Índia", flag: "🇮🇳", region: "Ásia", hexA: 0xF97316, hexB: 0x0F766E),
+    ChartCountry(code: "ca", ytmCode: "CA", name: "Canadá", flag: "🇨🇦", region: "América do Norte", hexA: 0xEF4444, hexB: 0x991B1B),
+    ChartCountry(code: "au", ytmCode: "AU", name: "Austrália", flag: "🇦🇺", region: "Oceania", hexA: 0x06B6D4, hexB: 0x1E3A8A),
+    ChartCountry(code: "se", ytmCode: "SE", name: "Suécia", flag: "🇸🇪", region: "Europa", hexA: 0x0EA5E9, hexB: 0xCA8A04),
+  ]
+}
+
+struct MusicGenre: Identifiable, Hashable, Codable {
+  enum Group: String, Codable, Hashable, CaseIterable {
+    case brasil = "Brasil"
+    case internacional = "Internacional"
+  }
+
+  let id: String
+  let title: String
+  let subtitle: String
+  let group: Group
+  let appleGenreId: Int?
+  let appleCountry: String
+  let searchQuery: String
+  let playlistQuery: String
+  let icon: String
+  let hexA: UInt32
+  let hexB: UInt32
+
+  static let all: [MusicGenre] = [
+    // Brasil
+    MusicGenre(id: "sertanejo", title: "Sertanejo", subtitle: "Modão, universitário e sucessos", group: .brasil, appleGenreId: 1122, appleCountry: "br", searchQuery: "sertanejo mais tocadas brasil 2026", playlistQuery: "top sertanejo brasil", icon: "guitars.fill", hexA: 0xFFB547, hexB: 0xD9534F),
+    MusicGenre(id: "funk_br", title: "Funk & Trap BR", subtitle: "Bailes, mandelão e trap nacional", group: .brasil, appleGenreId: 18, appleCountry: "br", searchQuery: "funk brasil trap nacional hits 2026", playlistQuery: "funk brasil hits", icon: "speaker.wave.3.fill", hexA: 0xEC4899, hexB: 0x7C3AED),
+    MusicGenre(id: "pagode", title: "Pagode & Samba", subtitle: "Rodas de samba e pagode 90/atual", group: .brasil, appleGenreId: nil, appleCountry: "br", searchQuery: "pagode samba mais tocadas brasil", playlistQuery: "pagode samba brasil", icon: "music.quarternote.3", hexA: 0xF59E0B, hexB: 0xB45309),
+    MusicGenre(id: "mpb", title: "MPB & Bossa", subtitle: "Clássicos e nova MPB brasileira", group: .brasil, appleGenreId: nil, appleCountry: "br", searchQuery: "mpb bossa nova melhores musicas", playlistQuery: "mpb classicos brasil", icon: "sun.max.fill", hexA: 0x10B981, hexB: 0x059669),
+    MusicGenre(id: "forro", title: "Forró & Piseiro", subtitle: "Nordeste, piseiro e vaquejada", group: .brasil, appleGenreId: nil, appleCountry: "br", searchQuery: "forro piseiro sucessos 2026", playlistQuery: "forro piseiro brasil", icon: "flame.fill", hexA: 0xFB7185, hexB: 0xE11D48),
+    MusicGenre(id: "gospel", title: "Gospel & Louvor", subtitle: "Adoração e louvores em alta", group: .brasil, appleGenreId: 22, appleCountry: "br", searchQuery: "gospel louvor adoracao mais tocadas", playlistQuery: "gospel brasil louvor", icon: "sparkles", hexA: 0x38BDF8, hexB: 0x4F46E5),
+
+    // Internacional
+    MusicGenre(id: "pop", title: "Pop", subtitle: "Hits globais das paradas", group: .internacional, appleGenreId: 14, appleCountry: "us", searchQuery: "top pop hits 2026", playlistQuery: "pop hits today", icon: "star.fill", hexA: 0xFF6B8B, hexB: 0x7C3AED),
+    MusicGenre(id: "rock", title: "Rock", subtitle: "Clássicos, alternativo e hard rock", group: .internacional, appleGenreId: 21, appleCountry: "br", searchQuery: "rock greatest hits classics", playlistQuery: "rock classics hits", icon: "bolt.fill", hexA: 0xF97316, hexB: 0x991B1B),
+    MusicGenre(id: "hiphop", title: "Hip-Hop & Rap", subtitle: "Rap mundial, trap e R&B", group: .internacional, appleGenreId: 18, appleCountry: "us", searchQuery: "hip hop rap hits 2026", playlistQuery: "hip hop rap hits", icon: "headphones", hexA: 0x6366F1, hexB: 0x1E1B4B),
+    MusicGenre(id: "eletronica", title: "Eletrônica & Dance", subtitle: "House, techno, EDM e festival", group: .internacional, appleGenreId: 17, appleCountry: "gb", searchQuery: "electronic dance house hits 2026", playlistQuery: "electronic dance hits", icon: "waveform", hexA: 0x06B6D4, hexB: 0x1D4ED8),
+    MusicGenre(id: "rnb", title: "R&B & Soul", subtitle: "Groove, neo-soul e vocais", group: .internacional, appleGenreId: 15, appleCountry: "us", searchQuery: "rnb soul hits classics", playlistQuery: "r&b soul hits", icon: "heart.circle.fill", hexA: 0xA855F7, hexB: 0x6B21A8),
+    MusicGenre(id: "latina", title: "Latina & Reggaeton", subtitle: "Reggaeton, salsa e pop latino", group: .internacional, appleGenreId: 12, appleCountry: "us", searchQuery: "latin reggaeton hits 2026", playlistQuery: "reggaeton latin hits", icon: "sun.haze.fill", hexA: 0xF59E0B, hexB: 0xDC2626),
+    MusicGenre(id: "kpop", title: "K-Pop", subtitle: "Grupos e solos da Coreia", group: .internacional, appleGenreId: 51, appleCountry: "kr", searchQuery: "kpop hits 2026", playlistQuery: "k-pop hits", icon: "wand.and.stars", hexA: 0xEC4899, hexB: 0x0EA5E9),
+    MusicGenre(id: "metal", title: "Metal", subtitle: "Heavy, thrash e metal moderno", group: .internacional, appleGenreId: 1153, appleCountry: "us", searchQuery: "heavy metal rock hits", playlistQuery: "heavy metal classics", icon: "flame", hexA: 0x52525B, hexB: 0x18181B),
+    MusicGenre(id: "indie", title: "Indie & Alternativo", subtitle: "Cenas independentes e alt-pop", group: .internacional, appleGenreId: 20, appleCountry: "us", searchQuery: "indie alternative hits", playlistQuery: "indie alternative", icon: "leaf.fill", hexA: 0x14B8A6, hexB: 0x0F766E),
+    MusicGenre(id: "jazz", title: "Jazz", subtitle: "Standards, sax e jazz contemporâneo", group: .internacional, appleGenreId: 11, appleCountry: "us", searchQuery: "jazz classics saxophone", playlistQuery: "jazz classics", icon: "music.note", hexA: 0xD97706, hexB: 0x451A03),
+    MusicGenre(id: "classica", title: "Clássica", subtitle: "Sinfonias, piano e concertos", group: .internacional, appleGenreId: 5, appleCountry: "us", searchQuery: "classical piano orchestra masterpiece", playlistQuery: "classical essentials", icon: "pianokeys", hexA: 0x64748B, hexB: 0x1E293B),
+    MusicGenre(id: "reggae", title: "Reggae", subtitle: "Roots, dub e vibrações positivas", group: .internacional, appleGenreId: 24, appleCountry: "br", searchQuery: "reggae roots classics brasil", playlistQuery: "reggae hits", icon: "tropicalstorm", hexA: 0x22C55E, hexB: 0xCA8A04),
+    MusicGenre(id: "country", title: "Country", subtitle: "Nashville e country contemporâneo", group: .internacional, appleGenreId: 6, appleCountry: "us", searchQuery: "country hits 2026", playlistQuery: "country hits", icon: "music.mic", hexA: 0xB45309, hexB: 0x78350F),
+    MusicGenre(id: "soundtrack", title: "Trilhas & Games", subtitle: "Cinema, séries e games", group: .internacional, appleGenreId: 16, appleCountry: "us", searchQuery: "movie soundtrack epic score", playlistQuery: "soundtrack movie hits", icon: "film.fill", hexA: 0x4F46E5, hexB: 0x0F172A),
+  ]
+}
+
+struct RemotePlaylist: Identifiable, Hashable, Codable {
+  var id: String { "dzpl_\(deezerId)" }
+  let deezerId: Int
+  let title: String
+  let subtitle: String
+  let artworkURL: String
+  let trackCount: Int
+  let creator: String
+}
+
+struct LyricSearchHit: Identifiable, Hashable {
+  var id: String { track.id }
+  let track: Track
+  let snippet: String
+}
+
+struct PersonalizedMix: Identifiable, Hashable {
+  let id: String
+  let title: String
+  let subtitle: String
+  let tag: String
+  let icon: String
+  let hexA: UInt32
+  let hexB: UInt32
+  let tracks: [Track]
 }

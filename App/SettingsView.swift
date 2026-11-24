@@ -35,6 +35,13 @@ struct SettingsView: View {
         Toggle(isOn: $player.autoplayRadio) {
           Label("Rádio automática", systemImage: "dot.radiowaves.left.and.right")
         }
+        NavigationLink(value: LumeRoute.equalizer) {
+          LabeledContent {
+            Text(store.soundProfile.rawValue)
+          } label: {
+            Label("Equalizador (5 bandas)", systemImage: "dial.medium")
+          }
+        }
         Picker(selection: Binding(
           get: { store.soundProfile },
           set: { player.applySoundProfile($0) }
@@ -42,6 +49,14 @@ struct SettingsView: View {
           ForEach(SoundProfile.allCases) { Text($0.rawValue).tag($0) }
         } label: {
           Label("Perfil de som", systemImage: "slider.horizontal.3")
+        }
+        Picker(selection: $store.crossfadeSeconds) {
+          Text("Desligado").tag(0.0)
+          Text("3 segundos").tag(3.0)
+          Text("6 segundos").tag(6.0)
+          Text("9 segundos").tag(9.0)
+        } label: {
+          Label("Crossfade entre faixas", systemImage: "waveform.path")
         }
         Toggle(isOn: $store.animatedArtEnabled) {
           Label("Capas animadas", systemImage: "sparkles.tv")
@@ -58,6 +73,9 @@ struct SettingsView: View {
       .listRowBackground(Theme.canvasRaised)
 
       Section("Biblioteca") {
+        NavigationLink(value: LumeRoute.replay) {
+          Label("Lume Replay · Seu Resumo", systemImage: "sparkles")
+        }
         NavigationLink(value: LumeRoute.importHub) {
           Label("Importar músicas", systemImage: "square.and.arrow.down")
         }
@@ -79,11 +97,19 @@ struct SettingsView: View {
       }
       .listRowBackground(Theme.canvasRaised)
 
-      Section("Armazenamento") {
-        LabeledContent {
-          Text(store.offlineStorageFormatted)
-        } label: {
-          Label("Músicas baixadas", systemImage: "arrow.down.circle")
+      Section("Armazenamento & Offline") {
+        Toggle(isOn: $store.offlineMode) {
+          Label("Modo Offline", systemImage: "airplane.circle")
+        }
+        Toggle(isOn: $store.autoDownloadFavorites) {
+          Label("Baixar curtidas automaticamente", systemImage: "heart.circle")
+        }
+        NavigationLink(value: LumeRoute.downloads) {
+          LabeledContent {
+            Text(store.offlineStorageFormatted)
+          } label: {
+            Label("Central de Downloads", systemImage: "arrow.down.circle")
+          }
         }
         Button {
           Haptics.light()
@@ -134,7 +160,7 @@ struct SettingsView: View {
     let v = info?["CFBundleShortVersionString"] as? String
     let b = info?["CFBundleVersion"] as? String
     if let v, let b { return "\(v) (\(b))" }
-    return "3.0.0 (3)"
+    return "4.0.0 (4)"
   }
 
   private func clearCache() {

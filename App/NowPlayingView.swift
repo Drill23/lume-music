@@ -28,6 +28,9 @@ struct NowPlayingView: View {
           .contentShape(Rectangle())
           .gesture(dismissDrag)
 
+        stageSwitcher
+          .padding(.top, 8)
+
         stage
           .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -92,6 +95,41 @@ struct NowPlayingView: View {
   }
 
   // MARK: Stage
+
+  private var stageSwitcher: some View {
+    HStack(spacing: 4) {
+      ForEach(PlayerSurfaceTab.allCases) { t in
+        let active = mode == t
+        Button {
+          Haptics.selection()
+          withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            if t != .lyrics { app.playerStyle = t }
+            app.playerTab = t
+          }
+        } label: {
+          HStack(spacing: 4) {
+            Image(systemName: t.icon)
+              .font(.system(size: 11, weight: .semibold))
+            if active {
+              Text(t.rawValue)
+                .font(Theme.font(11.5, .semibold))
+                .lineLimit(1)
+            }
+          }
+          .foregroundStyle(active ? Theme.onPrism : Theme.secondary)
+          .padding(.horizontal, active ? 10 : 9)
+          .frame(height: 28)
+          .background {
+            if active { Capsule().fill(Theme.prismDiagonal) }
+          }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(t.rawValue)
+      }
+    }
+    .padding(3)
+    .glassCapsule()
+  }
 
   @ViewBuilder
   private var stage: some View {
@@ -445,50 +483,84 @@ struct ArtworkStage: View {
 
 struct QueueSheet: View {
   @ObservedObject private var player = AudioPlayer.shared
+  @State private var tab: QueueTab = .upNext
+
+  enum QueueTab: String, CaseIterable, Identifiable {
+    case upNext = "Fila"
+    case history = "Histórico"
+    var id: String { rawValue }
+  }
 
   var body: some View {
     NavigationStack {
       List {
         Section {
-          HStack(spacing: 10) {
-            QueueToggle(title: "Aleatório", icon: "shuffle", on: player.shuffleEnabled) { player.shuffleEnabled.toggle() }
-            QueueToggle(title: "Repetir", icon: player.repeatMode.icon, on: player.repeatMode != .off) { player.repeatMode = player.repeatMode.next }
-            QueueToggle(title: "Rádio", icon: "infinity", on: player.autoplayRadio) { player.autoplayRadio.toggle() }
+          Picker("Modo", selection: $tab) {
+            ForEach(QueueTab.allCases) { Text($0.rawValue).tag($0) }
           }
+          .pickerStyle(.segmented)
           .listRowBackground(Color.clear)
-          .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+          .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
         }
-        if let cur = player.currentTrack {
-          Section("Tocando agora") {
-            QueueRow(track: cur, current: true)
+
+        if tab == .upNext {
+          Section {
+            HStack(spacing: 10) {
+              QueueToggle(title: "Aleatório", icon: "shuffle", on: player.shuffleEnabled) { player.shuffleEnabled.toggle() }
+              QueueToggle(title: "Repetir", icon: player.repeatMode.icon, on: player.repeatMode != .off) { player.repeatMode = player.repeatMode.next }
+              QueueToggle(title: "Rádio", icon: "infinity", on: player.autoplayRadio) { player.autoplayRadio.toggle() }
+            }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
           }
-        }
-        Section {
-          ForEach(upNextIndices, id: \.self) { idx in
-            QueueRow(track: player.queue[idx], current: false)
-              .contentShape(Rectangle())
-              .onTapGesture { player.jumpToQueueIndex(idx) }
+          if let cur = player.currentTrack {
+            Section("Tocando agora") {
+              QueueRow(track: cur, current: true)
+            }
           }
-          .onMove { from, to in
-            let base = player.currentIndex + 1
-            player.moveQueue(from: IndexSet(from.map { $0 + base }), to: to + base)
+          Section {
+            ForEach(upNextIndices, id: \.self) { idx in
+              QueueRow(track: player.queue[idx], current: false)
+                .contentShape(Rectangle())
+                .onTapGesture { player.jumpToQueueIndex(idx) }
+            }
+            .onMove { from, to in
+              let base = player.currentIndex + 1
+              player.moveQueue(from: IndexSet(from.map { $0 + base }), to: to + base)
+            }
+            .onDelete { offsets in
+              let base = player.currentIndex + 1
+              player.removeFromQueue(at: IndexSet(offsets.map { $0 + base }))
+            }
+          } header: {
+            HStack {
+              Text("A seguir")
+              Spacer()
+              if player.autoplayRadio { Text("rádio automática ligada").textCase(nil) }
+            }
           }
-          .onDelete { offsets in
-            let base = player.currentIndex + 1
-            player.removeFromQueue(at: IndexSet(offsets.map { $0 + base }))
-          }
-        } header: {
-          HStack {
-            Text("A seguir")
-            Spacer()
-            if player.autoplayRadio { Text("rádio automática ligada").textCase(nil) }
+        } else {
+          if player.sessionHistory.isEmpty {
+            Section {
+              Text("Nenhuma música tocada ainda nesta sessão.")
+                .font(Theme.font(14))
+                .foregroundStyle(Theme.secondary)
+            }
+          } else {
+            Section("Tocadas nesta sessão") {
+              ForEach(player.sessionHistory) { tr in
+                QueueRow(track: tr, current: tr.id == player.currentTrack?.id)
+                  .contentShape(Rectangle())
+                  .onTapGesture { player.play(tr, in: player.sessionHistory) }
+              }
+            }
           }
         }
       }
       .listStyle(.insetGrouped)
       .scrollContentBackground(.hidden)
-      .environment(\.editMode, .constant(.active))
-      .navigationTitle("Fila")
+      .environment(\.editMode, .constant(tab == .upNext ? .active : .inactive))
+      .navigationTitle(tab.rawValue)
       .navigationBarTitleDisplayMode(.inline)
     }
   }
@@ -634,13 +706,27 @@ struct PlayerOptionsSheet: View {
           .pickerStyle(.segmented)
         }
 
-        Section("Som") {
+        Section("Som & Equalizador") {
           Picker(selection: Binding(get: { store.soundProfile }, set: { player.applySoundProfile($0) })) {
             ForEach(SoundProfile.allCases) { p in
               Text(p.rawValue).tag(p)
             }
           } label: {
             Label("Perfil de som", systemImage: "slider.vertical.3")
+          }
+          Button {
+            dismiss()
+            app.navigateFromPlayer(.equalizer)
+          } label: {
+            Label("Abrir Equalizador (5 bandas)", systemImage: "dial.medium")
+          }
+          Picker(selection: $store.crossfadeSeconds) {
+            Text("Desligado").tag(0.0)
+            Text("3 segundos").tag(3.0)
+            Text("6 segundos").tag(6.0)
+            Text("9 segundos").tag(9.0)
+          } label: {
+            Label("Crossfade", systemImage: "waveform.path")
           }
         }
 

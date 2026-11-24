@@ -51,6 +51,44 @@ struct LumeMusicTests {
     expect(res.tracks[1].artist == "Daft Punk" && res.tracks[1].title == "Instant Crush", "Text Artist - Title parse")
     expect(res.tracks[2].title == "Bohemian Rhapsody", "Plain title parse")
 
+    // 7. 18 countries & 20 music genres configured
+    expect(ChartCountry.all.count == 18, "18 countries configured")
+    expect(MusicGenre.all.count == 20, "20 genres configured")
+    expect(MusicGenre.all.filter { $0.group == .brasil }.count == 6, "6 Brazilian genres")
+
+    // 8. SoundProfile 5-band EQ presets
+    for profile in SoundProfile.allCases {
+      expect(profile.defaultGains.count == 5, "SoundProfile \(profile.rawValue) has 5 EQ bands")
+    }
+
+    // 9. Lyrics snippet extraction
+    let snippet = SearchService.extractSnippet(
+      query: "por toda a minha vida",
+      plain: "Eu sei que vou te amar\nPor toda a minha vida eu vou te amar\nA cada despedida",
+      synced: ""
+    )
+    expect(snippet.contains("Por toda a minha vida"), "Lyrics snippet extracts matching verse")
+
+    // 10. Personalized mixes builder works even with feed fallback
+    let sampleTrack = Track(title: "Evidências", artist: "Chitãozinho & Xororó", artworkURL: "https://example.com/a.jpg")
+    let sampleFeed = DiscoverFeed(
+      updatedAt: Date(),
+      newReleases: [],
+      brazilReleases: [],
+      topBrazil: [sampleTrack],
+      topGlobal: [sampleTrack],
+      topArtists: [],
+      trending: [sampleTrack]
+    )
+    let mixes = CatalogExplorerService.buildPersonalizedMixes(
+      mostPlayed: [sampleTrack],
+      favorites: [sampleTrack],
+      recent: [sampleTrack],
+      topArtists: ["Chitãozinho & Xororó"],
+      feed: sampleFeed
+    )
+    expect(mixes.count >= 4, "Personalized mixes generated")
+
     print("ALL \(passed) LUME MUSIC UNIT TESTS PASSED!")
   }
 }

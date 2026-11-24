@@ -137,10 +137,10 @@ struct TrackRow: View {
     HStack(spacing: 12) {
       if let rank {
         Text("\(rank)")
-          .font(Theme.font(15, .semibold))
-          .foregroundStyle(rank <= 3 ? Theme.accent : Theme.secondary)
+          .font(Theme.font(14.5, .bold))
+          .foregroundStyle(rankColor(rank))
           .monospacedDigit()
-          .frame(width: 24)
+          .frame(width: 26)
       }
       if showArtwork {
         TrackArtwork(track: track, cornerRadius: 8, maxPixel: 200)
@@ -201,6 +201,15 @@ struct TrackRow: View {
     }
     .contextMenu { TrackMenuItems(track: track, queue: queue) }
   }
+
+  private func rankColor(_ rank: Int) -> Color {
+    switch rank {
+    case 1: return Theme.hex(0xF59E0B)
+    case 2: return Theme.hex(0x94A3B8)
+    case 3: return Theme.hex(0xD97706)
+    default: return Theme.secondary
+    }
+  }
 }
 
 // MARK: - Tiles
@@ -247,6 +256,7 @@ struct ArtistBubble: View {
   var pictureURL: String? = nil
   var deezerId: Int? = nil
   var size: CGFloat = 86
+  var rank: Int? = nil
 
   var body: some View {
     Button {
@@ -265,6 +275,19 @@ struct ArtistBubble: View {
         .clipShape(Circle())
         .overlay(Circle().stroke(Theme.hairline, lineWidth: 0.5))
         .lumeShadow(10, y: 5, opacity: 0.45)
+        .overlay(alignment: .topLeading) {
+          if let rank {
+            Text("#\(rank)")
+              .font(Theme.font(10.5, .bold))
+              .foregroundStyle(.white)
+              .monospacedDigit()
+              .padding(.horizontal, 6)
+              .frame(height: 20)
+              .background(Capsule().fill(badgeColor(rank)))
+              .overlay(Capsule().stroke(.white.opacity(0.45), lineWidth: 0.6))
+              .offset(x: -2, y: -2)
+          }
+        }
         Text(name)
           .font(Theme.font(13, .medium))
           .foregroundStyle(Theme.text)
@@ -273,6 +296,15 @@ struct ArtistBubble: View {
       }
     }
     .buttonStyle(PressableStyle())
+  }
+
+  private func badgeColor(_ rank: Int) -> Color {
+    switch rank {
+    case 1: return Theme.hex(0xD97706)
+    case 2: return Theme.hex(0x64748B)
+    case 3: return Theme.hex(0xB45309)
+    default: return Color.black.opacity(0.65)
+    }
   }
 }
 

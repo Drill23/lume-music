@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Buscar — músicas, artistas e álbuns. Raiz da aba (a barra de navegação fica escondida).
+/// Buscar — autocomplete ao vivo, músicas, artistas, álbuns, playlists, busca por letra e navegador completo.
 struct SearchView: View {
   @ObservedObject private var app = AppModel.shared
   @ObservedObject private var store = LibraryStore.shared
@@ -8,9 +8,13 @@ struct SearchView: View {
 
   @State private var query = ""
   @State private var scope: Scope = .all
+  @State private var browseTab: BrowseTab = .genres
   @State private var songs: [Track] = []
   @State private var artists: [ArtistInfo] = []
   @State private var albums: [AlbumShowcase] = []
+  @State private var playlists: [RemotePlaylist] = []
+  @State private var lyricHits: [LyricSearchHit] = []
+  @State private var suggestions: [String] = []
   @State private var loading = false
   @State private var resultsFor = ""
   @FocusState private var focused: Bool
@@ -20,16 +24,28 @@ struct SearchView: View {
     case songs = "Músicas"
     case artists = "Artistas"
     case albums = "Álbuns"
+    case playlists = "Playlists"
+    case lyrics = "Letras"
+    var id: String { rawValue }
+  }
+
+  enum BrowseTab: String, CaseIterable, Identifiable {
+    case genres = "Gêneros"
+    case moods = "Climas"
+    case countries = "Países"
+    case decades = "Décadas"
     var id: String { rawValue }
   }
 
   private var trimmed: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
-  private var hasResults: Bool { !songs.isEmpty || !artists.isEmpty || !albums.isEmpty }
+  private var hasResults: Bool {
+    !songs.isEmpty || !artists.isEmpty || !albums.isEmpty || !playlists.isEmpty || !lyricHits.isEmpty
+  }
 
   var body: some View {
     ScrollView(showsIndicators: false) {
       LazyVStack(alignment: .leading, spacing: 24) {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
           Text("Buscar")
             .font(Theme.font(34, .bold))
             .foregroundStyle(Theme.text)
@@ -41,15 +57,23 @@ struct SearchView: View {
         if trimmed.isEmpty {
           idleContent
         } else {
+          if focused && !suggestions.isEmpty && resultsFor != trimmed {
+            suggestionsBlock
+          }
           resultsContent
         }
       }
       .padding(.top, 6)
+      .padding(.bottom, 16)
     }
     .scrollDismissesKeyboard(.interactively)
     .background(Theme.canvas.ignoresSafeArea())
     .task(id: query) { await runSearch() }
     .onChange(of: app.searchFocusToken) { _, _ in focused = true }
+    .onChange(of: app.searchLyricsToken) { _, _ in
+      scope = .lyrics
+      focused = true
+    }
     .onAppear { if app.tab == .search { focused = true } }
   }
 
@@ -57,10 +81,10 @@ struct SearchView: View {
 
   private var searchField: some View {
     HStack(spacing: 10) {
-      Image(systemName: "magnifyingglass")
+      Image(systemName: scope == .lyrics ? "quote.bubble.fill" : "magnifyingglass")
         .font(.system(size: 16, weight: .semibold))
-        .foregroundStyle(Theme.secondary)
-      TextField("Músicas, artistas, álbuns", text: $query)
+        .foregroundStyle(scope == .lyrics ? Theme.accent : Theme.secondary)
+      TextField(scope == .lyrics ? "Digite um verso da música…" : "Músicas, artistas, álbuns ou letra", text: $query)
         .font(Theme.font(16))
         .foregroundStyle(Theme.text)
         .focused($focused)
@@ -103,10 +127,80 @@ struct SearchView: View {
     .scrollClipDisabled()
   }
 
-  // MARK: Consulta vazia
+  // MARK: Sugestões ao vivo
+
+  private var suggestionsBlock: some View {
+    VStack(spacing: 0) {
+      ForEach(suggestions.prefix(6), id: \.self) { sug in
+        HStack(spacing: 12) {
+          Image(systemName: "magnifyingglass")
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(Theme.secondary)
+            .frame(width: 22)
+          Text(sug)
+            .font(Theme.font(15.5))
+            .foregroundStyle(Theme.text)
+            .lineLimit(1)
+          Spacer()
+          Image(systemName: "arrow.up.left")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Theme.tertiary)
+        }
+        .frame(minHeight: 44)
+        .padding(.horizontal, 16)
+        .contentShape(Rectangle())
+        .onTapGesture {
+          Haptics.light()
+          query = sug
+          store.addSearchTerm(sug)
+          focused = false
+        }
+        if sug != suggestions.prefix(6).last {
+          Divider().overlay(Theme.hairline).padding(.leading, 50)
+        }
+      }
+    }
+    .glass(20)
+    .padding(.horizontal, 20)
+  }
+
+  // MARK: Estado Vazio
 
   @ViewBuilder
   private var idleContent: some View {
+    if let feed = app.feed, !feed.topBrazil.isEmpty {
+      VStack(alignment: .leading, spacing: 10) {
+        SectionHeader(title: "Em alta nas buscas")
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 8) {
+            ForEach(Array(feed.topBrazil.prefix(8)), id: \.id) { tr in
+              Button {
+                Haptics.light()
+                query = tr.title
+                focused = false
+              } label: {
+                HStack(spacing: 6) {
+                  Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Theme.accent)
+                  Text(tr.title)
+                    .font(Theme.font(13, .medium))
+                    .foregroundStyle(Theme.text)
+                    .lineLimit(1)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 34)
+                .glassCapsule(interactive: true)
+              }
+              .buttonStyle(PressableStyle(scale: 0.96))
+            }
+          }
+          .padding(.horizontal, 20)
+        }
+        .scrollClipDisabled()
+      }
+    }
+
     if !store.searchHistory.isEmpty {
       VStack(alignment: .leading, spacing: 8) {
         SectionHeader(title: "Buscas recentes", actionLabel: "Limpar") {
@@ -158,7 +252,38 @@ struct SearchView: View {
 
     VStack(alignment: .leading, spacing: 14) {
       SectionHeader(title: "Navegar por categorias")
-      MoodGrid()
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) {
+          ForEach(BrowseTab.allCases) { tab in
+            PrismChip(title: tab.rawValue, active: browseTab == tab) { browseTab = tab }
+          }
+        }
+        .padding(.horizontal, 20)
+      }
+      .scrollClipDisabled()
+
+      switch browseTab {
+      case .genres:
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+          ForEach(MusicGenre.all) { g in GenreCard(genre: g) }
+        }
+        .padding(.horizontal, 20)
+      case .moods:
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+          ForEach(MoodCategory.activities) { m in MoodCard(mood: m) }
+        }
+        .padding(.horizontal, 20)
+      case .countries:
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+          ForEach(ChartCountry.all) { c in CountryFlagCard(country: c, width: .infinity) }
+        }
+        .padding(.horizontal, 20)
+      case .decades:
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+          ForEach(MoodCategory.decades) { m in MoodCard(mood: m) }
+        }
+        .padding(.horizontal, 20)
+      }
     }
   }
 
@@ -182,6 +307,8 @@ struct SearchView: View {
       case .songs: songsList(songs)
       case .artists: artistsGrid
       case .albums: albumsGrid
+      case .playlists: playlistsGrid
+      case .lyrics: lyricsList
       }
     }
   }
@@ -226,6 +353,30 @@ struct SearchView: View {
               .simultaneousGesture(TapGesture().onEnded { store.addSearchTerm(trimmed) })
           }
         }
+      }
+    }
+
+    if !playlists.isEmpty {
+      VStack(alignment: .leading, spacing: 12) {
+        SectionHeader(title: "Playlists", actionLabel: playlists.count > 2 ? "Ver tudo" : nil, action: playlists.count > 2 ? { scope = .playlists } : nil)
+        HRow {
+          ForEach(playlists) { pl in
+            RemotePlaylistCard(playlist: pl)
+              .simultaneousGesture(TapGesture().onEnded { store.addSearchTerm(trimmed) })
+          }
+        }
+      }
+    }
+
+    if !lyricHits.isEmpty {
+      VStack(alignment: .leading, spacing: 10) {
+        SectionHeader(title: "Trechos de letras", actionLabel: lyricHits.count > 3 ? "Ver tudo" : nil, action: lyricHits.count > 3 ? { scope = .lyrics } : nil)
+        VStack(spacing: 10) {
+          ForEach(lyricHits.prefix(3)) { hit in
+            lyricHitCard(hit)
+          }
+        }
+        .padding(.horizontal, 20)
       }
     }
   }
@@ -275,6 +426,78 @@ struct SearchView: View {
     }
   }
 
+  @ViewBuilder
+  private var playlistsGrid: some View {
+    if playlists.isEmpty {
+      EmptyStateView(icon: "music.note.list", title: "Nenhuma playlist", message: "Não encontramos playlists para essa busca.")
+    } else {
+      LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 20) {
+        ForEach(playlists) { pl in
+          GeometryReader { g in
+            RemotePlaylistCard(playlist: pl, width: g.size.width)
+          }
+          .aspectRatio(0.80, contentMode: .fit)
+          .simultaneousGesture(TapGesture().onEnded { store.addSearchTerm(trimmed) })
+        }
+      }
+      .padding(.horizontal, 20)
+    }
+  }
+
+  @ViewBuilder
+  private var lyricsList: some View {
+    if lyricHits.isEmpty {
+      EmptyStateView(icon: "quote.bubble", title: "Nenhuma letra encontrada", message: "Digite algumas palavras exatas de um verso da música.")
+    } else {
+      VStack(spacing: 12) {
+        ForEach(lyricHits) { hit in
+          lyricHitCard(hit)
+        }
+      }
+      .padding(.horizontal, 20)
+    }
+  }
+
+  private func lyricHitCard(_ hit: LyricSearchHit) -> some View {
+    Button {
+      Haptics.medium()
+      store.addSearchTerm(trimmed)
+      player.play(hit.track, in: lyricHits.map(\.track))
+    } label: {
+      HStack(spacing: 12) {
+        TrackArtwork(track: hit.track, cornerRadius: 10, maxPixel: 200)
+          .frame(width: 54, height: 54)
+        VStack(alignment: .leading, spacing: 3) {
+          Text(hit.track.title)
+            .font(Theme.font(15.5, .semibold))
+            .foregroundStyle(Theme.text)
+            .lineLimit(1)
+          Text(hit.track.artist)
+            .font(Theme.font(13))
+            .foregroundStyle(Theme.secondary)
+            .lineLimit(1)
+          if !hit.snippet.isEmpty {
+            Text("“\(hit.snippet)”")
+              .font(Theme.font(12.5, .medium))
+              .foregroundStyle(Theme.accent)
+              .lineLimit(2)
+          }
+        }
+        Spacer(minLength: 4)
+        Image(systemName: "play.fill")
+          .font(.system(size: 13, weight: .bold))
+          .foregroundStyle(Theme.text)
+          .frame(width: 34, height: 34)
+          .glassCircle()
+      }
+      .padding(12)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .glass(20, interactive: true)
+    }
+    .buttonStyle(PressableStyle(scale: 0.98))
+    .contextMenu { TrackMenuItems(track: hit.track) }
+  }
+
   // MARK: Melhor resultado
 
   private enum Best {
@@ -294,7 +517,6 @@ struct SearchView: View {
       .trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  /// Nome do artista ≈ consulta (igual, um contém o outro ou começa com ela).
   private static func similar(_ name: String, _ q: String) -> Bool {
     let n = fold(name), s = fold(q)
     guard !n.isEmpty, !s.isEmpty else { return false }
@@ -381,28 +603,36 @@ struct SearchView: View {
     }
   }
 
-  // MARK: Busca com debounce
+  // MARK: Busca com debounce + sugestões instantâneas
 
   private func runSearch() async {
     let q = trimmed
     if q.isEmpty {
-      songs = []; artists = []; albums = []
+      songs = []; artists = []; albums = []; playlists = []; lyricHits = []; suggestions = []
       loading = false
       resultsFor = ""
       return
     }
     loading = true
-    try? await Task.sleep(for: .milliseconds(350))
+    async let sugTask = SearchService.shared.suggestions(q)
+    try? await Task.sleep(for: .milliseconds(320))
     if Task.isCancelled { return }
+
     async let s = MusicEngine.shared.searchSongs(query: q, limit: 25)
     async let a = SearchService.shared.artists(q)
     async let al = SearchService.shared.albums(q)
-    let (foundSongs, foundArtists, foundAlbums) = await (s, a, al)
+    async let pl = SearchService.shared.playlists(q, limit: 12)
+    async let ly = SearchService.shared.searchByLyrics(q)
+
+    let (foundSug, foundSongs, foundArtists, foundAlbums, foundPlaylists, foundLyrics) = await (sugTask, s, a, al, pl, ly)
     if Task.isCancelled { return }
     ArtworkStore.shared.register(foundArtists)
+    suggestions = foundSug
     songs = foundSongs
     artists = foundArtists
     albums = foundAlbums
+    playlists = foundPlaylists
+    lyricHits = foundLyrics
     resultsFor = q
     loading = false
   }

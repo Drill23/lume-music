@@ -1,50 +1,211 @@
 import Foundation
 import SwiftUI
 
-/// Fast native offline downloader (.mp4/.m4a + lyrics prefetch) using URLSessionDownloadDelegate.
+enum DownloadState: Equatable {
+  case queued
+  case resolving
+  case downloading(Double)
+  case failed(String)
+
+  var fraction: Double {
+    switch self {
+    case .queued: return 0.02
+    case .resolving: return 0.14
+    case .downloading(let p): return p
+    case .failed: return 0
+    }
+  }
+
+  var isActive: Bool {
+    switch self {
+    case .queued, .resolving, .downloading: return true
+    case .failed: return false
+    }
+  }
+}
+
+/// Gerenciador de downloads offline com fila de até 2 downloads simultâneos, pausa/retomada,
+/// prefetch automático de capas e letras, e tratamento de falhas com tentativa rápida.
 @MainActor
 final class DownloadManager: ObservableObject {
   static let shared = DownloadManager()
 
   @Published var progressById: [String: Double] = [:]
+  @Published var statesById: [String: DownloadState] = [:]
   @Published var activeCount: Int = 0
+  @Published var paused: Bool = false
   @Published var lastMessage: String?
 
-  private var tasks: [String: Task<Void, Never>] = [:]
+  private var queuedTracks: [Track] = []
+  private var activeTasks: [String: Task<Void, Never>] = [:]
+  private var failedTracks: [String: Track] = [:]
+  private let maxConcurrent = 2
+
+  var pendingCount: Int {
+    activeTasks.count + queuedTracks.count
+  }
+
+  var failedItems: [(track: Track, reason: String)] {
+    failedTracks.values.compactMap { tr in
+      if case .failed(let msg) = statesById[tr.id] { return (tr, msg) }
+      return nil
+    }
+    .sorted { $0.track.title.localizedCaseInsensitiveCompare($1.track.title) == .orderedAscending }
+  }
+
+  var overallProgress: Double {
+    let activeAndQueued = Array(statesById.values.filter { $0.isActive })
+    guard !activeAndQueued.isEmpty else { return 0 }
+    let sum = activeAndQueued.reduce(0.0) { $0 + $1.fraction }
+    return sum / Double(activeAndQueued.count)
+  }
 
   func isDownloading(_ trackId: String) -> Bool {
-    progressById[trackId] != nil
+    statesById[trackId]?.isActive == true
   }
 
   func download(_ track: Track) {
-    if LibraryStore.shared.isDownloaded(track.id) || tasks[track.id] != nil { return }
+    if LibraryStore.shared.isDownloaded(track.id) || statesById[track.id]?.isActive == true { return }
     LibraryStore.shared.register(track)
-    progressById[track.id] = 0.06
-    activeCount = progressById.count
+    failedTracks.removeValue(forKey: track.id)
+    statesById[track.id] = .queued
+    progressById[track.id] = 0.02
+    if !queuedTracks.contains(where: { $0.id == track.id }) {
+      queuedTracks.append(track)
+    }
+    refreshCounts()
+    pumpQueue()
+  }
+
+  func downloadBatch(_ tracks: [Track]) {
+    let pending = tracks.filter { !LibraryStore.shared.isDownloaded($0.id) && statesById[$0.id]?.isActive != true }
+    for t in pending {
+      LibraryStore.shared.register(t)
+      failedTracks.removeValue(forKey: t.id)
+      statesById[t.id] = .queued
+      progressById[t.id] = 0.02
+      if !queuedTracks.contains(where: { $0.id == t.id }) {
+        queuedTracks.append(t)
+      }
+    }
+    refreshCounts()
+    pumpQueue()
+  }
+
+  func downloadPlaylist(_ playlist: MusicPlaylist) {
+    downloadBatch(LibraryStore.shared.tracks(in: playlist))
+  }
+
+  func retry(_ trackId: String) {
+    guard let tr = failedTracks[trackId] ?? LibraryStore.shared.tracksById[trackId] else { return }
+    failedTracks.removeValue(forKey: trackId)
+    statesById.removeValue(forKey: trackId)
+    download(tr)
+  }
+
+  func retryAllFailed() {
+    let list = Array(failedTracks.values)
+    for t in list { retry(t.id) }
+  }
+
+  func togglePauseAll() {
+    paused.toggle()
+    if paused {
+      for (id, t) in activeTasks {
+        t.cancel()
+        if let tr = LibraryStore.shared.tracksById[id] {
+          queuedTracks.insert(tr, at: 0)
+          statesById[id] = .queued
+          progressById[id] = 0.02
+        }
+      }
+      activeTasks.removeAll()
+      refreshCounts()
+    } else {
+      pumpQueue()
+    }
+  }
+
+  func cancel(_ trackId: String) {
+    activeTasks[trackId]?.cancel()
+    activeTasks.removeValue(forKey: trackId)
+    queuedTracks.removeAll { $0.id == trackId }
+    failedTracks.removeValue(forKey: trackId)
+    statesById.removeValue(forKey: trackId)
+    progressById.removeValue(forKey: trackId)
+    refreshCounts()
+    pumpQueue()
+  }
+
+  func cancelAll() {
+    for t in activeTasks.values { t.cancel() }
+    activeTasks.removeAll()
+    queuedTracks.removeAll()
+    failedTracks.removeAll()
+    statesById.removeAll()
+    progressById.removeAll()
+    paused = false
+    refreshCounts()
+  }
+
+  private func refreshCounts() {
+    activeCount = activeTasks.count + queuedTracks.count
+  }
+
+  private func pumpQueue() {
+    guard !paused else { return }
+    while activeTasks.count < maxConcurrent, !queuedTracks.isEmpty {
+      let next = queuedTracks.removeFirst()
+      if LibraryStore.shared.isDownloaded(next.id) {
+        statesById.removeValue(forKey: next.id)
+        progressById.removeValue(forKey: next.id)
+        continue
+      }
+      startTask(for: next)
+    }
+    refreshCounts()
+  }
+
+  private func startTask(for track: Track) {
+    statesById[track.id] = .resolving
+    progressById[track.id] = 0.08
 
     let t = Task {
       defer {
         Task { @MainActor in
-          self.progressById.removeValue(forKey: track.id)
-          self.tasks.removeValue(forKey: track.id)
-          self.activeCount = self.progressById.count
+          self.activeTasks.removeValue(forKey: track.id)
+          self.refreshCounts()
+          self.pumpQueue()
         }
       }
+
       var working = track
       guard let vid = await MusicEngine.shared.resolveVideoId(for: working) else {
-        await MainActor.run { self.lastMessage = "Não foi possível localizar o áudio de \(track.title)." }
+        await MainActor.run {
+          self.markFailed(working, reason: "Áudio não localizado")
+        }
         return
       }
+      if Task.isCancelled { return }
       working.videoId = vid
       await MainActor.run {
         LibraryStore.shared.updateVideoId(vid, for: track.id)
+        self.statesById[track.id] = .resolving
         self.progressById[track.id] = 0.16
       }
+
       guard let resolved = await MusicEngine.shared.resolveStream(videoId: vid) else {
-        await MainActor.run { self.lastMessage = "Falha ao obter o áudio para download." }
+        await MainActor.run {
+          self.markFailed(working, reason: "Stream indisponível")
+        }
         return
       }
-      await MainActor.run { self.progressById[track.id] = 0.24 }
+      if Task.isCancelled { return }
+
+      await MainActor.run {
+        self.statesById[track.id] = .downloading(0.24)
+        self.progressById[track.id] = 0.24
+      }
 
       var req = URLRequest(url: resolved.url)
       req.timeoutInterval = 60
@@ -56,45 +217,55 @@ final class DownloadManager: ObservableObject {
           request: req,
           destination: dest,
           onProgress: { fraction in
+            let p = min(0.95, 0.24 + 0.71 * fraction)
             Task { @MainActor in
-              self.progressById[track.id] = min(0.95, 0.24 + 0.71 * fraction)
+              guard self.statesById[track.id]?.isActive == true else { return }
+              self.statesById[track.id] = .downloading(p)
+              self.progressById[track.id] = p
             }
           }
         )
 
         guard bytesWritten > 32768 else {
           try? FileManager.default.removeItem(at: dest)
-          await MainActor.run { self.lastMessage = "Download incompleto para \(track.title)." }
+          await MainActor.run {
+            self.markFailed(working, reason: "Arquivo incompleto")
+          }
           return
         }
 
-        // Prefetch synced lyrics silently for offline karaoke too
+        // Prefetch capa e letra para uso 100% offline
+        let artURL = await MainActor.run { ArtworkStore.shared.url(for: working) }
+        if !artURL.isEmpty {
+          _ = await ImagePipeline.shared.image(artURL, maxPixel: 700)
+        }
         _ = await LyricsService.shared.fetchLyrics(for: working)
 
         await MainActor.run {
           LibraryStore.shared.markDownloaded(working)
+          self.statesById.removeValue(forKey: track.id)
+          self.progressById.removeValue(forKey: track.id)
+          self.failedTracks.removeValue(forKey: track.id)
           Haptics.success()
           self.lastMessage = "Baixada offline: \(track.title)"
         }
+      } catch is CancellationError {
+        // Ignorado no cancelamento/pausa
       } catch {
-        await MainActor.run { self.lastMessage = "Erro ao baixar \(track.title)." }
+        await MainActor.run {
+          self.markFailed(working, reason: "Falha de rede")
+        }
       }
     }
-    tasks[track.id] = t
+    activeTasks[track.id] = t
+    refreshCounts()
   }
 
-  func downloadPlaylist(_ playlist: MusicPlaylist) {
-    let tracks = LibraryStore.shared.tracks(in: playlist)
-    for t in tracks where !LibraryStore.shared.isDownloaded(t.id) {
-      download(t)
-    }
-  }
-
-  func cancel(_ trackId: String) {
-    tasks[trackId]?.cancel()
-    tasks.removeValue(forKey: trackId)
-    progressById.removeValue(forKey: trackId)
-    activeCount = progressById.count
+  private func markFailed(_ track: Track, reason: String) {
+    progressById.removeValue(forKey: track.id)
+    statesById[track.id] = .failed(reason)
+    failedTracks[track.id] = track
+    lastMessage = "Erro ao baixar \(track.title): \(reason)"
   }
 }
 
