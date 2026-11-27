@@ -58,6 +58,8 @@ object UpgradeModel {
     // ---- teste grátis automático (v2.3) ----
     /** null (não rodou) | "running" | "ok" | "disabled" | "used" | "nopanel" | "offline" | "error". */
     var trialOutcome by mutableStateOf<String?>(null); private set
+    /** Motivo vindo do painel quando o teste não pôde começar (ex.: limite da rede): aparece no passo de código. */
+    var trialMessage by mutableStateOf<String?>(null); private set
     var debugTrialDays by mutableStateOf<Int?>(null); private set
     var debugTrialUsed by mutableStateOf(false); private set
 
@@ -73,7 +75,7 @@ object UpgradeModel {
                 TrialResult.Disabled -> "disabled"
                 TrialResult.NoPanel -> "nopanel"
                 is TrialResult.Used -> "used"
-                is TrialResult.Failed -> if (t.network) "offline" else "error"
+                is TrialResult.Failed -> { trialMessage = t.message.takeIf { !t.network && it.isNotBlank() }; if (t.network) "offline" else "error" }
             }
         }
     }

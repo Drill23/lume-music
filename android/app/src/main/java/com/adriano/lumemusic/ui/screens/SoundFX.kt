@@ -18,14 +18,15 @@ import kotlin.math.sin
 /**
  * Efeitos sonoros sintetizados em código (SoundFX.swift) para a abertura/onboarding, com as MESMAS notas, parciais e
  * envelopes do iOS: "plink" de vidro (escala pentatônica que sobe a cada toque), "whoosh" de transição, acorde
- * Cmaj9 de conclusão, tom de erro e arpejo de sucesso. Volume baixo (0,42), uso de sonificação (mistura com a música).
+ * Cmaj9 de conclusão, tom de erro e arpejo de sucesso. Volume 0,6 no volume de MÍDIA (USAGE_GAME, mistura com a música): o uso "sonificação" seguia o volume do sistema,
+ * que muitos celulares (Xiaomi, Samsung) deixam no mudo ou silenciam no Não perturbe, e os sons sumiam.
  * Fora do onboarding o "motor" se desliga sozinho após 3,5 s sem sons.
  */
 object SoundFX {
     enum class Effect { TAP, SELECT, DESELECT, WHOOSH, CHORD, ERROR, SUCCESS }
 
     private const val SR = 44_100
-    private const val MASTER = 0.42f
+    private const val MASTER = 0.6f
     private val scale = doubleArrayOf(523.25, 587.33, 659.25, 783.99, 880.00, 1046.50, 1174.66, 1318.51, 1567.98)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -74,7 +75,7 @@ object SoundFX {
                     }
                 }
                 val track = AudioTrack.Builder()
-                    .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+                    .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
                     .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(SR).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
                     .setBufferSizeInBytes(data.size * 2).setTransferMode(AudioTrack.MODE_STATIC).build()
                 track.write(data, 0, data.size)

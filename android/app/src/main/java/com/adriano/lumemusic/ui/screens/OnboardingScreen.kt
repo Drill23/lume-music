@@ -376,7 +376,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
                             Step.ACCESS -> Column(Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(top = 60.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                                 val info = accessInfo ?: (accessState as? AccessState.Active)?.info
                                 if (info != null) com.adriano.lumemusic.ui.screens.AccessSuccessView(info, "Continuar") { com.adriano.lumemusic.ui.UpgradeModel.onActivated(info); go(1) }
-                                else com.adriano.lumemusic.ui.screens.AccessCodeEntry("Digite seu código de acesso", "Quem te enviou o código também te mostra o prazo.", "Ativar", extra = { com.adriano.lumemusic.ui.screens.AccessGateExtras(null) }) { accessInfo = it }
+                                else com.adriano.lumemusic.ui.screens.AccessCodeEntry("Digite seu código de acesso", com.adriano.lumemusic.ui.UpgradeModel.trialMessage ?: "Quem te enviou o código também te mostra o prazo.", "Ativar", extra = { com.adriano.lumemusic.ui.screens.AccessGateExtras(null) }) { accessInfo = it }
                             }
                             Step.GENRES -> GenresStep(selectedGenres) { go(1) }
                             Step.ARTISTS -> ArtistsStep(chosenGenres, selectedArtists) { go(1) }
