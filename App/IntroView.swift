@@ -1,72 +1,73 @@
 import SwiftUI
 
-/// Abertura cinematográfica a 120Hz (~0.95s, toque para pular):
-/// ondas acústicas concêntricas com brilho prismático irradiam do novo emblema 3D,
-/// o nome Lume surge nítido e o app aparece sem blur pesado.
+/// Abertura de toda vez (~1,1 s, toque para pular, não bloqueia o app que carrega por baixo):
+/// um anel prismático se desenha, o disco de vidro se forma com brilho que atravessa e o nome Lume surge letra a letra.
 struct IntroView: View {
   let done: () -> Void
 
-  @State private var markScale: CGFloat = 0.72
-  @State private var markOpacity: Double = 0
-  @State private var pulseA: CGFloat = 0.6
-  @State private var pulseAAlpha: Double = 0
-  @State private var pulseB: CGFloat = 0.6
-  @State private var pulseBAlpha: Double = 0
-  @State private var sweep: CGFloat = -1
-  @State private var wordIn = false
+  @State private var ring: CGFloat = 0
+  @State private var discIn = false
+  @State private var sweep: CGFloat = -1.2
+  @State private var glow = false
+  @State private var letters = false
   @State private var leaving = false
+
+  private let word = Array("Lume")
 
   var body: some View {
     ZStack {
       Theme.canvas.ignoresSafeArea()
       RadialGradient(
-        colors: [Theme.lavender.opacity(markOpacity * 0.20), Theme.rose.opacity(markOpacity * 0.09), .clear],
-        center: .center, startRadius: 0, endRadius: 340
+        colors: [Theme.lavender.opacity(glow ? 0.26 : 0), Theme.rose.opacity(glow ? 0.12 : 0), .clear],
+        center: .center, startRadius: 0, endRadius: 360
       )
       .ignoresSafeArea()
 
-      VStack(spacing: 22) {
+      VStack(spacing: 24) {
         ZStack {
-          // Ondas acústicas prismáticas concêntricas
+          // Anel prismático que se desenha ao redor do disco.
           Circle()
-            .stroke(Theme.prismAngular, lineWidth: 2.5)
-            .frame(width: 146, height: 146)
-            .scaleEffect(pulseA)
-            .opacity(pulseAAlpha)
+            .trim(from: 0, to: ring)
+            .stroke(Theme.prismAngular, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            .rotationEffect(.degrees(-90))
+            .frame(width: 148, height: 148)
 
+          // Disco de vidro.
           Circle()
-            .stroke(Theme.prismAngular, lineWidth: 1.6)
-            .frame(width: 146, height: 146)
-            .scaleEffect(pulseB)
-            .opacity(pulseBAlpha)
+            .fill(Color.clear)
+            .frame(width: 124, height: 124)
+            .glassCircle(tint: Theme.lavender.opacity(0.2))
+            .scaleEffect(discIn ? 1 : 0.55)
+            .opacity(discIn ? 1 : 0)
 
-          PrismMark(size: 112)
+          PrismMark(size: 100)
+            .drawingGroup()
             .overlay {
-              LinearGradient(colors: [.clear, .white.opacity(0.6), .clear], startPoint: .leading, endPoint: .trailing)
-                .frame(width: 44)
+              // Brilho prisma que atravessa o disco.
+              LinearGradient(colors: [.clear, .white.opacity(0.7), Theme.peach.opacity(0.4), .clear], startPoint: .leading, endPoint: .trailing)
+                .frame(width: 40)
                 .rotationEffect(.degrees(22))
-                .offset(x: sweep * 96)
-                .mask(Circle().frame(width: 112, height: 112))
+                .offset(x: sweep * 90)
+                .mask(Circle().frame(width: 100, height: 100))
                 .blendMode(.plusLighter)
             }
-            .scaleEffect(markScale)
-            .opacity(markOpacity)
+            .scaleEffect(discIn ? 1 : 0.5)
+            .opacity(discIn ? 1 : 0)
+            .rotationEffect(.degrees(discIn ? 0 : -50))
         }
 
-        VStack(spacing: 5) {
-          Text("Lume")
-            .font(.system(size: 42, weight: .bold, design: .rounded))
-            .tracking(wordIn ? -0.5 : 3)
-            .foregroundStyle(Theme.text)
-          Text("MUSIC")
-            .font(Theme.font(11.5, .bold))
-            .tracking(wordIn ? 5.5 : 8.5)
-            .foregroundStyle(Theme.secondary)
+        HStack(spacing: 1) {
+          ForEach(Array(word.enumerated()), id: \.offset) { i, ch in
+            Text(String(ch))
+              .font(.system(size: 42, weight: .bold, design: .rounded))
+              .foregroundStyle(Theme.text)
+              .opacity(letters ? 1 : 0)
+              .offset(y: letters ? 0 : 14)
+              .animation(.spring(response: 0.45, dampingFraction: 0.78).delay(Double(i) * 0.05), value: letters)
+          }
         }
-        .opacity(wordIn ? 1 : 0)
-        .offset(y: wordIn ? 0 : 8)
       }
-      .scaleEffect(leaving ? 1.08 : 1)
+      .scaleEffect(leaving ? 1.1 : 1)
       .opacity(leaving ? 0 : 1)
 
       VStack {
@@ -74,7 +75,8 @@ struct IntroView: View {
         Text(Theme.credit)
           .font(Theme.font(11))
           .foregroundStyle(Theme.tertiary)
-          .opacity(wordIn && !leaving ? 1 : 0)
+          .opacity(letters && !leaving ? 1 : 0)
+          .animation(.easeOut(duration: 0.3), value: letters)
           .padding(.bottom, 18)
       }
     }
@@ -86,40 +88,25 @@ struct IntroView: View {
 
   private func run() async {
     guard Theme.motion else {
-      markScale = 1; markOpacity = 1; wordIn = true
-      try? await Task.sleep(for: .milliseconds(320))
+      ring = 1; discIn = true; letters = true; glow = true; sweep = 1.2
+      try? await Task.sleep(for: .milliseconds(300))
       finish(fast: true)
       return
     }
-    withAnimation(.spring(response: 0.48, dampingFraction: 0.78)) {
-      markScale = 1
-      markOpacity = 1
-    }
-    pulseAAlpha = 0.85
-    withAnimation(.easeOut(duration: 0.75)) {
-      pulseA = 1.48
-      pulseAAlpha = 0
-    }
-    try? await Task.sleep(for: .milliseconds(160))
-    pulseBAlpha = 0.65
-    withAnimation(.easeOut(duration: 0.72)) {
-      pulseB = 1.32
-      pulseBAlpha = 0
-    }
-    withAnimation(.easeInOut(duration: 0.55)) { sweep = 1 }
-    withAnimation(.spring(response: 0.48, dampingFraction: 0.86)) { wordIn = true }
-
-    try? await Task.sleep(for: .milliseconds(620))
+    withAnimation(.easeInOut(duration: 0.5)) { ring = 1; glow = true }
+    withAnimation(.spring(response: 0.5, dampingFraction: 0.72).delay(0.08)) { discIn = true }
+    withAnimation(.easeInOut(duration: 0.5).delay(0.3)) { sweep = 1.2 }
+    try? await Task.sleep(for: .milliseconds(380))
+    letters = true
+    try? await Task.sleep(for: .milliseconds(480))
     finish(fast: false)
   }
 
   private func finish(fast: Bool) {
     guard !leaving else { return }
-    withAnimation(.easeInOut(duration: fast ? 0.18 : 0.28)) {
-      leaving = true
-    }
+    withAnimation(.easeInOut(duration: fast ? 0.16 : 0.24)) { leaving = true }
     Task {
-      try? await Task.sleep(for: .milliseconds(fast ? 180 : 280))
+      try? await Task.sleep(for: .milliseconds(fast ? 160 : 240))
       done()
     }
   }

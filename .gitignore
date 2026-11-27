@@ -3,3 +3,4 @@ DerivedData/
 *.ipa
 outputs/
 .DS_Store
+.claude/

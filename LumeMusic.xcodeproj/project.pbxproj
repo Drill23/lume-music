@@ -11,6 +11,7 @@
 		05F6B8CD6D7D1CFFB399907D /* CoverFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9320A46E83B96A2F07243E /* CoverFlowView.swift */; };
 		090976F58BC038FC39469BB2 /* ChartsAndGenresViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 691EF3669009EEA366A4B981 /* ChartsAndGenresViews.swift */; };
 		0969C55D35805EB2A7D6EF64 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83352AB6C71300BA7B8295E8 /* Models.swift */; };
+		0C524781045DDD9831C02355 /* PerfGovernor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AFA86B728C914AFB0434A30 /* PerfGovernor.swift */; };
 		0D2259F4ED0DEDC4F2A8451C /* CassetteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5482B7A3EDCC050038FD095B /* CassetteView.swift */; };
 		0EC95692B34B95323ED0475E /* ArtworkResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B6234A0497A79A01A36BDAF /* ArtworkResolver.swift */; };
 		22A3B240A7EC01C207241C6F /* LumeTextures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE6AE4C9A881BDFB751C4D5 /* LumeTextures.swift */; };
@@ -20,6 +21,7 @@
 		44486FCF9B32132FDD11A9EE /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 695F078AFA2C13F37E63160F /* HomeView.swift */; };
 		47A8B14C00335513B1D5449A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F7A44E4BAD812A89F923E7 /* SettingsView.swift */; };
 		4B84C125832D231773F5E824 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E1FE3239D1EA67CAE036AEA /* AudioPlayer.swift */; };
+		55D973A70147E3EAD2966450 /* ImportHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0103EB46A704A6C256A96BE9 /* ImportHub.swift */; };
 		5A85274F16007897DB86746A /* ChartsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C18472EDA0593B18CB8266B3 /* ChartsService.swift */; };
 		65A09E1E4072A41A77D091D9 /* AudioSpectrum.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5392190808677F4B2A39F726 /* AudioSpectrum.swift */; };
 		683B63D8E0A6E888D1D86D1E /* ExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCD6B9C0BAC8ED7485F3AE07 /* ExploreView.swift */; };
@@ -28,13 +30,16 @@
 		6D73F037CBE8C1F8ADA201FA /* ImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90ADB4F3520C970548C4135D /* ImportService.swift */; };
 		7498D32D2311D0A0C983FE31 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 578C4F7AA45EF2D2094F63D9 /* LibraryView.swift */; };
 		76FAB4C663C3B25D269C8000 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20BB538C33F60C2F2EBCA51 /* RootView.swift */; };
+		78B6D85DCCC7184692E6A409 /* SoundFX.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02625F22D4999748DFDB8887 /* SoundFX.swift */; };
 		818F87A5E53BED1A6C4F7BEA /* OrientationKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57DAE3CE4753F147299D96B /* OrientationKit.swift */; };
 		8266DD4C831EF4F6CB41FB8A /* MusicEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6E1DD5A774CD60727B95A2 /* MusicEngine.swift */; };
+		86B57C60ED55CCD22F34D0C6 /* OnboardingLoading.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10F10EEF9970253B01560133 /* OnboardingLoading.swift */; };
 		94E9E201E08B1912D64C94BA /* ChartsKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 501DE2850FDDBFC12B0DE4B4 /* ChartsKit.swift */; };
 		96F6369537FD78D3C2B31898 /* SearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3E52D081DA95C4A35E1157 /* SearchService.swift */; };
 		98CC27171494676861528840 /* CatalogExplorerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5117F85630AB294A77E4D4E5 /* CatalogExplorerService.swift */; };
 		A7B1BA41041ED303BA24AA92 /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA641F404EC69C814F870E88 /* NowPlayingView.swift */; };
 		ABA5173790A2E59F8CD68D15 /* CassetteArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 158DB816C413E01CE20C52D2 /* CassetteArt.swift */; };
+		AFBB95E9EEF215B999F2657D /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 416CDD03F1EA830B82CF400B /* OnboardingView.swift */; };
 		B410F33101C6495CC67C85ED /* StageKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D34CA7EFF50F6C037109211 /* StageKit.swift */; };
 		B960C6333B883BD86E67355C /* LumeMusicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 137025BD0CC7C72E4A42F1AD /* LumeMusicApp.swift */; };
 		B9F79A2AD27257B46302CBE3 /* TurntableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD857E87EF620DBC84E179A /* TurntableView.swift */; };
@@ -43,14 +48,19 @@
 		BE1174C414B67C131B9A6EAC /* ImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F23B94BEDC0D3DC3ACD7993 /* ImportView.swift */; };
 		D551449D17360D14A5E8B025 /* LyricsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F860EC77A5EACFBE5371F5FD /* LyricsService.swift */; };
 		D8EFCBCBECA299E9317960F2 /* DetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2B6BAFF0BD0CEF83772657 /* DetailViews.swift */; };
+		E00DCE9A528F65A98A0A9971 /* LockScreenArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5050CDA3C331861ECE73F9AB /* LockScreenArtwork.swift */; };
 		E5067BB4EFF827E26FFDEDEE /* DiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58C07F3219CE189B07F16A7 /* DiscoveryService.swift */; };
 		ED3D8210139D512BCDEC7E03 /* VisualizerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BC23F996659A219FBD02C73 /* VisualizerViews.swift */; };
+		F1DCA90A75F0146C1553D798 /* AccessService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97DBA4F28ECC1ECB21EC471A /* AccessService.swift */; };
 		F3E1FE91A67C6CA481BD1BCA /* CoverFlowDebug.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59F6C3533B8A757BAA5C2917 /* CoverFlowDebug.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0103EB46A704A6C256A96BE9 /* ImportHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportHub.swift; sourceTree = "<group>"; };
+		02625F22D4999748DFDB8887 /* SoundFX.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundFX.swift; sourceTree = "<group>"; };
 		0BC23F996659A219FBD02C73 /* VisualizerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualizerViews.swift; sourceTree = "<group>"; };
 		0D34CA7EFF50F6C037109211 /* StageKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageKit.swift; sourceTree = "<group>"; };
+		10F10EEF9970253B01560133 /* OnboardingLoading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingLoading.swift; sourceTree = "<group>"; };
 		137025BD0CC7C72E4A42F1AD /* LumeMusicApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumeMusicApp.swift; sourceTree = "<group>"; };
 		158DB816C413E01CE20C52D2 /* CassetteArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CassetteArt.swift; sourceTree = "<group>"; };
 		1E1FE3239D1EA67CAE036AEA /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
@@ -58,9 +68,11 @@
 		2F23B94BEDC0D3DC3ACD7993 /* ImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportView.swift; sourceTree = "<group>"; };
 		31F7A44E4BAD812A89F923E7 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		37D37E923300DB8005FF0415 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		416CDD03F1EA830B82CF400B /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		4DB2A8B415C1F9799E01C2C0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4F6E1DD5A774CD60727B95A2 /* MusicEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicEngine.swift; sourceTree = "<group>"; };
 		501DE2850FDDBFC12B0DE4B4 /* ChartsKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartsKit.swift; sourceTree = "<group>"; };
+		5050CDA3C331861ECE73F9AB /* LockScreenArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockScreenArtwork.swift; sourceTree = "<group>"; };
 		5117F85630AB294A77E4D4E5 /* CatalogExplorerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogExplorerService.swift; sourceTree = "<group>"; };
 		5392190808677F4B2A39F726 /* AudioSpectrum.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioSpectrum.swift; sourceTree = "<group>"; };
 		5482B7A3EDCC050038FD095B /* CassetteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CassetteView.swift; sourceTree = "<group>"; };
@@ -73,6 +85,8 @@
 		83352AB6C71300BA7B8295E8 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		8B6234A0497A79A01A36BDAF /* ArtworkResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkResolver.swift; sourceTree = "<group>"; };
 		90ADB4F3520C970548C4135D /* ImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportService.swift; sourceTree = "<group>"; };
+		97DBA4F28ECC1ECB21EC471A /* AccessService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessService.swift; sourceTree = "<group>"; };
+		9AFA86B728C914AFB0434A30 /* PerfGovernor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerfGovernor.swift; sourceTree = "<group>"; };
 		AFB9B76B2E7C134B6A478588 /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
 		B20BB538C33F60C2F2EBCA51 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		B24397E481BE31D37B7258EE /* LumeMusic.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LumeMusic.entitlements; sourceTree = "<group>"; };
@@ -120,6 +134,7 @@
 		D59E462047E4611AE9A570F5 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				97DBA4F28ECC1ECB21EC471A /* AccessService.swift */,
 				8B6234A0497A79A01A36BDAF /* ArtworkResolver.swift */,
 				1E1FE3239D1EA67CAE036AEA /* AudioPlayer.swift */,
 				5392190808677F4B2A39F726 /* AudioSpectrum.swift */,
@@ -138,11 +153,13 @@
 				BCD6B9C0BAC8ED7485F3AE07 /* ExploreView.swift */,
 				2A7DD2CF94297B7FC3EE265C /* HomeStore.swift */,
 				695F078AFA2C13F37E63160F /* HomeView.swift */,
+				0103EB46A704A6C256A96BE9 /* ImportHub.swift */,
 				90ADB4F3520C970548C4135D /* ImportService.swift */,
 				2F23B94BEDC0D3DC3ACD7993 /* ImportView.swift */,
 				B5002846355AECF20DC8647A /* IntroView.swift */,
 				AFB9B76B2E7C134B6A478588 /* LibraryStore.swift */,
 				578C4F7AA45EF2D2094F63D9 /* LibraryView.swift */,
+				5050CDA3C331861ECE73F9AB /* LockScreenArtwork.swift */,
 				B24397E481BE31D37B7258EE /* LumeMusic.entitlements */,
 				137025BD0CC7C72E4A42F1AD /* LumeMusicApp.swift */,
 				5CE6AE4C9A881BDFB751C4D5 /* LumeTextures.swift */,
@@ -150,11 +167,15 @@
 				83352AB6C71300BA7B8295E8 /* Models.swift */,
 				4F6E1DD5A774CD60727B95A2 /* MusicEngine.swift */,
 				BA641F404EC69C814F870E88 /* NowPlayingView.swift */,
+				10F10EEF9970253B01560133 /* OnboardingLoading.swift */,
+				416CDD03F1EA830B82CF400B /* OnboardingView.swift */,
 				E57DAE3CE4753F147299D96B /* OrientationKit.swift */,
+				9AFA86B728C914AFB0434A30 /* PerfGovernor.swift */,
 				B20BB538C33F60C2F2EBCA51 /* RootView.swift */,
 				BA3E52D081DA95C4A35E1157 /* SearchService.swift */,
 				7CD336F821A1ECEFD8835C54 /* SearchView.swift */,
 				31F7A44E4BAD812A89F923E7 /* SettingsView.swift */,
+				02625F22D4999748DFDB8887 /* SoundFX.swift */,
 				0D34CA7EFF50F6C037109211 /* StageKit.swift */,
 				D91B7F936D3EE4D0CF5943D4 /* Theme.swift */,
 				BDD857E87EF620DBC84E179A /* TurntableView.swift */,
@@ -235,6 +256,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F1DCA90A75F0146C1553D798 /* AccessService.swift in Sources */,
 				0EC95692B34B95323ED0475E /* ArtworkResolver.swift in Sources */,
 				4B84C125832D231773F5E824 /* AudioPlayer.swift in Sources */,
 				65A09E1E4072A41A77D091D9 /* AudioSpectrum.swift in Sources */,
@@ -253,22 +275,28 @@
 				683B63D8E0A6E888D1D86D1E /* ExploreView.swift in Sources */,
 				BC36D17423D97255628A1D8F /* HomeStore.swift in Sources */,
 				44486FCF9B32132FDD11A9EE /* HomeView.swift in Sources */,
+				55D973A70147E3EAD2966450 /* ImportHub.swift in Sources */,
 				6D73F037CBE8C1F8ADA201FA /* ImportService.swift in Sources */,
 				BE1174C414B67C131B9A6EAC /* ImportView.swift in Sources */,
 				6AD069CBDBBC8AA347633BE7 /* IntroView.swift in Sources */,
 				24265E6B12C4D3887B16D4FA /* LibraryStore.swift in Sources */,
 				7498D32D2311D0A0C983FE31 /* LibraryView.swift in Sources */,
+				E00DCE9A528F65A98A0A9971 /* LockScreenArtwork.swift in Sources */,
 				B960C6333B883BD86E67355C /* LumeMusicApp.swift in Sources */,
 				22A3B240A7EC01C207241C6F /* LumeTextures.swift in Sources */,
 				D551449D17360D14A5E8B025 /* LyricsService.swift in Sources */,
 				0969C55D35805EB2A7D6EF64 /* Models.swift in Sources */,
 				8266DD4C831EF4F6CB41FB8A /* MusicEngine.swift in Sources */,
 				A7B1BA41041ED303BA24AA92 /* NowPlayingView.swift in Sources */,
+				86B57C60ED55CCD22F34D0C6 /* OnboardingLoading.swift in Sources */,
+				AFBB95E9EEF215B999F2657D /* OnboardingView.swift in Sources */,
 				818F87A5E53BED1A6C4F7BEA /* OrientationKit.swift in Sources */,
+				0C524781045DDD9831C02355 /* PerfGovernor.swift in Sources */,
 				76FAB4C663C3B25D269C8000 /* RootView.swift in Sources */,
 				96F6369537FD78D3C2B31898 /* SearchService.swift in Sources */,
 				6ACDC5C2048480CE3A80F0A1 /* SearchView.swift in Sources */,
 				47A8B14C00335513B1D5449A /* SettingsView.swift in Sources */,
+				78B6D85DCCC7184692E6A409 /* SoundFX.swift in Sources */,
 				B410F33101C6495CC67C85ED /* StageKit.swift in Sources */,
 				2FFD7F1AFD5413217768A62D /* Theme.swift in Sources */,
 				B9F79A2AD27257B46302CBE3 /* TurntableView.swift in Sources */,
