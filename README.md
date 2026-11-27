@@ -1,4 +1,18 @@
-# Lume Music 4.2.0
+# Lume Music 5.0.0
+
+**Baixar:** [Android (APK)](https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-Android.apk) · [iPhone (IPA para LiveContainer/SideStore)](https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-iPhone.ipa)
+
+## Novidades da versão 5.0.0
+
+- **iPhone e Android** com a mesma aparência e as mesmas funções (Android em Kotlin + Jetpack Compose + Media3, pasta `android/`).
+- **Ícone novo** claro e translúcido: disco de vidro com anel prisma.
+- **Apresentação interativa** na primeira abertura: gêneros com som, artistas, importação (Apple Music, Spotify, YouTube Music, Deezer, Amazon Music, Tidal, arquivo) e carregamento animado "Carregando suas músicas".
+- **Código de acesso** com validade (meses ou vitalício) e limite de pessoas, definido no painel.
+- **Palcos redesenhados:** toca-discos realista (prato estroboscópico, braço que desce no play, 33⅓/45, pitch), fita K7 com etiqueta escrita à mão e carretéis que acompanham a música, ondas de vidro que reagem às batidas.
+- **Cover Flow** clássico em paisagem (acelerômetro), com capas em 3D, reflexo e capa que vira mostrando as faixas.
+- **Tela inicial limpa** com Top 10 de 20 países + Global e fontes de paradas auditadas.
+- **Tela de bloqueio** com arte de vinil ou fita, **player só de música** (sem vídeo) e otimizações contra aquecimento.
+
 
 Aplicativo nativo de música para iPhone e iPad construído em **SwiftUI** com estética **Prisma Liquid Glass** (iOS 18–26+), texturas procedurais pré-aquecidas em disco e GPU a 120Hz, combinando o melhor de **Apple Music**, **Spotify** e **Amazon Music** com palcos analógicos e visualizadores exclusivos.
 
@@ -34,6 +48,8 @@ Aplicativo nativo de música para iPhone e iPad construído em **SwiftUI** com e
 
 - Xcode 16+ / iOS 18.0+
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+
+Android: `cd android && ./gradlew assembleRelease` (JDK do Android Studio; a chave de assinatura fica fora do repositório).
 
 ```bash
 xcodegen generate
