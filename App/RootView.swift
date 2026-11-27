@@ -203,8 +203,11 @@ final class AppModel: ObservableObject {
 
 struct RootView: View {
   @ObservedObject private var app = AppModel.shared
-  @ObservedObject private var player = AudioPlayer.shared
-  @ObservedObject private var downloads = DownloadManager.shared
+  // 5.0 (desempenho): o RootView NÃO observa mais o player nem os downloads inteiros — qualquer
+  // @Published deles re-renderizava as 4 abas (todas vivas no ZStack). Assina só o que usa.
+  private let player = AudioPlayer.shared
+  private let downloads = DownloadManager.shared
+  @State private var hasTrack = false
   @Environment(\.scenePhase) private var scenePhase
 
   var body: some View {
@@ -255,17 +258,19 @@ struct RootView: View {
         .presentationDragIndicator(.visible)
     }
     .task {
+      player.runDebugHooksIfNeeded()
       await app.loadFeed()
       await app.refreshArtistReleases()
     }
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { Task { await app.loadFeed() } }
     }
-    .onChange(of: downloads.lastMessage) { _, msg in if let msg { app.showToast(msg) } }
-    .onChange(of: player.errorToast) { _, msg in if let msg { app.showToast(msg) } }
+    .onReceive(downloads.$lastMessage.removeDuplicates()) { msg in if let msg { app.showToast(msg) } }
+    .onReceive(player.$errorToast.removeDuplicates()) { msg in if let msg { app.showToast(msg) } }
+    .onReceive(player.$currentTrack.map { $0 != nil }.removeDuplicates()) { hasTrack = $0 }
   }
 
-  private var bottomInset: CGFloat { player.currentTrack != nil ? 150 : 92 }
+  private var bottomInset: CGFloat { hasTrack ? 150 : 92 }
 
   private func tabOrder(_ t: AppTab) -> Int {
     switch t {

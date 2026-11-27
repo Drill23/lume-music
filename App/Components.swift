@@ -425,21 +425,20 @@ struct PlayCard: View {
 
 // MARK: - Skeletons
 
+/// Esqueleto "respirando". 5.0: antes era um gradiente com máscara deslizando para sempre (mask +
+/// overlay redesenhados a cada quadro, mesmo nas abas ocultas). Agora só a opacidade pulsa — barato —
+/// e fica parado com Reduzir Movimento, modo economia ou aparelho quente.
 struct Shimmer: ViewModifier {
-  @State private var phase: CGFloat = -1
+  @State private var dim = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   func body(content: Content) -> some View {
     content
-      .overlay {
-        GeometryReader { g in
-          LinearGradient(colors: [.clear, .white.opacity(0.18), .clear], startPoint: .leading, endPoint: .trailing)
-            .frame(width: g.size.width * 0.6)
-            .offset(x: phase * g.size.width * 1.4)
-        }
-        .mask(content)
-      }
+      .opacity(dim ? 0.55 : 1)
       .onAppear {
-        withAnimation(.linear(duration: 1.3).repeatForever(autoreverses: false)) { phase = 1 }
+        guard !reduceMotion, !PerfGovernor.shared.reduced else { return }
+        withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { dim = true }
       }
+      .onDisappear { dim = false }
   }
 }
 

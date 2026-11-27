@@ -127,7 +127,7 @@ enum VisualizerStyle: String, CaseIterable, Codable, Identifiable {
   var id: String { rawValue }
   var title: String {
     switch self {
-    case .ares: return "Ondas 3D"
+    case .ares: return "Ondas Líquidas"
     case .aurora: return "Espectro"
     case .orb: return "Orbe"
     case .solarRing: return "Anel Solar"
@@ -138,7 +138,7 @@ enum VisualizerStyle: String, CaseIterable, Codable, Identifiable {
   }
   var icon: String {
     switch self {
-    case .ares: return "mountain.2.fill"
+    case .ares: return "water.waves"
     case .aurora: return "chart.bar.fill"
     case .orb: return "circle.hexagongrid.fill"
     case .solarRing: return "sun.max.circle.fill"
@@ -147,7 +147,35 @@ enum VisualizerStyle: String, CaseIterable, Codable, Identifiable {
     case .off: return "eye.slash"
     }
   }
-  static var activeStyles: [VisualizerStyle] { [.ares, .aurora, .orb, .solarRing, .oscilloscope, .nebula] }
+  /// 5.0: "Anel Solar" duplicava o Orbe (e era o mais pesado) — saiu do menu. O raw value continua
+  /// válido no disco e é mapeado para o Orbe; "Desligado" vira as Ondas Líquidas no palco.
+  static var activeStyles: [VisualizerStyle] { [.ares, .aurora, .orb, .oscilloscope, .nebula] }
+  var resolved: VisualizerStyle {
+    switch self {
+    case .solarRing: return .orb
+    case .off: return .ares
+    default: return self
+    }
+  }
+}
+
+/// Arte mostrada na tela de bloqueio / Central de Controle (MPNowPlayingInfo).
+enum LockArtStyle: String, CaseIterable, Identifiable {
+  // Raw values persistidos em UserDefaults ("lume.lockArtStyle") — não renomear.
+  case automatic = "auto"
+  case cover = "capa"
+  case vinyl = "vinil"
+  case cassette = "k7"
+
+  var id: String { rawValue }
+  var title: String {
+    switch self {
+    case .automatic: return "Automático"
+    case .cover: return "Capa"
+    case .vinyl: return "Vinil"
+    case .cassette: return "Fita K7"
+    }
+  }
 }
 
 enum TurntableFinish: String, CaseIterable, Codable, Identifiable {
