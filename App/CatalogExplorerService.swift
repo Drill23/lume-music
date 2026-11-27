@@ -36,47 +36,57 @@ actor CatalogExplorerService {
 
   // MARK: - Paradas por País
 
+  /// Último pacote salvo (memória/disco), de qualquer idade. Serve para mostrar algo NA HORA e atualizar depois.
+  func cachedCountryChart(for country: ChartCountry) -> CountryChartBundle? {
+    if let hit = countryCache[country.code] { return hit }
+    let disk = DiscNet.caches("lume_country_v2_\(country.code).json")
+    guard let data = try? Data(contentsOf: disk),
+          let saved = try? JSONDecoder().decode(CountryChartBundle.self, from: data),
+          !saved.topSongs.isEmpty else { return nil }
+    countryCache[country.code] = saved
+    return saved
+  }
+
+  /// Etapa rápida: só músicas e álbuns (compartilha o cache com a Home). Preserva artistas/em alta já conhecidos.
+  func countryChartFast(for country: ChartCountry, force: Bool = false) async -> CountryChartBundle? {
+    guard let place = ChartPlace.place(id: country.code),
+          let list = await ChartsService.shared.load(place, force: force) else { return cachedCountryChart(for: country) }
+    let prev = cachedCountryChart(for: country)
+    let bundle = CountryChartBundle(
+      country: country, topSongs: list.songs, topAlbums: list.albums,
+      topArtists: prev?.topArtists ?? [], trending: prev?.trending ?? [], updatedAt: list.updatedAt)
+    countryCache[country.code] = bundle
+    return bundle
+  }
+
+  /// Pacote completo: músicas, álbuns, artistas ranqueados e "em alta" do YouTube Music do país.
   func countryChart(for country: ChartCountry, force: Bool = false) async -> CountryChartBundle {
-    if !force, let hit = countryCache[country.code], Date().timeIntervalSince(hit.updatedAt) < ttl {
-      return hit
-    }
-    let disk = DiscNet.caches("lume_country_\(country.code).json")
-    if !force,
-       let data = try? Data(contentsOf: disk),
-       let saved = try? JSONDecoder().decode(CountryChartBundle.self, from: data),
-       Date().timeIntervalSince(saved.updatedAt) < ttl,
-       !saved.topSongs.isEmpty {
-      countryCache[country.code] = saved
-      return saved
-    }
+    if !force, let hit = countryCache[country.code], Date().timeIntervalSince(hit.updatedAt) < ttl,
+       !hit.topArtists.isEmpty || !hit.trending.isEmpty { return hit }
 
-    async let songsTask = fetchAppleCountrySongs(country: country.code)
-    async let albumsTask = fetchAppleCountryAlbums(country: country.code)
+    async let fastTask = countryChartFast(for: country, force: force)
     async let ytmTask = fetchYTMCountryCharts(ytmCode: country.ytmCode)
-
-    let (songs, albums, ytm) = await (songsTask, albumsTask, ytmTask)
+    let (fast, ytm) = await (fastTask, ytmTask)
+    let songs = fast?.topSongs ?? []
 
     var artists: [ArtistInfo] = []
-    if !ytm.artistNames.isEmpty {
+    if country.code == "world" {
+      // Global: artistas da própria parada global do Deezer (a lista de artistas do YouTube Global é dominada pela Índia).
+      if let dz = await ChartParsers.deezerPlaylistTracks(3155776842) { artists = Array(dz.artists.prefix(16)) }
+    } else if !ytm.artistNames.isEmpty {
       artists = await resolveArtists(names: ytm.artistNames, limit: 16)
     }
     if artists.isEmpty {
-      let fromSongs = songs.map { Self.primaryArtist($0.artist) }
-      artists = await resolveArtists(names: fromSongs, limit: 16)
+      artists = await resolveArtists(names: songs.map { Self.primaryArtist($0.artist) }, limit: 16)
     }
 
     let bundle = CountryChartBundle(
-      country: country,
-      topSongs: songs,
-      topAlbums: albums,
-      topArtists: artists,
-      trending: ytm.tracks,
-      updatedAt: Date()
-    )
+      country: country, topSongs: songs, topAlbums: fast?.topAlbums ?? [],
+      topArtists: artists, trending: ytm.tracks, updatedAt: Date())
     if !songs.isEmpty {
       countryCache[country.code] = bundle
       if let encoded = try? JSONEncoder().encode(bundle) {
-        try? encoded.write(to: disk, options: .atomic)
+        try? encoded.write(to: DiscNet.caches("lume_country_v2_\(country.code).json"), options: .atomic)
       }
     }
     return bundle
@@ -84,11 +94,25 @@ actor CatalogExplorerService {
 
   // MARK: - Hub de Gênero Musical
 
+  /// Último hub salvo (qualquer idade) para mostrar na hora e atualizar em seguida.
+  func cachedGenreHub(for genre: MusicGenre) -> GenreHubBundle? {
+    if let hit = genreCache[genre.id] { return hit }
+    guard let data = try? Data(contentsOf: DiscNet.caches("lume_genre_v2_\(genre.id).json")),
+          let saved = try? JSONDecoder().decode(GenreHubBundle.self, from: data), !saved.topSongs.isEmpty else { return nil }
+    genreCache[genre.id] = saved
+    return saved
+  }
+
+  func isGenreHubFresh(_ genre: MusicGenre) -> Bool {
+    guard let hit = genreCache[genre.id] else { return false }
+    return Date().timeIntervalSince(hit.updatedAt) < ttl
+  }
+
   func genreHub(for genre: MusicGenre, force: Bool = false) async -> GenreHubBundle {
     if !force, let hit = genreCache[genre.id], Date().timeIntervalSince(hit.updatedAt) < ttl {
       return hit
     }
-    let disk = DiscNet.caches("lume_genre_\(genre.id).json")
+    let disk = DiscNet.caches("lume_genre_v2_\(genre.id).json")
     if !force,
        let data = try? Data(contentsOf: disk),
        let saved = try? JSONDecoder().decode(GenreHubBundle.self, from: data),
@@ -98,8 +122,8 @@ actor CatalogExplorerService {
       return saved
     }
 
-    async let appleSongsTask = fetchAppleGenreSongs(genre: genre)
-    async let appleAlbumsTask = fetchAppleGenreAlbums(genre: genre)
+    async let appleSongsTask = GenreSources.songs(for: genre, limit: 30)
+    async let appleAlbumsTask = GenreSources.albums(for: genre, limit: 16)
     async let playlistsTask = SearchService.shared.playlists(genre.playlistQuery, limit: 10)
 
     let (appleSongs, appleAlbums, playlists) = await (appleSongsTask, appleAlbumsTask, playlistsTask)
@@ -169,8 +193,8 @@ actor CatalogExplorerService {
   ) -> [PersonalizedMix] {
     var mixes: [PersonalizedMix] = []
     let br = feed?.topBrazil ?? []
+    let brHits = feed?.brazilianHits ?? []
     let gl = feed?.topGlobal ?? []
-    let tr = feed?.trending ?? []
 
     if !mostPlayed.isEmpty {
       mixes.append(PersonalizedMix(
@@ -239,25 +263,25 @@ actor CatalogExplorerService {
       ))
     }
 
-    if !br.isEmpty {
+    if !brHits.isEmpty || !br.isEmpty {
       mixes.append(PersonalizedMix(
         id: "mix_br_radar",
         title: "Radar Brasil",
-        subtitle: "O que domina o país hoje",
+        subtitle: brHits.isEmpty ? "O que mais toca no Brasil hoje" : "Só música brasileira que está tocando",
         tag: "BRASIL",
         icon: "flame.fill",
         hexA: 0x10B981,
         hexB: 0x047857,
-        tracks: Array(br.prefix(30))
+        tracks: Array((brHits.isEmpty ? br : brHits).prefix(30))
       ))
     }
 
-    if !tr.isEmpty || !gl.isEmpty {
-      let discovery = dedupeTracks(tr + gl)
+    if !gl.isEmpty {
+      let discovery = dedupeTracks(gl)
       mixes.append(PersonalizedMix(
         id: "mix_global_wave",
         title: "Onda Global",
-        subtitle: "Hits subindo no mundo inteiro",
+        subtitle: "Os hits que o mundo está ouvindo",
         tag: "MUNDO",
         icon: "globe.americas.fill",
         hexA: 0x06B6D4,
@@ -315,6 +339,7 @@ actor CatalogExplorerService {
     }
   }
 
+  /// YouTube Music Charts do país: artistas em alta (ranqueados) + faixas da playlist "<País>: 20 vídeos em alta".
   private func fetchYTMCountryCharts(ytmCode: String) async -> (artistNames: [String], tracks: [Track]) {
     let body: [String: Any] = [
       "context": Self.ytContext,
@@ -326,24 +351,20 @@ actor CatalogExplorerService {
       return ([], [])
     }
     var artistNames: [String] = []
-    var tracks: [Track] = []
+    var trendingId: String?
     func walk(_ n: Any) {
       if let d = n as? [String: Any] {
         if let r = d["musicResponsiveListItemRenderer"] as? [String: Any] {
-          let vid = (r["playlistItemData"] as? [String: Any])?["videoId"] as? String
           let cols = r["flexColumns"] as? [[String: Any]] ?? []
-          let c0 = cols.indices.contains(0) ? Self.ytmColText(cols[0]) : ""
-          let c1 = cols.indices.contains(1) ? Self.ytmColText(cols[1]) : ""
-          if let vid, !vid.isEmpty, !c0.isEmpty {
-            var thumb = ""
-            if let th = (((r["thumbnail"] as? [String: Any])?["musicThumbnailRenderer"] as? [String: Any])?["thumbnail"] as? [String: Any])?["thumbnails"] as? [[String: Any]] {
-              thumb = (th.last?["url"] as? String) ?? ""
-            }
-            tracks.append(Track(videoId: vid, title: c0, artist: c1, artworkURL: thumb, sourceService: "YouTube Music"))
-          } else if !c0.isEmpty {
-            artistNames.append(c0)
-          }
+          let hasVideo = ((r["playlistItemData"] as? [String: Any])?["videoId"] as? String) != nil
+          if !hasVideo, let c0 = cols.first.map({ Self.ytmColText($0) }), !c0.isEmpty { artistNames.append(c0) }
           return
+        }
+        if trendingId == nil, let r = d["musicTwoRowItemRenderer"] as? [String: Any],
+           let runs = (r["title"] as? [String: Any])?["runs"] as? [[String: Any]],
+           let text = runs.first?["text"] as? String, text.lowercased().contains("vídeos em alta"),
+           let bid = ((r["navigationEndpoint"] as? [String: Any])?["browseEndpoint"] as? [String: Any])?["browseId"] as? String {
+          trendingId = bid
         }
         for v in d.values { walk(v) }
       } else if let a = n as? [Any] {
@@ -351,52 +372,34 @@ actor CatalogExplorerService {
       }
     }
     walk(charts)
-    return (artistNames, tracks)
-  }
 
-  private func fetchAppleGenreSongs(genre: MusicGenre) async -> [Track] {
-    guard let gid = genre.appleGenreId else { return [] }
-    guard let obj = await DiscNet.json("https://itunes.apple.com/\(genre.appleCountry)/rss/topsongs/limit=30/genre=\(gid)/json", timeout: 6, retries: 1) as? [String: Any],
-          let feed = obj["feed"] as? [String: Any],
-          let entries = feed["entry"] as? [[String: Any]] else { return [] }
-    return entries.compactMap { e in
-      guard let title = (e["im:name"] as? [String: Any])?["label"] as? String,
-            let artist = (e["im:artist"] as? [String: Any])?["label"] as? String else { return nil }
-      let imgs = (e["im:image"] as? [[String: Any]]) ?? []
-      let rawImg = (imgs.last?["label"] as? String) ?? ""
-      let art = Self.upscaleApple(rawImg)
-      let album = ((e["im:collection"] as? [String: Any])?["im:name"] as? [String: Any])?["label"] as? String ?? ""
-      return Track(title: title, artist: artist, album: album, artworkURL: art, sourceService: genre.title)
+    var tracks: [Track] = []
+    if let pid = trendingId,
+       let obj = await DiscNet.postJSON("https://music.youtube.com/youtubei/v1/browse?prettyPrint=false",
+                                        body: ["context": Self.ytContext, "browseId": pid], headers: Self.ytHeaders) {
+      func walkTracks(_ n: Any) {
+        if let d = n as? [String: Any] {
+          if let r = d["musicResponsiveListItemRenderer"] as? [String: Any] {
+            if let vid = (r["playlistItemData"] as? [String: Any])?["videoId"] as? String,
+               let cols = r["flexColumns"] as? [[String: Any]], cols.count >= 2 {
+              let title = Self.ytmColText(cols[0]), artist = Self.ytmColText(cols[1])
+              var thumb = ""
+              if let th = (((r["thumbnail"] as? [String: Any])?["musicThumbnailRenderer"] as? [String: Any])?["thumbnail"] as? [String: Any])?["thumbnails"] as? [[String: Any]] {
+                thumb = (th.last?["url"] as? String) ?? ""
+              }
+              if !title.isEmpty { tracks.append(Track(videoId: vid, title: title, artist: artist, artworkURL: thumb, sourceService: "YouTube Music")) }
+            }
+            return
+          }
+          for v in d.values { walkTracks(v) }
+        } else if let a = n as? [Any] {
+          for v in a { walkTracks(v) }
+        }
+      }
+      walkTracks(obj)
     }
-  }
-
-  private func fetchAppleGenreAlbums(genre: MusicGenre) async -> [AlbumShowcase] {
-    guard let gid = genre.appleGenreId else { return [] }
-    guard let obj = await DiscNet.json("https://itunes.apple.com/\(genre.appleCountry)/rss/topalbums/limit=16/genre=\(gid)/json", timeout: 6, retries: 1) as? [String: Any],
-          let feed = obj["feed"] as? [String: Any],
-          let entries = feed["entry"] as? [[String: Any]] else { return [] }
-    return entries.compactMap { e in
-      guard let title = (e["im:name"] as? [String: Any])?["label"] as? String,
-            let artist = (e["im:artist"] as? [String: Any])?["label"] as? String else { return nil }
-      let idAttrs = (e["id"] as? [String: Any])?["attributes"] as? [String: Any]
-      let idStr = (idAttrs?["im:id"] as? String) ?? Track.stableId(title: title, artist: artist)
-      let imgs = (e["im:image"] as? [[String: Any]]) ?? []
-      let art = Self.upscaleApple((imgs.last?["label"] as? String) ?? "")
-      let release = ((e["im:releaseDate"] as? [String: Any])?["label"] as? String)
-      return AlbumShowcase(
-        id: "alb_\(idStr)",
-        title: title,
-        artist: artist,
-        artworkURL: art,
-        year: DiscText.year(from: release),
-        genre: genre.title,
-        tracks: [],
-        releaseDate: release.map { String($0.prefix(10)) },
-        kind: "Álbum",
-        deezerId: nil,
-        itunesId: Int(idStr)
-      )
-    }
+    var seen = Set<String>()
+    return (artistNames, tracks.filter { seen.insert($0.id).inserted })
   }
 
   private func resolveArtists(names: [String], limit: Int) async -> [ArtistInfo] {

@@ -1,24 +1,16 @@
 import SwiftUI
 
-/// Explorar — paradas por país (18 países), mais ouvidas, cantores mais ouvidos (Brasil/Mundo),
-/// 20 gêneros reais, climas, décadas e lançamentos.
+/// Explorar — paradas por país e Global (seletor), cantores mais ouvidos (Brasil/Mundo),
+/// gêneros reais, climas, décadas e lançamentos.
 struct ExploreView: View {
   @ObservedObject private var app = AppModel.shared
-  @ObservedObject private var player = AudioPlayer.shared
+  @ObservedObject private var home = HomeStore.shared
 
-  @State private var selectedCountry: ChartCountry = ChartCountry.all[0]
-  @State private var countryPreview: CountryChartBundle?
-  @State private var loadingCountry = false
-  @State private var chartMode: ChartMode = .brazil
+  @State private var place: ChartPlace = HomeStore.shared.place
+  @State private var list: ChartList?
+  @State private var loadingChart = false
   @State private var artistScope: ArtistScope = .brazil
   @State private var browseGroup: BrowseGroup = .brasil
-
-  enum ChartMode: String, CaseIterable, Identifiable {
-    case brazil = "Top 50 Brasil"
-    case world = "Top 50 Mundo"
-    case trending = "Em Alta"
-    var id: String { rawValue }
-  }
 
   enum ArtistScope: String, CaseIterable, Identifiable {
     case brazil = "Brasil"
@@ -36,9 +28,10 @@ struct ExploreView: View {
 
   var body: some View {
     ScrollView(showsIndicators: false) {
-      LazyVStack(alignment: .leading, spacing: 28) {
+      LazyVStack(alignment: .leading, spacing: 30) {
         header
-        if let feed = app.feed {
+        chartsSection
+        if let feed = app.feed ?? home.feed {
           content(feed)
             .transition(.opacity)
         } else {
@@ -47,26 +40,32 @@ struct ExploreView: View {
       }
       .padding(.top, 6)
       .padding(.bottom, 16)
-      .animation(.spring(response: 0.28, dampingFraction: 0.88), value: chartMode)
-      .animation(.spring(response: 0.28, dampingFraction: 0.88), value: artistScope)
-      .animation(.spring(response: 0.28, dampingFraction: 0.88), value: browseGroup)
+      .animation(.spring(response: 0.3, dampingFraction: 0.88), value: artistScope)
+      .animation(.spring(response: 0.3, dampingFraction: 0.88), value: browseGroup)
       .animation(.easeInOut(duration: 0.25), value: app.feed == nil)
     }
     .background(backdrop)
     .refreshable {
-      await app.loadFeed(force: true)
+      await home.refresh()
       await app.refreshArtistReleases()
-      await loadCountryPreview(force: true)
+      await loadChart(force: true)
     }
-    .task(id: selectedCountry.code) {
-      await loadCountryPreview()
+    .navigationDestination(for: LumeHub.self) { hub in
+      switch hub {
+      case .genres: GenresHubView()
+      }
     }
+    .task(id: place.id) { await loadChart() }
   }
 
-  private func loadCountryPreview(force: Bool = false) async {
-    loadingCountry = true
-    countryPreview = await CatalogExplorerService.shared.countryChart(for: selectedCountry, force: force)
-    loadingCountry = false
+  /// Mostra o cache na hora e atualiza em seguida.
+  private func loadChart(force: Bool = false) async {
+    if let cached = await ChartsService.shared.cached(place) { list = cached } else { list = nil }
+    loadingChart = true
+    let fresh = await ChartsService.shared.load(place, force: force)
+    guard !Task.isCancelled else { return }
+    withAnimation(.easeOut(duration: 0.2)) { if let fresh { list = fresh } }
+    loadingChart = false
   }
 
   private var backdrop: some View {
@@ -89,60 +88,87 @@ struct ExploreView: View {
       Text("Explorar")
         .font(Theme.font(34, .bold))
         .foregroundStyle(Theme.text)
-      if let updated = app.feed?.updatedAt {
-        Text(updatedText(updated))
-          .font(Theme.font(14))
-          .foregroundStyle(Theme.secondary)
-      }
+      Text(list?.caption ?? "Paradas do mundo inteiro")
+        .font(Theme.font(14))
+        .foregroundStyle(Theme.secondary)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, 20)
   }
 
-  private func updatedText(_ date: Date) -> String {
-    let f = RelativeDateTimeFormatter()
-    f.locale = Locale(identifier: "pt_BR")
-    f.unitsStyle = .full
-    if abs(date.timeIntervalSinceNow) < 60 { return "Paradas atualizadas agora" }
-    return "Paradas atualizadas " + f.localizedString(for: date, relativeTo: Date())
+  // MARK: Paradas (país / Global)
+
+  private var chartsSection: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      SectionHeader(title: "Paradas", subtitle: "Top 10 de cada país e do mundo", actionLabel: "Top 50") {
+        app.push(.country(place.chartCountry))
+      }
+      PlaceChipsBar(selected: place.id) { p in
+        withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) { place = p }
+      }
+      ChartTrackList(list: list, loading: loadingChart, limit: 10) {
+        Task { await loadChart(force: true) }
+      }
+      .id(place.id)
+      .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 10)), removal: .opacity))
+
+      if let albums = list?.albums, !albums.isEmpty {
+        VStack(alignment: .leading, spacing: 12) {
+          SectionHeader(
+            title: place.isGlobal ? "Álbuns em alta no mundo" : "Álbuns mais ouvidos · \(place.name)",
+            actionLabel: "Ver tudo"
+          ) {
+            app.push(.albums("Álbuns · \(place.name)", albums))
+          }
+          HRow {
+            ForEach(albums.prefix(16)) { a in AlbumTile(album: a, width: 150, showDate: a.releaseDate != nil) }
+          }
+        }
+        .padding(.top, 8)
+      }
+    }
+    .animation(.spring(response: 0.36, dampingFraction: 0.86), value: place.id)
   }
 
   // MARK: Conteúdo
 
   @ViewBuilder
   private func content(_ feed: DiscoverFeed) -> some View {
-    // 1. Paradas por País
-    countrySpotlightSection
-
-    // 2. Mais Tocadas (Brasil / Mundo / Em Alta) + Top Álbuns
-    chartsSection(feed)
-
-    let topAlbums = chartMode == .world
-      ? (feed.topAlbumsGlobal ?? feed.newReleases)
-      : (feed.topAlbumsBrazil ?? feed.brazilReleases)
-    if !topAlbums.isEmpty {
+    // Música brasileira de verdade (playlist "Top Brasil" do Deezer) — a parada da Apple traz muitos hits gringos.
+    if let hits = feed.brazilianHits, !hits.isEmpty {
       VStack(alignment: .leading, spacing: 12) {
-        SectionHeader(
-          title: chartMode == .world ? "Álbuns mais ouvidos no Mundo" : "Álbuns mais ouvidos no Brasil",
-          actionLabel: "Ver tudo"
-        ) {
-          app.push(.albums("Álbuns em destaque", topAlbums))
+        SectionHeader(title: "Música brasileira", subtitle: "Só o que é nacional e está tocando agora", actionLabel: "Tocar") {
+          if let f = hits.first { AudioPlayer.shared.play(f, in: hits, context: "Música brasileira") }
         }
-        HRow {
-          ForEach(topAlbums.prefix(16)) { a in
-            AlbumTile(album: a, width: 150, showDate: a.releaseDate != nil)
+        HRow(spacing: 14) {
+          ForEach(Array(hits.prefix(15).enumerated()), id: \.element.id) { idx, tr in
+            TallTrackCard(track: tr, rank: idx + 1, caption: "música brasileira") {
+              AudioPlayer.shared.play(tr, in: hits, context: "Música brasileira")
+            }
           }
         }
       }
     }
 
-    // 3. Cantores mais ouvidos (Brasil | Mundo)
+    // Cantores mais ouvidos (Brasil | Mundo)
     artistsSpotlight(feed)
 
-    // 4. Gêneros, Climas e Décadas
+    // Em alta no YouTube Music Brasil
+    if !feed.trending.isEmpty {
+      VStack(alignment: .leading, spacing: 12) {
+        SectionHeader(title: "Em alta no YouTube Music", subtitle: "Vídeos de música em alta no Brasil", actionLabel: "Ver tudo") {
+          app.push(.tracks("Em alta · YouTube Music Brasil", feed.trending))
+        }
+        HRow(spacing: 12) {
+          ForEach(feed.trending.prefix(12)) { tr in PlayCard(track: tr, queue: feed.trending) }
+        }
+      }
+    }
+
+    // Gêneros, Climas e Décadas
     browseCategoriesSection
 
-    // 5. Lançamentos
+    // Lançamentos
     if !app.artistReleases.isEmpty {
       VStack(alignment: .leading, spacing: 12) {
         SectionHeader(title: "Dos seus artistas", subtitle: "Lançamentos de quem você ouve", actionLabel: "Ver tudo") {
@@ -159,115 +185,6 @@ struct ExploreView: View {
     weekReleases(feed.newReleases.isEmpty ? feed.brazilReleases : feed.newReleases)
   }
 
-  // MARK: Paradas por País
-
-  private var countrySpotlightSection: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      SectionHeader(title: "Paradas por País", subtitle: "Veja o Top 50 ao vivo em qualquer região", actionLabel: "Abrir país") {
-        app.push(.country(selectedCountry))
-      }
-
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 8) {
-          ForEach(ChartCountry.all) { c in
-            PrismChip(title: "\(c.flag) \(c.name)", active: c.code == selectedCountry.code) {
-              selectedCountry = c
-            }
-          }
-        }
-        .padding(.horizontal, 20)
-      }
-      .scrollClipDisabled()
-
-      VStack(alignment: .leading, spacing: 12) {
-        HStack {
-          HStack(spacing: 8) {
-            Text(selectedCountry.flag).font(.system(size: 24))
-            VStack(alignment: .leading, spacing: 1) {
-              Text("Top 50 · \(selectedCountry.name)")
-                .font(Theme.font(17, .bold))
-                .foregroundStyle(Theme.text)
-              Text(selectedCountry.region)
-                .font(Theme.font(12))
-                .foregroundStyle(Theme.secondary)
-            }
-          }
-          Spacer()
-          Button {
-            Haptics.light()
-            app.push(.country(selectedCountry))
-          } label: {
-            Text("Ver Top 50")
-              .font(Theme.font(12.5, .semibold))
-              .foregroundStyle(Theme.onPrism)
-              .padding(.horizontal, 12)
-              .frame(height: 30)
-              .background(Capsule().fill(Theme.prismDiagonal))
-          }
-          .buttonStyle(PressableStyle(scale: 0.95))
-        }
-
-        if loadingCountry && countryPreview == nil {
-          VStack(spacing: 10) {
-            ForEach(0..<4, id: \.self) { _ in
-              HStack(spacing: 12) {
-                SkeletonBlock(width: 44, height: 44, radius: 8)
-                SkeletonBlock(width: 170, height: 14, radius: 6)
-                Spacer()
-              }
-            }
-          }
-        } else if let preview = countryPreview, !preview.topSongs.isEmpty {
-          VStack(spacing: 0) {
-            ForEach(Array(preview.topSongs.prefix(5).enumerated()), id: \.element.id) { idx, tr in
-              TrackRow(track: tr, rank: idx + 1, queue: preview.topSongs)
-            }
-          }
-        }
-      }
-      .padding(16)
-      .glass(24)
-      .padding(.horizontal, 20)
-    }
-  }
-
-  // MARK: Mais Tocadas
-
-  private func chartsSection(_ feed: DiscoverFeed) -> some View {
-    let tracks: [Track] = {
-      switch chartMode {
-      case .brazil: return feed.topBrazil
-      case .world: return feed.topGlobal
-      case .trending: return feed.trending
-      }
-    }()
-
-    return VStack(alignment: .leading, spacing: 12) {
-      SectionHeader(title: "Mais tocadas", actionLabel: "Ver Top 50") {
-        app.push(.tracks(chartMode.rawValue, tracks))
-      }
-
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 8) {
-          ForEach(ChartMode.allCases) { m in
-            PrismChip(title: m.rawValue, active: chartMode == m) { chartMode = m }
-          }
-        }
-        .padding(.horizontal, 20)
-      }
-      .scrollClipDisabled()
-
-      if !tracks.isEmpty {
-        VStack(spacing: 0) {
-          ForEach(Array(tracks.prefix(10).enumerated()), id: \.element.id) { idx, tr in
-            TrackRow(track: tr, rank: idx + 1, queue: tracks)
-          }
-        }
-        .padding(.horizontal, 20)
-      }
-    }
-  }
-
   // MARK: Cantores mais ouvidos
 
   private func artistsSpotlight(_ feed: DiscoverFeed) -> some View {
@@ -280,7 +197,7 @@ struct ExploreView: View {
           Text("Cantores mais ouvidos")
             .font(Theme.font(21, .bold))
             .foregroundStyle(Theme.text)
-          Text(artistScope == .brazil ? "Ranking de popularidade no Brasil" : "Ranking global nas plataformas")
+          Text(artistScope == .brazil ? "Os mais tocados na parada brasileira" : "Os mais tocados na parada mundial")
             .font(Theme.font(13))
             .foregroundStyle(Theme.secondary)
         }
@@ -294,11 +211,13 @@ struct ExploreView: View {
               Text(sc.rawValue)
                 .font(Theme.font(12, .semibold))
                 .foregroundStyle(artistScope == sc ? Theme.onPrism : Theme.secondary)
-                .padding(.horizontal, 10)
-                .frame(height: 28)
+                .padding(.horizontal, 12)
+                .frame(height: 32)
                 .background {
                   if artistScope == sc { Capsule().fill(Theme.prism) } else { Capsule().fill(Theme.fill) }
                 }
+                .frame(height: 44)
+                .contentShape(Capsule())
             }
             .buttonStyle(.plain)
           }
@@ -311,6 +230,8 @@ struct ExploreView: View {
           ArtistBubble(name: a.name, pictureURL: a.pictureURL, deezerId: a.deezerId, rank: a.rank ?? (idx + 1))
         }
       }
+      .id(artistScope)
+      .transition(.opacity)
     }
   }
 
@@ -377,19 +298,14 @@ struct ExploreView: View {
 
   private var skeleton: some View {
     VStack(alignment: .leading, spacing: 20) {
-      SkeletonBlock(width: 200, height: 22, radius: 8).padding(.horizontal, 20)
-      SkeletonBlock(height: 220, radius: 24).padding(.horizontal, 20)
-      SkeletonBlock(width: 160, height: 22, radius: 8).padding(.horizontal, 20)
-      ForEach(0..<5, id: \.self) { _ in
-        HStack(spacing: 12) {
-          SkeletonBlock(width: 50, height: 50, radius: 8)
-          VStack(alignment: .leading, spacing: 6) {
-            SkeletonBlock(width: 170, height: 14, radius: 6)
-            SkeletonBlock(width: 110, height: 12, radius: 6)
-          }
-        }
-        .padding(.horizontal, 20)
+      SoftBlock(width: 200, height: 22, radius: 8).padding(.horizontal, 20)
+      HStack(spacing: 14) {
+        SoftBlock(width: 206, height: 276, radius: 26)
+        SoftBlock(width: 206, height: 276, radius: 26)
       }
+      .padding(.horizontal, 20)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .clipped()
     }
   }
 }

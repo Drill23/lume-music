@@ -29,6 +29,8 @@ struct DiscoverFeed: Codable {
   var topAlbumsBrazil: [AlbumShowcase]? = nil
   var topAlbumsGlobal: [AlbumShowcase]? = nil
   var globalTopArtists: [ArtistInfo]? = nil
+  /// Playlist "Top Brasil" (Deezer Charts): música realmente brasileira, ao contrário da parada da Apple que traz muitos hits gringos.
+  var brazilianHits: [Track]? = nil
 }
 
 // MARK: - Serviço
@@ -40,12 +42,20 @@ actor DiscoveryService {
   private var albumsMemo: [Int: Task<[AlbumShowcase], Never>] = [:]
   private var memoryFeed: DiscoverFeed?
 
-  private var feedURL: URL { DiscNet.caches("lume_discover_feed.json") }
+  private var feedURL: URL { DiscNet.caches("lume_discover_feed_v2.json") }
+  private var refreshTask: Task<DiscoverFeed, Never>?
+
+  /// Publicada a cada etapa da atualização (Home/Explorar podem reagir sem esperar tudo terminar).
+  static let feedUpdated = Notification.Name("lume.discover.feedUpdated")
 
   private static let ytContext: [String: Any] = [
     "client": ["clientName": "WEB_REMIX", "clientVersion": "1.20250101.01.00", "hl": "pt", "gl": "BR"]
   ]
   private static let ytHeaders = ["Origin": "https://music.youtube.com", "Referer": "https://music.youtube.com/"]
+
+  // Playlists oficiais "Deezer Charts" (auditadas): Top Brasil e Top Worldwide.
+  private static let deezerTopBrasil = 1111141961
+  private static let deezerTopWorldwide = 3155776842
 
   // MARK: Feed
 
@@ -62,38 +72,72 @@ actor DiscoveryService {
     return await refresh()
   }
 
+  /// Atualização coalescida: chamadas simultâneas (Home, Explorar, RootView) compartilham a mesma busca.
   func refresh() async -> DiscoverFeed {
-    albumsMemo.removeAll()
-    async let nr = buildNewReleases()
-    async let br = buildBrazilReleases()
-    async let tb = fetchTopBrazil()
-    async let tg = fetchTopGlobal()
-    async let ta = fetchTopArtists()
-    async let gta = fetchGlobalTopArtists()
-    async let tr = fetchTrending()
-    async let abr = appleAlbums(country: "br")
-    async let aus = appleAlbums(country: "us")
-    let (newR, brR, topBR, topG, topA, gTopA, trend, albBR, albUS) = await (nr, br, tb, tg, ta, gta, tr, abr, aus)
+    if let t = refreshTask { return await t.value }
+    let t = Task<DiscoverFeed, Never> { await self.runRefresh() }
+    refreshTask = t
+    let f = await t.value
+    refreshTask = nil
+    return f
+  }
 
-    let old = cachedFeed()
-    let feed = DiscoverFeed(
-      updatedAt: Date(),
-      newReleases: newR.isEmpty ? (old?.newReleases ?? []) : newR,
-      brazilReleases: brR.isEmpty ? (old?.brazilReleases ?? []) : brR,
-      topBrazil: topBR.isEmpty ? (old?.topBrazil ?? []) : topBR,
-      topGlobal: topG.isEmpty ? (old?.topGlobal ?? []) : topG,
-      topArtists: topA.isEmpty ? (old?.topArtists ?? []) : topA,
-      trending: trend.isEmpty ? (old?.trending ?? []) : trend,
-      topAlbumsBrazil: albBR.isEmpty ? old?.topAlbumsBrazil : Array(albBR.prefix(25)),
-      topAlbumsGlobal: albUS.isEmpty ? old?.topAlbumsGlobal : Array(albUS.prefix(25)),
-      globalTopArtists: gTopA.isEmpty ? old?.globalTopArtists : gTopA
-    )
+  private func publish(_ feed: DiscoverFeed) {
     let anyData = !(feed.newReleases.isEmpty && feed.brazilReleases.isEmpty && feed.topBrazil.isEmpty
       && feed.topGlobal.isEmpty && feed.topArtists.isEmpty && feed.trending.isEmpty)
-    if anyData {
-      memoryFeed = feed
-      if let data = try? JSONEncoder().encode(feed) { try? data.write(to: feedURL, options: .atomic) }
-    }
+    guard anyData else { return }
+    memoryFeed = feed
+    if let data = try? JSONEncoder().encode(feed) { try? data.write(to: feedURL, options: .atomic) }
+    NotificationCenter.default.post(name: Self.feedUpdated, object: nil, userInfo: ["feed": feed])
+  }
+
+  private func runRefresh() async -> DiscoverFeed {
+    albumsMemo.removeAll()
+    let old = cachedFeed()
+
+    // ETAPA 1 (rápida, tudo em paralelo): paradas, artistas e álbuns mais ouvidos.
+    async let brPL = ChartParsers.deezerPlaylistTracks(Self.deezerTopBrasil)
+    async let wwPL = ChartParsers.deezerPlaylistTracks(Self.deezerTopWorldwide)
+    async let tbApple = fetchAppleTracks(country: "br")
+    async let abr = appleAlbums(country: "br")
+    async let aus = appleAlbums(country: "us")
+    async let agb = appleAlbums(country: "gb")
+    let (br, ww, topBRApple, albBR, albUS, albGB) = await (brPL, wwPL, tbApple, abr, aus, agb)
+
+    // "Top Brasil" = parada da Apple Music do Brasil (o que os brasileiros mais ouvem, inclui hits internacionais);
+    // reserva = playlist "Top Brasil" do Deezer. "Top Global" = playlist Deezer "Top Worldwide".
+    let topBR = topBRApple.isEmpty ? (br?.tracks ?? []) : topBRApple
+    let topG = ww?.tracks ?? []
+    // Artistas: calculados a partir dessas paradas (e não do /chart/0 do Deezer, que muda conforme o país do IP).
+    var brArtists = Array((br?.artists ?? []).prefix(30))
+    if brArtists.isEmpty { brArtists = await fetchTopArtistsFallback() }
+    let worldArtists = Array((ww?.artists ?? []).prefix(30))
+
+    var feed = DiscoverFeed(
+      updatedAt: Date(),
+      newReleases: old?.newReleases ?? [],
+      brazilReleases: old?.brazilReleases ?? [],
+      topBrazil: topBR.isEmpty ? (old?.topBrazil ?? []) : topBR,
+      topGlobal: topG.isEmpty ? (old?.topGlobal ?? []) : topG,
+      topArtists: brArtists.isEmpty ? (old?.topArtists ?? []) : brArtists,
+      trending: old?.trending ?? [],
+      topAlbumsBrazil: albBR.isEmpty ? old?.topAlbumsBrazil : Array(albBR.prefix(25)),
+      topAlbumsGlobal: albUS.isEmpty ? old?.topAlbumsGlobal : Array(albUS.prefix(25)),
+      globalTopArtists: worldArtists.isEmpty ? old?.globalTopArtists : worldArtists,
+      brazilianHits: (br?.tracks.isEmpty ?? true) ? old?.brazilianHits : br?.tracks
+    )
+    publish(feed)
+
+    // ETAPA 2 (mais lenta: dezenas de consultas ao Deezer): lançamentos do mundo e do Brasil.
+    async let nr = buildNewReleases(worldArtists: worldArtists, apple: albUS + albGB)
+    async let brr = buildBrazilReleases(brazilArtists: brArtists, apple: albBR)
+    async let tr = fetchTrending()
+    let (newR, brR, trend) = await (nr, brr, tr)
+    if !trend.isEmpty { feed.trending = trend }
+    feed.newReleases = newR.isEmpty ? feed.newReleases : newR
+    feed.brazilReleases = brR.isEmpty ? feed.brazilReleases : brR
+    feed.updatedAt = Date()
+    publish(feed)
     return feed
   }
 
@@ -227,114 +271,25 @@ actor DiscoveryService {
 
   // MARK: Construção das listas
 
-  private func fetchTopBrazil() async -> [Track] {
-    if let obj = await DiscNet.json("https://rss.marketingtools.apple.com/api/v2/br/music/most-played/50/songs.json", timeout: 5, retries: 2) as? [String: Any],
-       let results = (obj["feed"] as? [String: Any])?["results"] as? [[String: Any]] {
-      let tracks = Self.appleSongs(results)
-      if !tracks.isEmpty { return tracks }
-    }
-    // Fallback: playlist editorial "Top Brasil" do Deezer
-    guard let obj = await DiscNet.json("https://api.deezer.com/playlist/1111141961/tracks?limit=50", retries: 1) as? [String: Any],
-          let data = obj["data"] as? [[String: Any]] else { return [] }
-    return data.compactMap { Self.deezerTrack($0, fallbackArtist: "") }
+  private func fetchAppleTracks(country: String) async -> [Track] {
+    ChartParsers.appleSongs(await ChartParsers.appleChart(country, kind: "songs", limit: 50), label: "Apple")
   }
 
-  private func fetchTopGlobal() async -> [Track] {
-    // Deezer's chart/0 follows the caller's country (Brazil on the user's phone), so use the
-    // editorial "Top Worldwide" playlist for the real global chart; chart/0 only as fallback.
-    if let obj = await DiscNet.json("https://api.deezer.com/playlist/3155776842/tracks?limit=50", retries: 1) as? [String: Any],
-       let data = obj["data"] as? [[String: Any]] {
-      let tracks = data.compactMap { Self.deezerTrack($0, fallbackArtist: "") }
-      if !tracks.isEmpty { return tracks }
-    }
-    guard let obj = await DiscNet.json("https://api.deezer.com/chart/0/tracks?limit=50") as? [String: Any],
-          let data = obj["data"] as? [[String: Any]] else { return [] }
-    return data.compactMap { Self.deezerTrack($0, fallbackArtist: "") }
-  }
-
-  private func fetchTopArtists() async -> [ArtistInfo] {
+  /// Reserva: ranking de artistas do Deezer (varia com o país do IP; só usado se a playlist Top Brasil falhar).
+  private func fetchTopArtistsFallback() async -> [ArtistInfo] {
     guard let obj = await DiscNet.json("https://api.deezer.com/chart/0/artists?limit=30") as? [String: Any],
           let data = obj["data"] as? [[String: Any]] else { return [] }
     return data.enumerated().compactMap { i, d in
       guard var a = Self.artistInfo(d) else { return nil }
-      a.rank = Self.int(d["position"]) ?? (i + 1)
+      a.rank = i + 1
       return a
     }
   }
 
-  /// Cantores mais ouvidos no mundo (YouTube Music Global `ZZ` + fotos em alta via ArtworkResolver).
-  private func fetchGlobalTopArtists() async -> [ArtistInfo] {
-    let body: [String: Any] = [
-      "context": Self.ytContext, "browseId": "FEmusic_charts", "formData": ["selectedValues": ["ZZ"]],
-    ]
-    var names: [String] = []
-    if let obj = await DiscNet.postJSON("https://music.youtube.com/youtubei/v1/browse?prettyPrint=false",
-                                        body: body, headers: Self.ytHeaders) {
-      func walk(_ n: Any) {
-        if let d = n as? [String: Any] {
-          if let r = d["musicResponsiveListItemRenderer"] as? [String: Any],
-             let cols = r["flexColumns"] as? [[String: Any]], let first = cols.first {
-            let runs = ((first["musicResponsiveListItemFlexColumnRenderer"] as? [String: Any])?["text"] as? [String: Any])?["runs"] as? [[String: Any]] ?? []
-            let name = runs.compactMap { $0["text"] as? String }.joined().trimmingCharacters(in: .whitespacesAndNewlines)
-            if !name.isEmpty { names.append(name) }
-            return
-          }
-          for v in d.values { walk(v) }
-        } else if let a = n as? [Any] { for v in a { walk(v) } }
-      }
-      walk(obj)
-    }
-    var seen = Set<String>()
-    let unique = names.filter { seen.insert(DiscText.normalize($0)).inserted }.prefix(24)
-    if unique.isEmpty {
-      // Fallback: extrair artistas do Top Global do Apple Music US
-      if let obj = await DiscNet.json("https://rss.marketingtools.apple.com/api/v2/us/music/most-played/40/songs.json", timeout: 5, retries: 1) as? [String: Any],
-         let results = (obj["feed"] as? [String: Any])?["results"] as? [[String: Any]] {
-        let fallbackNames = results.compactMap { $0["artistName"] as? String }
-        return await resolveRankedArtists(Array(fallbackNames.prefix(20)))
-      }
-      return []
-    }
-    return await resolveRankedArtists(Array(unique))
-  }
-
-  private func resolveRankedArtists(_ names: [String]) async -> [ArtistInfo] {
-    var seen = Set<String>()
-    var clean: [(Int, String)] = []
-    for n in names {
-      let main = DiscText.searchArtist(n)
-      let key = DiscText.normalize(main)
-      guard !key.isEmpty, seen.insert(key).inserted else { continue }
-      clean.append((clean.count + 1, main))
-      if clean.count >= 24 { break }
-    }
-    let resolved: [(Int, ArtistInfo)] = await withTaskGroup(of: (Int, ArtistInfo)?.self) { group in
-      for (rank, name) in clean {
-        group.addTask {
-          if let info = await self.resolveArtist(name: name) {
-            var a = info
-            a.rank = rank
-            return (rank, a)
-          }
-          return (rank, ArtistInfo(id: "g_\(DiscText.normalize(name))", name: name, pictureURL: "", deezerId: nil, fans: nil, rank: rank))
-        }
-      }
-      var out: [(Int, ArtistInfo)] = []
-      for await item in group { if let item { out.append(item) } }
-      return out
-    }
-    return resolved.sorted { $0.0 < $1.0 }.map(\.1)
-  }
-
+  /// "Em alta": vídeos de música em alta no YouTube Music Brasil (sem reserva de outro país, para o rótulo ser verdadeiro).
   private func fetchTrending() async -> [Track] {
     var tracks = await fetchYTMTrending()
-    if tracks.isEmpty {
-      if let obj = await DiscNet.json("https://rss.marketingtools.apple.com/api/v2/us/music/most-played/50/songs.json", timeout: 5, retries: 2) as? [String: Any],
-         let results = (obj["feed"] as? [String: Any])?["results"] as? [[String: Any]] {
-        tracks = Self.appleSongs(results)
-      }
-      return tracks
-    }
+    if tracks.isEmpty { return [] }
     // thumbnails de vídeo → capas reais
     let upgraded: [Int: String] = await withTaskGroup(of: (Int, String?).self) { group in
       for (i, t) in tracks.enumerated() where ArtworkResolver.needsUpgrade(t.artworkURL) {
@@ -410,68 +365,44 @@ actor DiscoveryService {
     return Track(videoId: videoId, title: title, artist: artist, artworkURL: thumb, sourceService: "YouTube Music")
   }
 
-  private func buildNewReleases() async -> [AlbumShowcase] {
-    async let apBR = appleAlbums(country: "br")
-    async let apUS = appleAlbums(country: "us")
-    async let chart = DiscNet.json("https://api.deezer.com/chart/0/artists?limit=20")
-    let (br, us, chartObj) = await (apBR, apUS, chart)
+  /// Lançamentos do mundo: álbuns recentes dos maiores artistas da parada global + álbuns novos mais ouvidos nos EUA/Reino Unido.
+  private func buildNewReleases(worldArtists: [ArtistInfo], apple: [AlbumShowcase]) async -> [AlbumShowcase] {
     let cutoff = Self.dayString(daysAgo: 120)
     let today = Self.dayString(daysAgo: 0)
-
-    let artists = ((chartObj as? [String: Any])?["data"] as? [[String: Any]] ?? []).compactMap { Self.artistInfo($0) }
-    let deezer = await recentForArtists(artists.map { ($0.deezerId ?? 0, $0.name) }.filter { $0.0 != 0 })
-    let all = deezer + br + us
-    let recent = all.filter { ($0.releaseDate ?? "") >= cutoff && ($0.releaseDate ?? "") <= today }
-    return Array(Self.dedupe(recent).sorted { ($0.releaseDate ?? "") > ($1.releaseDate ?? "") }.prefix(40))
-  }
-
-  private func buildBrazilReleases() async -> [AlbumShowcase] {
-    async let apBR = appleAlbums(country: "br")
-    async let topBRArtists = fetchTopArtists()
-    let (apple, chartArtists) = await (apBR, topBRArtists)
-    let pairs = chartArtists.prefix(16).compactMap { a -> (Int, String)? in
+    let pairs = worldArtists.prefix(14).compactMap { a -> (Int, String)? in
       guard let id = a.deezerId else { return nil }
       return (id, a.name)
     }
-    let deezer = await recentForArtists(pairs)
+    let deezer = await recentForArtists(Array(pairs))
+    let recent = (deezer + apple).filter { ($0.releaseDate ?? "") >= cutoff && ($0.releaseDate ?? "") <= today }
+    return Array(Self.dedupe(recent).sorted { ($0.releaseDate ?? "") > ($1.releaseDate ?? "") }.prefix(40))
+  }
+
+  /// Lançamentos do Brasil: só entra o que for de artista da parada brasileira ou de gênero tipicamente brasileiro.
+  private func buildBrazilReleases(brazilArtists: [ArtistInfo], apple: [AlbumShowcase]) async -> [AlbumShowcase] {
+    let pairs = brazilArtists.prefix(16).compactMap { a -> (Int, String)? in
+      guard let id = a.deezerId else { return nil }
+      return (id, a.name)
+    }
+    let deezer = await recentForArtists(Array(pairs))
     let cutoffDz = Self.dayString(daysAgo: 150)
     let cutoffAp = Self.dayString(daysAgo: 90)
     let today = Self.dayString(daysAgo: 0)
     let dzRecent = deezer.filter { ($0.releaseDate ?? "") >= cutoffDz && ($0.releaseDate ?? "") <= today }
-    let brNames = Set(chartArtists.map { DiscText.normalize($0.name) })
-    let brGenres = ["sertanej", "mpb", "pagode", "samba", "funk", "forro", "axe", "brasil", "gospel", "piseiro", "arrocha", "bossa", "tropicalia"]
+    let brNames = Set(brazilArtists.map { DiscText.normalize($0.name) })
+    let brGenres = ["sertanej", "mpb", "pagode", "samba", "funk", "forro", "axe", "brasil", "piseiro", "arrocha",
+                    "bossa", "tropicalia", "choro", "frevo"]
     func isBrazilian(_ a: AlbumShowcase) -> Bool {
       let g = DiscText.normalize(a.genre)
       if brGenres.contains(where: { g.contains($0) }) { return true }
       return DiscText.splitArtists(a.artist).contains { brNames.contains($0) }
     }
     let apRecent = apple.filter { ($0.releaseDate ?? "") >= cutoffAp && ($0.releaseDate ?? "") <= today && isBrazilian($0) }
-    let combined = Self.dedupe(dzRecent + apRecent).sorted { ($0.releaseDate ?? "") > ($1.releaseDate ?? "") }
-    if combined.isEmpty {
-      return Array(apple.prefix(24))
-    }
-    return Array(combined.prefix(40))
+    return Array(Self.dedupe(dzRecent + apRecent).sorted { ($0.releaseDate ?? "") > ($1.releaseDate ?? "") }.prefix(40))
   }
 
   private func appleAlbums(country: String) async -> [AlbumShowcase] {
-    guard let obj = await DiscNet.json("https://rss.marketingtools.apple.com/api/v2/\(country)/music/most-played/50/albums.json", timeout: 5, retries: 2) as? [String: Any],
-          let results = (obj["feed"] as? [String: Any])?["results"] as? [[String: Any]] else { return [] }
-    return results.compactMap { r in
-      guard let idStr = r["id"] as? String, var title = r["name"] as? String else { return nil }
-      var kind = "Álbum"
-      for (suffix, k) in [(" - Single", "Single"), (" - EP", "EP")] where title.hasSuffix(suffix) {
-        title = String(title.dropLast(suffix.count))
-        kind = k
-      }
-      let date = r["releaseDate"] as? String
-      let genre = ((r["genres"] as? [[String: Any]]) ?? []).compactMap { $0["name"] as? String }
-        .first { $0 != "Música" && $0 != "Music" } ?? ""
-      return AlbumShowcase(
-        id: "alb_\(idStr)", title: title, artist: (r["artistName"] as? String) ?? "",
-        artworkURL: Self.upscaleApple((r["artworkUrl100"] as? String) ?? ""),
-        year: DiscText.year(from: date), genre: genre, tracks: [],
-        releaseDate: date, kind: kind, deezerId: nil, itunesId: Int(idStr))
-    }
+    ChartParsers.appleAlbums(await ChartParsers.appleChart(country, kind: "albums", limit: 50), size: 1000)
   }
 
   /// Álbuns recentes de vários artistas, com concorrência limitada (Deezer limita ~50 req/5s).
