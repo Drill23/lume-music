@@ -17,79 +17,63 @@ final class VUBallistics {
   }
 }
 
-/// Deck de fita K7 3D com 4 estilos de fita, flip sem espelhamento Lado A/B,
-/// cabeçote magnético dourado, pinch rollers girando, VU meters balísticos com LED PEAK e teclas físicas.
+/// Posição "ao vivo" da fita: extrapola o relógio entre as atualizações do player.
+struct CassetteLive {
+  var playing: Bool
+  var anchorTime: Double
+  var anchorDate: Date
+  var duration: Double
+
+  func progress(at date: Date) -> Double {
+    guard duration > 1 else { return 0 }
+    let t = playing ? anchorTime + date.timeIntervalSince(anchorDate) : anchorTime
+    return min(1, max(0, t / duration))
+  }
+}
+
+// MARK: - Palco "K7"
+
 struct CassetteStage: View {
   let track: Track
   @ObservedObject private var player = AudioPlayer.shared
   @ObservedObject private var clock = PlaybackClock.shared
-  @ObservedObject private var spectrum = AudioSpectrum.shared
   @ObservedObject private var art = ArtworkStore.shared
   @ObservedObject private var store = LibraryStore.shared
+  @Environment(\.displayScale) private var displayScale
 
   @State private var sideB = false
   @State private var anchorTime: Double = 0
   @State private var anchorDate = Date()
-  @State private var vuPhysics = VUBallistics()
 
   var body: some View {
     GeometryReader { g in
-      let availH = max(210, g.size.height - 62)
-      let W = min(g.size.width - 36, 380, availH / 1.07)
-      ZStack(alignment: .topTrailing) {
-        VStack(spacing: W * 0.032) {
-          Spacer(minLength: 26)
-          freeCassette(W)
-          meters(W)
-          keys(W)
+      let dockH: CGFloat = 44
+      let availH = max(150, g.size.height - dockH - 40)
+      let W = min(g.size.width - 28, availH * TapeGeo.aspect, 420)
+      ZStack {
+        VStack(spacing: 18) {
           Spacer(minLength: 0)
+          freeCassette(W)
+          dock
+            .padding(.trailing, 52)
+            .padding(.horizontal, 14)
+            .frame(height: dockH)
         }
+        .padding(.bottom, 8)
         .frame(width: g.size.width, height: g.size.height)
 
-        StageStyleOrb(icon: "recordingtape", accessibilityLabel: "Estilo da fita K7") { dismiss in
-          VStack(alignment: .leading, spacing: 6) {
-            Text("ESTILO DA FITA K7")
-              .font(Theme.font(10.5, .heavy))
-              .tracking(0.8)
-              .foregroundStyle(Theme.secondary)
-              .padding(.horizontal, 6)
-              .padding(.bottom, 2)
-
+        StageStyleOrb(icon: "recordingtape", accessibilityLabel: "Estilo da fita K7", title: nil, placement: .bottomTrailing) { _ in
+          VStack(alignment: .leading, spacing: 8) {
+            StageSectionHeader(title: "FITA", trailing: store.cassetteStyle.rawValue)
             ForEach(CassetteStyle.allCases) { st in
-              let active = store.cassetteStyle == st
-              Button {
-                Haptics.selection()
-                withAnimation(.easeInOut(duration: 0.25)) { store.cassetteStyle = st }
-                dismiss()
-              } label: {
-                HStack(spacing: 8) {
-                  Circle()
-                    .fill(swatchColor(for: st))
-                    .frame(width: 12, height: 12)
-                    .overlay(Circle().stroke(Color.white.opacity(0.45), lineWidth: 0.7))
-                  Text(st.rawValue)
-                    .font(Theme.font(12.5, active ? .bold : .semibold))
-                    .foregroundStyle(active ? Theme.onPrism : Theme.text)
-                  Spacer(minLength: 4)
-                  if active {
-                    Image(systemName: "checkmark")
-                      .font(.system(size: 11, weight: .bold))
-                      .foregroundStyle(Theme.onPrism)
-                  }
-                }
-                .padding(.horizontal, 10)
-                .frame(height: 34)
-                .background {
-                  if active {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.prismDiagonal)
-                  } else {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.06))
-                  }
-                }
+              StageOptionRow(title: st.rawValue, subtitle: subtitle(for: st), selected: store.cassetteStyle == st) {
+                Circle().fill(swatch(for: st)).overlay(Circle().stroke(Color.white.opacity(0.45), lineWidth: 0.8))
+              } action: {
+                withAnimation(.easeInOut(duration: 0.3)) { store.cassetteStyle = st }
               }
-              .buttonStyle(.plain)
             }
           }
+          .padding(.bottom, 4)
         }
       }
     }
@@ -97,6 +81,11 @@ struct CassetteStage: View {
     .onChange(of: clock.currentTime) { _, _ in anchor() }
     .onChange(of: player.isPlaying) { _, _ in anchor() }
     .onChange(of: track.id) { _, _ in sideB = false }
+    .task(id: store.cassetteStyle) {
+      // aquece o outro lado para o flip não piscar
+      let px = Int(380 * displayScale)
+      _ = await LumeTextures.shared.cassette(style: store.cassetteStyle, sideB: true, px: px)
+    }
   }
 
   private func anchor() {
@@ -104,85 +93,127 @@ struct CassetteStage: View {
     anchorDate = Date()
   }
 
-  private func swatchColor(for style: CassetteStyle) -> Color {
+  private func subtitle(for style: CassetteStyle) -> String {
     switch style {
-    case .smokedStudio: return Color(white: 0.22)
-    case .crystalClear: return Color.white.opacity(0.75)
-    case .metallicChrome: return Color(white: 0.68)
-    case .vintageCream: return Color(red: 0.92, green: 0.87, blue: 0.76)
+    case .smokedStudio: return "Plástico fumê, engrenagens à vista"
+    case .crystalClear: return "Transparente, mecanismo visível"
+    case .metallicChrome: return "Cromo Tipo II, acabamento espelhado"
+    case .vintageCream: return "Creme dos anos 80"
     }
   }
 
-  // MARK: Fita K7 inteira em primeiro plano
+  private func swatch(for style: CassetteStyle) -> LinearGradient {
+    switch style {
+    case .smokedStudio: return LinearGradient(colors: [Color(white: 0.34), Color(white: 0.08)], startPoint: .top, endPoint: .bottom)
+    case .crystalClear: return LinearGradient(colors: [Color(red: 0.85, green: 0.93, blue: 0.97), Color(red: 0.55, green: 0.68, blue: 0.78)], startPoint: .top, endPoint: .bottom)
+    case .metallicChrome: return LinearGradient(colors: [Color(white: 0.95), Color(white: 0.45)], startPoint: .top, endPoint: .bottom)
+    case .vintageCream: return LinearGradient(colors: [Color(red: 0.96, green: 0.92, blue: 0.80), Color(red: 0.80, green: 0.72, blue: 0.56)], startPoint: .top, endPoint: .bottom)
+    }
+  }
+
+  // MARK: fita em primeiro plano
 
   private func freeCassette(_ W: CGFloat) -> some View {
-    TimelineView(.animation(paused: !player.isPlaying)) { tl in
-      let t = player.isPlaying ? anchorTime + tl.date.timeIntervalSince(anchorDate) : anchorTime
-      let p = clock.duration > 1 ? min(1, max(0, t / clock.duration)) : 0
-      CassetteFlipWrapper(angle: sideB ? 180 : 0) {
-        CassetteTape(
-          width: W,
-          title: track.title,
-          artist: track.artist,
-          artworkURL: player.currentArtwork,
-          sideB: false,
-          progress: p,
-          seconds: max(1, clock.duration),
-          style: store.cassetteStyle
-        )
-      } back: {
-        CassetteTape(
-          width: W,
-          title: track.title,
-          artist: track.artist,
-          artworkURL: art.photo(for: track.artist) ?? player.currentArtwork,
-          sideB: true,
-          progress: p,
-          seconds: max(1, clock.duration),
-          style: store.cassetteStyle
-        )
-      }
+    let live = CassetteLive(playing: player.isPlaying, anchorTime: anchorTime, anchorDate: anchorDate, duration: max(1, clock.duration))
+    let seconds = max(1, clock.duration)
+    return CassetteFlipWrapper(angle: sideB ? 180 : 0) {
+      CassetteTape(width: W, title: track.title, artist: track.artist, artworkURL: player.currentArtwork,
+                   sideB: false, progress: 0, seconds: seconds, style: store.cassetteStyle, live: live)
+    } back: {
+      CassetteTape(width: W, title: track.title, artist: track.artist, artworkURL: art.photo(for: track.artist) ?? player.currentArtwork,
+                   sideB: true, progress: 0, seconds: seconds, style: store.cassetteStyle, live: live)
     }
-    .animation(.spring(response: 0.65, dampingFraction: 0.82), value: sideB)
-    .shadow(color: .black.opacity(0.45), radius: W * 0.045, y: W * 0.03)
+    .frame(width: W, height: W / TapeGeo.aspect)
+    .contentShape(Rectangle())
     .onTapGesture { Haptics.medium(); player.togglePlayPause() }
+    .accessibilityElement()
+    .accessibilityLabel("Fita K7")
+    .accessibilityHint("Toque para tocar ou pausar")
+    .accessibilityAddTraits(.isButton)
   }
 
-  // MARK: VU Meters Balísticos + Contador
+  // MARK: doca
 
-  private func meters(_ W: CGFloat) -> some View {
-    let H = W * 0.22
-    return ZStack {
-      BrushedPanel(cornerRadius: W * 0.05, dark: true).equatable()
-      HStack(spacing: W * 0.03) {
-        TimelineView(.animation(minimumInterval: 1 / 45, paused: !player.isPlaying && !spectrum.isLive)) { tl in
-          let raw = rawLevels(at: tl.date)
-          let smooth = vuPhysics.step(now: tl.date.timeIntervalSinceReferenceDate, targetL: raw.0, targetR: raw.1)
-          HStack(spacing: W * 0.025) {
-            VUMeter(level: smooth.0, label: "L").frame(width: W * 0.33, height: H * 0.74)
-            VUMeter(level: smooth.1, label: "R").frame(width: W * 0.33, height: H * 0.74)
-          }
+  private var dock: some View {
+    HStack(spacing: 8) {
+      Button {
+        Haptics.medium()
+        Task { await ArtworkStore.shared.ensurePhoto(track.artist) }
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) { sideB.toggle() }
+      } label: {
+        HStack(spacing: 6) {
+          Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 16, weight: .semibold))
+          Text(sideB ? "Lado A" : "Lado B").font(Theme.font(13.5, .semibold))
         }
-        VStack(spacing: W * 0.012) {
-          TapeCounter(value: Int(clock.currentTime) % 1000, digitWidth: W * 0.05)
-          Text("COUNTER")
-            .font(.system(size: W * 0.02, weight: .heavy, design: .rounded))
-            .tracking(1)
-            .foregroundStyle(.white.opacity(0.45))
+        .foregroundStyle(Theme.text)
+        .padding(.horizontal, 14)
+        .frame(minWidth: 108, minHeight: 44)
+        .contentShape(Capsule())
+        .glassCapsule(interactive: true)
+      }
+      .buttonStyle(PressableStyle(scale: 0.94))
+      .accessibilityLabel(sideB ? "Virar para o lado A" : "Virar para o lado B")
+
+      VUDock()
+        .frame(minWidth: 100)
+    }
+    .glassGroup(spacing: 8)
+  }
+}
+
+/// Dois VUs analógicos discretos. Observa o espectro só aqui (e só com a música tocando), sem refazer o palco inteiro.
+private struct VUDock: View {
+  @ObservedObject private var player = AudioPlayer.shared
+  @State private var phys = VUBallistics()
+  @Environment(\.displayScale) private var displayScale
+
+  var body: some View {
+    GeometryReader { g in
+      let w = min(64, (g.size.width - 30) / 2)
+      let face = LumeTextures.shared.vuFace(px: Int(w * displayScale))
+      TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !player.isPlaying)) { tl in
+        let raw = levels(at: tl.date)
+        let s = phys.step(now: tl.date.timeIntervalSinceReferenceDate, targetL: raw.0, targetR: raw.1)
+        HStack(spacing: 10) {
+          dial(face, w: w, level: s.0)
+          dial(face, w: w, level: s.1)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
     }
-    .frame(width: W, height: H)
+    .frame(height: 44)
+    .glassCapsule()
+    .accessibilityHidden(true)
   }
 
-  private func rawLevels(at date: Date) -> (Double, Double) {
-    if spectrum.isLive {
-      let b = spectrum.bands
+  private func dial(_ face: UIImage, w: CGFloat, level: Double) -> some View {
+    let h = w * 0.62
+    return ZStack {
+      Image(uiImage: face).resizable().frame(width: w, height: h)
+      Capsule()
+        .fill(Color.black.opacity(0.85))
+        .frame(width: 1.3, height: h * 0.80)
+        .rotationEffect(.degrees(-48 + 96 * min(1, max(0, level))), anchor: .bottom)
+        .position(x: w / 2, y: h - h * 0.40)
+      Circle().fill(Color.black.opacity(0.85)).frame(width: h * 0.10).position(x: w / 2, y: h * 0.99)
+      Circle()
+        .fill(level > 0.84 ? Color.red : Color.red.opacity(0.2))
+        .frame(width: h * 0.09)
+        .position(x: w * 0.88, y: h * 0.84)
+    }
+    .frame(width: w, height: h)
+    .clipShape(RoundedRectangle(cornerRadius: h * 0.16, style: .continuous))
+  }
+
+  private func levels(at date: Date) -> (Double, Double) {
+    let sp = AudioSpectrum.shared
+    if sp.isLive {
+      let b = sp.bands
       let half = max(1, b.count / 2)
       let low = b.prefix(half).reduce(0, +) / Float(half)
       let high = b.suffix(half).reduce(0, +) / Float(half)
-      let l = 0.06 + Double(spectrum.level) * 0.58 + Double(low) * 0.22
-      let r = 0.06 + Double(spectrum.level) * 0.58 + Double(high) * 0.26
+      let l = 0.06 + Double(sp.level) * 0.58 + Double(low) * 0.22
+      let r = 0.06 + Double(sp.level) * 0.58 + Double(high) * 0.26
       return (min(1, l), min(1, r))
     }
     guard player.isPlaying else { return (0, 0) }
@@ -191,32 +222,6 @@ struct CassetteStage: View {
     let l = base + 0.16 * sin(t * 9.1) + 0.08 * sin(t * 17.3)
     let r = base + 0.16 * sin(t * 8.3 + 1) + 0.08 * cos(t * 15.1)
     return (min(1, max(0, l)), min(1, max(0, r)))
-  }
-
-  // MARK: Teclas Mecânicas
-
-  private func keys(_ W: CGFloat) -> some View {
-    let H = W * 0.15
-    return ZStack {
-      RoundedRectangle(cornerRadius: W * 0.04, style: .continuous)
-        .fill(LinearGradient(colors: [Color(white: 0.08), Color(white: 0.16)], startPoint: .top, endPoint: .bottom))
-        .overlay(RoundedRectangle(cornerRadius: W * 0.04, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 0.8))
-      HStack(spacing: W * 0.012) {
-        PianoKey(icon: "backward.fill", label: "REW", latched: false, width: W * 0.17, height: H * 0.78) { player.previousTrack() }
-        PianoKey(icon: "play.fill", label: "PLAY", latched: player.isPlaying, width: W * 0.2, height: H * 0.78) {
-          if !player.isPlaying { player.togglePlayPause() }
-        }
-        PianoKey(icon: "stop.fill", label: "STOP", latched: false, width: W * 0.17, height: H * 0.78) {
-          if player.isPlaying { player.togglePlayPause() }
-        }
-        PianoKey(icon: "forward.fill", label: "FF", latched: false, width: W * 0.17, height: H * 0.78) { player.nextTrack() }
-        PianoKey(icon: "eject.fill", label: sideB ? "LADO A" : "LADO B", latched: sideB, width: W * 0.17, height: H * 0.78) {
-          Task { await ArtworkStore.shared.ensurePhoto(track.artist) }
-          sideB.toggle()
-        }
-      }
-    }
-    .frame(width: W, height: H)
   }
 }
 
@@ -243,6 +248,23 @@ private struct CassetteFlipWrapper<Front: View, Back: View>: View, Animatable {
   }
 }
 
+/// Estado dos carretéis (ângulos acumulados), mutável sem refazer a view.
+final class ReelState {
+  var aL: Double = 0
+  var aR: Double = 0
+  private var last: Double = 0
+  func step(now: Double, rL: CGFloat, rR: CGFloat, animate: Bool) -> (Double, Double) {
+    let dt = last == 0 ? 0 : min(0.1, max(0, now - last))
+    last = now
+    if animate {
+      // velocidade linear da fita constante: ω = k / raio (carretel cheio gira mais devagar)
+      aL -= 14.0 / Double(max(0.03, rL)) * dt
+      aR -= 14.0 / Double(max(0.03, rR)) * dt
+    }
+    return (aL, aR)
+  }
+}
+
 // MARK: - Fita K7
 
 struct CassetteTape: View {
@@ -254,429 +276,141 @@ struct CassetteTape: View {
   let progress: Double
   let seconds: Double
   var style: CassetteStyle = .smokedStudio
+  var live: CassetteLive? = nil
+
+  @Environment(\.displayScale) private var displayScale
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var layers: CassetteLayers?
+  @State private var reels = ReelState()
+
+  private var px: Int { Int((width * displayScale).rounded()) }
 
   var body: some View {
     let w = width
-    let h = w / 1.574
-    let hubR = h * 0.085
-    let fullR = h * 0.25
-    let a = fullR * fullR - hubR * hubR
-    let rL = sqrt(fullR * fullR - progress * a)
-    let rR = sqrt(hubR * hubR + progress * a)
-    let vT = 3.456 * hubR * seconds
-    let thetaL = -(vT * (2 / a) * (fullR - rL)) * 180 / .pi
-    let thetaR = -(vT * (2 / a) * (rR - hubR)) * 180 / .pi
-    let reelDX = w * 0.17
-
+    let h = w / TapeGeo.aspect
+    let L = layers ?? LumeTextures.shared.cachedCassette(style: style, sideB: sideB, px: px)
+    let parts = LumeTextures.shared.tapeParts()
     ZStack {
-      shellView(w: w, h: h)
-
-      // Etiqueta ou modo Cristal Transparente
-      if style == .crystalClear {
-        crystalWindow(w: w, h: h, hubR: hubR, rL: rL, rR: rR, reelDX: reelDX, thetaL: thetaL, thetaR: thetaR)
+      if let L {
+        Image(uiImage: L.shadow)
+          .resizable()
+          .frame(width: w * (1 + 2 * TapeGeo.shadowMarginX), height: h + w * (TapeGeo.shadowMarginTop + TapeGeo.shadowMarginBottom))
+          .offset(y: w * (TapeGeo.shadowMarginBottom - TapeGeo.shadowMarginTop) / 2)
+          .allowsHitTesting(false)
+        Image(uiImage: L.back).resizable().frame(width: w, height: h)
+        reelLayer(w: w, h: h, parts: parts)
+        Image(uiImage: L.front).resizable().frame(width: w, height: h)
+        labelText(w: w)
       } else {
-        labelSticker(w: w, h: h, hubR: hubR, rL: rL, rR: rR, reelDX: reelDX, thetaL: thetaL, thetaR: thetaR)
+        RoundedRectangle(cornerRadius: w * 0.034, style: .continuous).fill(Color.white.opacity(0.08)).frame(width: w, height: h)
       }
-
-      // Cabeçote magnético dourado + pinch rollers + trapézio inferior
-      TrapezoidShape()
-        .fill(LinearGradient(colors: headShellColors, startPoint: .top, endPoint: .bottom))
-        .overlay(TrapezoidShape().stroke(Color.white.opacity(0.22), lineWidth: 0.8))
-        .frame(width: w * 0.62, height: h * 0.17)
-        .overlay {
-          HStack(spacing: w * 0.042) {
-            // Pinch roller esquerdo
-            Circle().fill(Color(white: 0.12))
-              .overlay(Circle().stroke(Color(white: 0.55), lineWidth: 1))
-              .frame(width: h * 0.062)
-            RoundedRectangle(cornerRadius: 2).fill(Color.black).frame(width: w * 0.075, height: h * 0.06)
-            // Cabeçote magnético dourado central
-            RoundedRectangle(cornerRadius: 2)
-              .fill(LinearGradient(colors: [Color(hex: 0xF5D06B), Color(hex: 0xB8860B)], startPoint: .top, endPoint: .bottom))
-              .frame(width: w * 0.065, height: h * 0.065)
-            RoundedRectangle(cornerRadius: 2).fill(Color.black).frame(width: w * 0.075, height: h * 0.06)
-            // Pinch roller direito
-            Circle().fill(Color(white: 0.12))
-              .overlay(Circle().stroke(Color(white: 0.55), lineWidth: 1))
-              .frame(width: h * 0.062)
-          }
-          .offset(y: h * 0.02)
-        }
-        .frame(maxHeight: .infinity, alignment: .bottom)
-
-      ForEach(Array(screwPoints(w: w, h: h).enumerated()), id: \.offset) { _, p in
-        Screw(size: w * 0.022).offset(x: p.x, y: p.y)
-      }
-
-      RoundedRectangle(cornerRadius: w * 0.035, style: .continuous)
-        .fill(LinearGradient(colors: [.white.opacity(0.12), .clear, .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
-        .allowsHitTesting(false)
     }
     .frame(width: w, height: h)
-    .shadow(color: .black.opacity(0.55), radius: 8, y: 5)
-  }
-
-  private func shellView(w: CGFloat, h: CGFloat) -> some View {
-    let colors: [Color] = {
-      switch style {
-      case .smokedStudio: return [Color(white: 0.20), Color(white: 0.10)]
-      case .crystalClear: return [Color.white.opacity(0.22), Color.white.opacity(0.08)]
-      case .metallicChrome: return [Color(white: 0.58), Color(white: 0.32)]
-      case .vintageCream: return [Color(red: 0.94, green: 0.90, blue: 0.80), Color(red: 0.84, green: 0.78, blue: 0.66)]
-      }
-    }()
-    return RoundedRectangle(cornerRadius: w * 0.035, style: .continuous)
-      .fill(LinearGradient(colors: colors, startPoint: .top, endPoint: .bottom))
-      .overlay(
-        RoundedRectangle(cornerRadius: w * 0.035, style: .continuous)
-          .stroke(LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.08)], startPoint: .top, endPoint: .bottom), lineWidth: 1)
-      )
-  }
-
-  private var headShellColors: [Color] {
-    switch style {
-    case .vintageCream: return [Color(red: 0.84, green: 0.78, blue: 0.66), Color(red: 0.70, green: 0.64, blue: 0.52)]
-    case .metallicChrome: return [Color(white: 0.42), Color(white: 0.24)]
-    default: return [Color(white: 0.18), Color(white: 0.09)]
+    .task(id: "\(style.rawValue)|\(sideB)|\(px)") {
+      if let hit = LumeTextures.shared.cachedCassette(style: style, sideB: sideB, px: px) { layers = hit; return }
+      layers = await LumeTextures.shared.cassette(style: style, sideB: sideB, px: px)
     }
   }
 
-  private func crystalWindow(w: CGFloat, h: CGFloat, hubR: CGFloat, rL: CGFloat, rR: CGFloat, reelDX: CGFloat, thetaL: Double, thetaR: Double) -> some View {
-    ZStack {
-      // Fundo interno transparente com guias de fita
-      RoundedRectangle(cornerRadius: w * 0.02, style: .continuous)
-        .fill(Color.black.opacity(0.62))
-        .overlay(
-          ArtworkImage(url: artworkURL, cornerRadius: 0, maxPixel: 500)
-            .opacity(0.28)
-        )
-      Circle().fill(TapePack.gradient).frame(width: rL * 2, height: rL * 2).offset(x: -reelDX)
-      Circle().fill(TapePack.gradient).frame(width: rR * 2, height: rR * 2).offset(x: reelDX)
-      Rectangle().fill(Color(red: 0.34, green: 0.20, blue: 0.12)).frame(width: reelDX * 2.2, height: 1.8).offset(y: h * 0.22)
-      ReelHub(radius: hubR).rotationEffect(.degrees(thetaL)).offset(x: -reelDX)
-      ReelHub(radius: hubR).rotationEffect(.degrees(thetaR)).offset(x: reelDX)
-      VStack {
-        HStack {
-          Text(sideB ? "B" : "A").font(.system(size: w * 0.042, weight: .black)).foregroundStyle(.white)
-          Text(sideB ? artist : title).font(Theme.font(w * 0.036, .bold)).foregroundStyle(.white).lineLimit(1)
-          Spacer()
-          Text("CRYSTAL 90").font(.system(size: w * 0.024, weight: .heavy)).foregroundStyle(Theme.peach)
-        }
-        .padding(.horizontal, w * 0.035)
-        .padding(.top, h * 0.035)
-        Spacer()
+  // MARK: carretéis (única parte que anima)
+
+  @ViewBuilder
+  private func reelLayer(w: CGFloat, h: CGFloat, parts: (hub: UIImage, pack: UIImage)) -> some View {
+    if let live {
+      TimelineView(.animation(minimumInterval: reduceMotion ? 1 : 1.0 / 30.0, paused: !live.playing)) { tl in
+        reelsView(p: live.progress(at: tl.date), now: tl.date.timeIntervalSinceReferenceDate, w: w, h: h, parts: parts, animate: live.playing && !reduceMotion)
       }
-    }
-    .clipShape(RoundedRectangle(cornerRadius: w * 0.02, style: .continuous))
-    .frame(width: w * 0.88, height: h * 0.70)
-    .offset(y: -h * 0.09)
-  }
-
-  private func labelSticker(w: CGFloat, h: CGFloat, hubR: CGFloat, rL: CGFloat, rR: CGFloat, reelDX: CGFloat, thetaL: Double, thetaR: Double) -> some View {
-    ZStack {
-      ArtworkImage(url: artworkURL, cornerRadius: 0, maxPixel: 700, placeholderIcon: sideB ? "person.fill" : "music.note")
-      LinearGradient(colors: [.clear, .black.opacity(0.18)], startPoint: .top, endPoint: .bottom)
-      VStack(spacing: 0) {
-        HStack(spacing: w * 0.02) {
-          Text(sideB ? "B" : "A")
-            .font(.system(size: w * 0.05, weight: .black, design: .rounded))
-            .foregroundStyle(Color.black.opacity(0.85))
-            .frame(width: w * 0.07, height: w * 0.065)
-            .background(RoundedRectangle(cornerRadius: w * 0.01).fill(Color.white.opacity(0.9)))
-          Text(sideB ? artist : title)
-            .font(.custom("Noteworthy-Bold", size: w * 0.052))
-            .foregroundStyle(Color(red: 0.12, green: 0.14, blue: 0.32))
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-          Spacer(minLength: 0)
-          Text("90")
-            .font(.system(size: w * 0.038, weight: .heavy, design: .rounded))
-            .foregroundStyle(Color.black.opacity(0.55))
-        }
-        .padding(.horizontal, w * 0.025)
-        .frame(height: h * 0.17)
-        .background(Color(red: 0.97, green: 0.96, blue: 0.92).opacity(0.94))
-
-        Spacer(minLength: 0)
-
-        VStack(spacing: 0) {
-          ForEach(0..<4, id: \.self) { i in Theme.prismColors[i].frame(height: h * 0.022) }
-        }
-        .opacity(0.95)
-        HStack {
-          Text(sideB ? title : artist)
-            .font(.custom("Noteworthy-Bold", size: w * 0.036))
-            .foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.6), radius: 2)
-            .lineLimit(1)
-          Spacer()
-          Text(style == .metallicChrome ? "CHROME · TYPE II" : "LUME · HIGH BIAS")
-            .font(.system(size: w * 0.022, weight: .heavy, design: .rounded))
-            .foregroundStyle(.white.opacity(0.85))
-            .shadow(color: .black.opacity(0.6), radius: 2)
-        }
-        .padding(.horizontal, w * 0.03)
-        .frame(height: h * 0.11)
-        .background(Color.black.opacity(0.35))
-      }
-
-      // Janela dos carretéis
-      ZStack {
-        RoundedRectangle(cornerRadius: h * 0.11, style: .continuous)
-          .fill(Color(white: 0.04).opacity(0.92))
-        Circle().fill(TapePack.gradient).frame(width: rL * 2, height: rL * 2).offset(x: -reelDX)
-        Circle().fill(TapePack.gradient).frame(width: rR * 2, height: rR * 2).offset(x: reelDX)
-        Rectangle().fill(Color(red: 0.28, green: 0.17, blue: 0.10)).frame(width: reelDX * 2, height: 1.4).offset(y: h * 0.13)
-        ReelHub(radius: hubR).rotationEffect(.degrees(thetaL)).offset(x: -reelDX)
-        ReelHub(radius: hubR).rotationEffect(.degrees(thetaR)).offset(x: reelDX)
-        HStack(spacing: w * 0.018) {
-          ForEach(0..<5, id: \.self) { _ in Rectangle().fill(Color.white.opacity(0.35)).frame(width: 0.8, height: h * 0.03) }
-        }
-        .offset(y: -h * 0.12)
-        RoundedRectangle(cornerRadius: h * 0.11, style: .continuous)
-          .fill(LinearGradient(colors: [.white.opacity(0.22), .clear, .white.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing))
-        RoundedRectangle(cornerRadius: h * 0.11, style: .continuous)
-          .stroke(Color.white.opacity(0.4), lineWidth: 0.8)
-      }
-      .frame(width: w * 0.56, height: h * 0.27)
-      .clipped()
-      .offset(y: -h * 0.015)
-    }
-    .clipShape(RoundedRectangle(cornerRadius: w * 0.02, style: .continuous))
-    .frame(width: w * 0.88, height: h * 0.70)
-    .offset(y: -h * 0.09)
-  }
-
-  private func screwPoints(w: CGFloat, h: CGFloat) -> [CGPoint] {
-    [CGPoint(x: -w * 0.465, y: -h * 0.44), CGPoint(x: w * 0.465, y: -h * 0.44),
-     CGPoint(x: -w * 0.465, y: h * 0.44), CGPoint(x: w * 0.465, y: h * 0.44),
-     CGPoint(x: 0, y: h * 0.33)]
-  }
-}
-
-private enum TapePack {
-  static let gradient = RadialGradient(
-    colors: [Color(red: 0.30, green: 0.19, blue: 0.11), Color(red: 0.20, green: 0.12, blue: 0.07), Color(red: 0.26, green: 0.16, blue: 0.09)],
-    center: .center, startRadius: 0, endRadius: 60
-  )
-}
-
-struct ReelHub: View {
-  let radius: CGFloat
-  var body: some View {
-    ZStack {
-      Circle().fill(Color(white: 0.94)).frame(width: radius * 2, height: radius * 2)
-        .overlay(Circle().stroke(Color.black.opacity(0.25), lineWidth: 0.6))
-      Circle().fill(Color(white: 0.12)).frame(width: radius * 1.1, height: radius * 1.1)
-      ForEach(0..<6, id: \.self) { i in
-        RoundedRectangle(cornerRadius: 1)
-          .fill(Color(white: 0.94))
-          .frame(width: radius * 0.22, height: radius * 0.3)
-          .offset(y: -radius * 0.48)
-          .rotationEffect(.degrees(Double(i) * 60))
-      }
-      Circle().fill(Color(white: 0.12)).frame(width: radius * 0.42, height: radius * 0.42)
+    } else {
+      reelsView(p: progress, now: 0, w: w, h: h, parts: parts, animate: false)
     }
   }
-}
 
-struct Screw: View {
-  let size: CGFloat
-  var body: some View {
-    ZStack {
-      Circle().fill(RadialGradient(colors: [Color(white: 0.85), Color(white: 0.4)], center: UnitPoint(x: 0.35, y: 0.3), startRadius: 0, endRadius: size * 0.7))
-      Rectangle().fill(Color.black.opacity(0.5)).frame(width: size * 0.7, height: size * 0.12).rotationEffect(.degrees(35))
+  private func reelsView(p: Double, now: Double, w: CGFloat, h: CGFloat, parts: (hub: UIImage, pack: UIImage), animate: Bool) -> some View {
+    let a = TapeGeo.rFull * TapeGeo.rFull - TapeGeo.rEmpty * TapeGeo.rEmpty
+    let q = CGFloat(min(1, max(0, p)))
+    let rL = sqrt(TapeGeo.rFull * TapeGeo.rFull - q * a)
+    let rR = sqrt(TapeGeo.rEmpty * TapeGeo.rEmpty + q * a)
+    let ang = animate ? reels.step(now: now, rL: rL, rR: rR, animate: true) : (reels.aL, reels.aR)
+    let cL = CGPoint(x: TapeGeo.reelL.x * w, y: TapeGeo.reelL.y * w)
+    let cR = CGPoint(x: TapeGeo.reelR.x * w, y: TapeGeo.reelR.y * w)
+    return ZStack {
+      tapePath(w: w, rL: rL, rR: rR)
+        .stroke(Color(red: 0.30, green: 0.18, blue: 0.10), style: StrokeStyle(lineWidth: max(1, w * 0.0055), lineCap: .round))
+      Image(uiImage: parts.pack).resizable()
+        .frame(width: TapeGeo.rFull * 2 * w, height: TapeGeo.rFull * 2 * w)
+        .scaleEffect(rL / TapeGeo.rFull)
+        .position(cL)
+      Image(uiImage: parts.pack).resizable()
+        .frame(width: TapeGeo.rFull * 2 * w, height: TapeGeo.rFull * 2 * w)
+        .scaleEffect(rR / TapeGeo.rFull)
+        .position(cR)
+      Image(uiImage: parts.hub).resizable()
+        .frame(width: TapeGeo.hubR * 2 * w, height: TapeGeo.hubR * 2 * w)
+        .rotationEffect(.degrees(ang.0))
+        .position(cL)
+      Image(uiImage: parts.hub).resizable()
+        .frame(width: TapeGeo.hubR * 2 * w, height: TapeGeo.hubR * 2 * w)
+        .rotationEffect(.degrees(ang.1))
+        .position(cR)
     }
-    .frame(width: size, height: size)
+    .frame(width: w, height: h)
+    .allowsHitTesting(false)
   }
-}
 
-struct TrapezoidShape: Shape {
-  func path(in r: CGRect) -> Path {
+  /// Fita saindo de cada rolo (tangente) até os roletes guia e esticada na borda inferior.
+  private func tapePath(w: CGFloat, rL: CGFloat, rR: CGFloat) -> Path {
+    func tangent(from p: CGPoint, center c: CGPoint, r: CGFloat, outerSign: CGFloat) -> CGPoint {
+      let dx = p.x - c.x, dy = p.y - c.y
+      let d = max(r + 0.001, hypot(dx, dy))
+      let beta = atan2(dy, dx)
+      let alpha = acos(min(1, r / d))
+      let t = beta + outerSign * alpha
+      return CGPoint(x: c.x + r * cos(t), y: c.y + r * sin(t))
+    }
+    let rolL = TapeGeo.rollerL, rolR = TapeGeo.rollerR
+    let tL = tangent(from: CGPoint(x: rolL.x - 0.016, y: rolL.y), center: TapeGeo.reelL, r: rL, outerSign: 1)
+    let tR = tangent(from: CGPoint(x: rolR.x + 0.016, y: rolR.y), center: TapeGeo.reelR, r: rR, outerSign: -1)
     var p = Path()
-    let inset = r.width * 0.1
-    p.move(to: CGPoint(x: r.minX + inset, y: r.minY))
-    p.addLine(to: CGPoint(x: r.maxX - inset, y: r.minY))
-    p.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
-    p.addLine(to: CGPoint(x: r.minX, y: r.maxY))
-    p.closeSubpath()
+    p.move(to: CGPoint(x: tL.x * w, y: tL.y * w))
+    p.addLine(to: CGPoint(x: (rolL.x - 0.016) * w, y: rolL.y * w))
+    p.move(to: CGPoint(x: tR.x * w, y: tR.y * w))
+    p.addLine(to: CGPoint(x: (rolR.x + 0.016) * w, y: rolR.y * w))
     return p
   }
-}
 
-// MARK: - Painel metálico GPU
+  // MARK: escrita à mão na etiqueta
 
-struct BrushedPanel: View, Equatable {
-  let cornerRadius: CGFloat
-  let dark: Bool
-
-  var body: some View {
-    let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    GeometryReader { g in
-      Image(uiImage: LumeTextures.shared.brushedSurface(styleId: dark ? 1 : 0))
-        .resizable()
-        .scaledToFill()
-        .frame(width: g.size.width, height: g.size.height)
-        .clipShape(shape)
-        .overlay(
-          shape.stroke(LinearGradient(colors: [.white.opacity(dark ? 0.3 : 0.90), .black.opacity(0.28)], startPoint: .zero, endPoint: .bottomTrailing), lineWidth: 1.1)
-        )
-    }
-    .drawingGroup()
+  private func handFont(_ size: CGFloat) -> Font {
+    UIFont(name: "BradleyHandITCTT-Bold", size: size) != nil ? .custom("BradleyHandITCTT-Bold", size: size) : .custom("Noteworthy-Bold", size: size)
   }
-}
 
-// MARK: - VU meter
-
-struct VUMeter: View {
-  let level: Double
-  let label: String
-
-  var body: some View {
-    GeometryReader { g in
-      let w = g.size.width, h = g.size.height
-      let isPeak = level > 0.84
-      ZStack {
-        RoundedRectangle(cornerRadius: h * 0.12, style: .continuous)
-          .fill(LinearGradient(colors: [Color(red: 1.0, green: 0.93, blue: 0.78), Color(red: 0.98, green: 0.82, blue: 0.58)], startPoint: .top, endPoint: .bottom))
-          .overlay(
-            RoundedRectangle(cornerRadius: h * 0.12, style: .continuous)
-              .fill(RadialGradient(colors: [.white.opacity(0.6), .clear], center: UnitPoint(x: 0.5, y: 1.1), startRadius: 0, endRadius: w * 0.75))
-          )
-        Canvas { ctx, sz in
-          let pivot = CGPoint(x: sz.width / 2, y: sz.height * 1.02)
-          let radius = sz.height * 0.82
-          for k in 0...10 {
-            let f = Double(k) / 10
-            let ang = (-50 + 100 * f) * .pi / 180
-            let inner = radius * (k % 2 == 0 ? 0.84 : 0.89)
-            let p1 = CGPoint(x: pivot.x + inner * CGFloat(sin(ang)), y: pivot.y - inner * CGFloat(cos(ang)))
-            let p2 = CGPoint(x: pivot.x + radius * CGFloat(sin(ang)), y: pivot.y - radius * CGFloat(cos(ang)))
-            var path = Path()
-            path.move(to: p1)
-            path.addLine(to: p2)
-            ctx.stroke(path, with: .color(f > 0.72 ? Color(red: 0.85, green: 0.12, blue: 0.1) : Color.black.opacity(0.75)), lineWidth: k % 2 == 0 ? 1.2 : 0.7)
-          }
-          var arc = Path()
-          arc.addArc(center: pivot, radius: radius, startAngle: .degrees(-140), endAngle: .degrees(-40), clockwise: false)
-          ctx.stroke(arc, with: .color(.black.opacity(0.6)), lineWidth: 0.8)
-          var red = Path()
-          red.addArc(center: pivot, radius: radius * 0.98, startAngle: .degrees(-58), endAngle: .degrees(-40), clockwise: false)
-          ctx.stroke(red, with: .color(Color(red: 0.85, green: 0.12, blue: 0.1)), lineWidth: 2.5)
-        }
-        Text("VU")
-          .font(.system(size: h * 0.17, weight: .heavy, design: .serif))
-          .foregroundStyle(.black.opacity(0.7))
-          .offset(y: h * 0.12)
-        Text(label)
-          .font(.system(size: h * 0.12, weight: .bold, design: .rounded))
-          .foregroundStyle(.black.opacity(0.5))
-          .position(x: w * 0.12, y: h * 0.82)
-
-        // LED PEAK vermelho
-        Circle()
-          .fill(isPeak ? Color.red : Color.red.opacity(0.18))
-          .frame(width: h * 0.10, height: h * 0.10)
-          .shadow(color: isPeak ? .red : .clear, radius: 4)
-          .position(x: w * 0.88, y: h * 0.82)
-
-        // Agulha direta (já suavizada por VUBallistics)
-        Capsule()
-          .fill(Color.black.opacity(0.85))
-          .frame(width: 1.5, height: h * 0.86)
-          .offset(y: -h * 0.43)
-          .rotationEffect(.degrees(-48 + 96 * min(1, max(0, level))), anchor: .center)
-          .position(x: w / 2, y: h * 1.02)
-        Circle().fill(Color.black.opacity(0.8)).frame(width: h * 0.1).position(x: w / 2, y: h * 0.98)
-
-        RoundedRectangle(cornerRadius: h * 0.12, style: .continuous)
-          .fill(LinearGradient(colors: [.white.opacity(0.35), .clear, .clear], startPoint: .top, endPoint: .bottom))
-        RoundedRectangle(cornerRadius: h * 0.12, style: .continuous)
-          .stroke(Color.black.opacity(0.5), lineWidth: 1)
-      }
-      .clipShape(RoundedRectangle(cornerRadius: h * 0.12, style: .continuous))
-      .shadow(color: Color(red: 1, green: 0.75, blue: 0.4).opacity(0.35), radius: 6)
-    }
-  }
-}
-
-struct TapeCounter: View {
-  let value: Int
-  let digitWidth: CGFloat
-  var body: some View {
-    HStack(spacing: 2) {
-      ForEach(Array(String(format: "%03d", value).enumerated()), id: \.offset) { _, ch in
-        Text(String(ch))
-          .font(.system(size: digitWidth * 1.15, weight: .semibold, design: .monospaced))
-          .foregroundStyle(.white)
-          .contentTransition(.numericText(countsDown: false))
-          .frame(width: digitWidth, height: digitWidth * 1.5)
-          .background(
-            RoundedRectangle(cornerRadius: 3)
-              .fill(LinearGradient(colors: [Color(white: 0.02), Color(white: 0.2), Color(white: 0.02)], startPoint: .top, endPoint: .bottom))
-          )
-      }
-    }
-    .padding(3)
-    .background(RoundedRectangle(cornerRadius: 5).fill(Color.black))
-    .animation(.snappy, value: value)
-  }
-}
-
-struct PianoKey: View {
-  let icon: String
-  let label: String
-  let latched: Bool
-  let width: CGFloat
-  let height: CGFloat
-  let action: () -> Void
-  @State private var pressed = false
-
-  var body: some View {
-    let down = pressed || latched
-    VStack(spacing: height * 0.06) {
-      Image(systemName: icon)
-        .font(.system(size: height * 0.26, weight: .bold))
-      Text(label)
-        .font(.system(size: height * 0.14, weight: .heavy, design: .rounded))
+  private func labelText(w: CGFloat) -> some View {
+    let main = sideB ? artist : title
+    let sub = sideB ? title : artist
+    return ZStack {
+      Text(main)
+        .font(handFont(w * 0.054))
+        .foregroundStyle(Color(red: 0.10, green: 0.14, blue: 0.46))
         .lineLimit(1)
-        .minimumScaleFactor(0.6)
+        .minimumScaleFactor(0.5)
+        .frame(width: w * 0.69, alignment: .leading)
+        .rotationEffect(.degrees(-0.7))
+        .position(x: w * (0.085 + 0.345), y: w * 0.133)
+      Text(sub)
+        .font(handFont(w * 0.040))
+        .foregroundStyle(Color(red: 0.16, green: 0.18, blue: 0.40).opacity(0.85))
+        .lineLimit(1)
+        .minimumScaleFactor(0.5)
+        .frame(width: w * 0.69, alignment: .leading)
+        .rotationEffect(.degrees(-0.5))
+        .position(x: w * (0.085 + 0.345), y: w * 0.172)
+      ArtworkImage(url: artworkURL, cornerRadius: w * 0.004, maxPixel: 220, placeholderIcon: sideB ? "person.fill" : "music.note")
+        .frame(width: w * 0.078, height: w * 0.078)
+        .position(x: w * 0.873, y: w * 0.147)
     }
-    .foregroundStyle(Color.black.opacity(down ? 0.55 : 0.7))
-    .frame(width: width, height: height)
-    .background {
-      RoundedRectangle(cornerRadius: height * 0.12, style: .continuous)
-        .fill(LinearGradient(colors: down ? [Color(white: 0.70), Color(white: 0.82)] : [Color(white: 0.96), Color(white: 0.74)], startPoint: .top, endPoint: .bottom))
-        .overlay(alignment: .bottom) {
-          VStack(spacing: 1.5) {
-            ForEach(0..<3, id: \.self) { _ in Rectangle().fill(Color.black.opacity(0.12)).frame(height: 0.7) }
-          }
-          .padding(.horizontal, width * 0.15)
-          .padding(.bottom, height * 0.08)
-        }
-        .overlay(
-          RoundedRectangle(cornerRadius: height * 0.12, style: .continuous)
-            .stroke(LinearGradient(colors: [.white, .black.opacity(0.2)], startPoint: .top, endPoint: .bottom), lineWidth: 0.8)
-        )
-    }
-    .overlay(alignment: .top) {
-      if latched {
-        Capsule().fill(Theme.mint).frame(width: width * 0.25, height: 2.5).shadow(color: Theme.mint, radius: 3).padding(.top, 3)
-      }
-    }
-    .shadow(color: .black.opacity(down ? 0.2 : 0.5), radius: down ? 1 : 3, y: down ? 1 : 3.5)
-    .offset(y: down ? 2 : 0)
-    .scaleEffect(y: down ? 0.97 : 1, anchor: .bottom)
-    .animation(.spring(response: 0.18, dampingFraction: 0.6), value: down)
-    .contentShape(Rectangle())
-    .gesture(
-      DragGesture(minimumDistance: 0)
-        .onChanged { _ in if !pressed { pressed = true; Haptics.rigid() } }
-        .onEnded { _ in pressed = false; action() }
-    )
-    .accessibilityElement()
-    .accessibilityLabel(label)
-    .accessibilityAddTraits(.isButton)
-    .accessibilityAction { action() }
+    // Mesmo quadro dos carretéis: sem ele as posições ficavam relativas ao quadro maior da sombra
+    // e o título/capa escapavam para fora da etiqueta (canto superior esquerdo).
+    .frame(width: w, height: w / TapeGeo.aspect)
+    .allowsHitTesting(false)
   }
 }

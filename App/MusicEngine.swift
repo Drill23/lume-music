@@ -14,6 +14,10 @@ actor MusicEngine {
     let headers: [String: String]
     let bitrate: Int
     let expiresAt: Date
+    /// true = só áudio (itag 140, AAC 128k): ~3,4x menos dados que o MP4 com vídeo.
+    var audioOnly: Bool = false
+    /// Alternativa já resolvida (MP4 progressivo itag 18) caso o AVPlayer recuse o áudio puro.
+    var fallbackURL: URL? = nil
   }
 
   private var streamCache: [String: ResolvedStream] = [:]
@@ -320,7 +324,9 @@ actor MusicEngine {
     if let cached = streamCache[videoId], cached.expiresAt > Date().addingTimeInterval(60) {
       return cached
     }
-    // Primary: ANDROID client progressive MP4 (itag 18) — verified HTTP 200/206 past 1MB directly in native iOS AVPlayer!
+    // Primário: cliente ANDROID. Preferimos o áudio puro itag 140 (AAC-LC 128k, m4a) — testado com
+    // HTTP 206 além de 1 MB e tocando no AVPlayer (com o tap de FFT). O MP4 itag 18 (vídeo 360p + áudio,
+    // ~444 kbps) fica só como reserva: baixá-lo era desperdício de rede, decodificação e bateria.
     if let resolved = await requestPlayerStream(
       videoId: videoId,
       client: [
@@ -377,11 +383,27 @@ actor MusicEngine {
       guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
             let sd = json["streamingData"] as? [String: Any] else { return nil }
 
-      // 1. Progressive formats (itag 18 MP4/AAC-LC) — 100% playable natively in AVPlayer with zero PO-token 403!
+      // 0. Áudio puro AAC (itag 140; reserva 139 HE-AAC) — arquivo m4a progressivo: o tap de FFT funciona.
       let combined = (sd["formats"] as? [[String: Any]]) ?? []
+      let adaptive = (sd["adaptiveFormats"] as? [[String: Any]]) ?? []
       let preferredProgressive = combined.first(where: { ($0["itag"] as? Int) == 18 && ($0["url"] as? String) != nil })
         ?? combined.first(where: { (($0["mimeType"] as? String) ?? "").contains("mp4") && ($0["url"] as? String) != nil })
-      if let fmt = preferredProgressive, let urlStr = fmt["url"] as? String, let streamURL = URL(string: urlStr) {
+      let progressiveURL = (preferredProgressive?["url"] as? String).flatMap(URL.init(string:))
+      // 27/11/2026: testado com curl — sem PO token o itag 140 responde 403 depois de ~1 MB (a música pararia
+      // por volta de 1 min). Só usamos áudio puro se não houver MP4 progressivo (que toca a faixa inteira).
+      let audioFmt: [String: Any]? = progressiveURL != nil ? nil : (adaptive.first(where: { ($0["itag"] as? Int) == 140 && ($0["url"] as? String) != nil })
+        ?? adaptive.first(where: {
+          let mime = ($0["mimeType"] as? String) ?? ""
+          return mime.hasPrefix("audio/mp4") && mime.contains("mp4a.40.2") && ($0["url"] as? String) != nil
+        }))
+      if let fmt = audioFmt, let urlStr = fmt["url"] as? String, let streamURL = URL(string: urlStr) {
+        let br = max(96000, (fmt["bitrate"] as? Int) ?? 128000)
+        return ResolvedStream(url: streamURL, headers: [:], bitrate: br, expiresAt: Date().addingTimeInterval(40 * 60),
+                              audioOnly: true, fallbackURL: progressiveURL)
+      }
+
+      // 1. Progressive formats (itag 18 MP4/AAC-LC) — reserva: toca nativo no AVPlayer, sem PO-token.
+      if let fmt = preferredProgressive, let streamURL = progressiveURL {
         let br = max(96000, (fmt["bitrate"] as? Int) ?? 128000)
         return ResolvedStream(url: streamURL, headers: [:], bitrate: br, expiresAt: Date().addingTimeInterval(40 * 60))
       }

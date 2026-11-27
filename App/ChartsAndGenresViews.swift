@@ -179,6 +179,7 @@ struct CountryChartView: View {
   @State private var bundle: CountryChartBundle?
   @State private var loading = true
   @State private var scope: CountryScope = .songs
+  @State private var caption: String = ""
 
   enum CountryScope: String, CaseIterable, Identifiable {
     case songs = "Top 50"
@@ -200,19 +201,7 @@ struct CountryChartView: View {
         scopePicker
 
         if loading && bundle == nil {
-          VStack(spacing: 12) {
-            ForEach(0..<8, id: \.self) { _ in
-              HStack(spacing: 12) {
-                SkeletonBlock(width: 50, height: 50, radius: 8)
-                VStack(alignment: .leading, spacing: 6) {
-                  SkeletonBlock(width: 190, height: 14, radius: 6)
-                  SkeletonBlock(width: 120, height: 12, radius: 6)
-                }
-                Spacer()
-              }
-            }
-          }
-          .padding(.horizontal, 20)
+          SkeletonTrackRows(count: 8).padding(.horizontal, 20)
         } else if let bundle {
           scopeContent(bundle)
         } else {
@@ -226,12 +215,31 @@ struct CountryChartView: View {
     .navigationTitle("")
     .navigationBarTitleDisplayMode(.inline)
     .toolbarBackground(.hidden, for: .navigationBar)
-    .task(id: selectedCountry.code) {
+    .task(id: selectedCountry.code) { await loadChart() }
+  }
+
+  /// Stale-while-revalidate: mostra o que já existe NA HORA, atualiza as músicas e só então completa artistas/em alta.
+  private func loadChart() async {
+    let c = selectedCountry
+    let svc = CatalogExplorerService.shared
+    if let cached = await svc.cachedCountryChart(for: c) {
+      bundle = cached
+      loading = false
+    } else {
+      bundle = nil
       loading = true
-      bundle = await CatalogExplorerService.shared.countryChart(for: selectedCountry)
-      if let arts = bundle?.topArtists { ArtworkStore.shared.register(arts) }
+    }
+    if let place = ChartPlace.place(id: c.code), let l = await ChartsService.shared.cached(place) { caption = l.caption }
+    if let fast = await svc.countryChartFast(for: c), !fast.topSongs.isEmpty, !Task.isCancelled {
+      withAnimation(.easeOut(duration: 0.2)) { bundle = fast }
       loading = false
     }
+    let full = await svc.countryChart(for: c)
+    guard !Task.isCancelled else { return }
+    withAnimation(.easeOut(duration: 0.2)) { bundle = full.topSongs.isEmpty ? bundle : full }
+    if let place = ChartPlace.place(id: c.code), let l = await ChartsService.shared.cached(place) { caption = l.caption }
+    ArtworkStore.shared.register(full.topArtists)
+    loading = false
   }
 
   private var hero: some View {
@@ -252,15 +260,20 @@ struct CountryChartView: View {
           .foregroundStyle(.white.opacity(0.85))
         HStack(spacing: 10) {
           Text(selectedCountry.flag).font(.system(size: 36))
-          Text("Top 50 \(selectedCountry.name)")
+          Text(selectedCountry.code == "world" ? "Top 50 Global" : "Top 50 \(selectedCountry.name)")
             .font(.system(size: 30, weight: .heavy))
             .foregroundStyle(.white)
             .lineLimit(2)
             .minimumScaleFactor(0.75)
         }
-        Text("As músicas, álbuns e cantores mais ouvidos no país")
+        Text(selectedCountry.code == "world" ? "As músicas mais ouvidas no mundo inteiro" : "As músicas, álbuns e cantores mais ouvidos no país")
           .font(Theme.font(13.5, .medium))
           .foregroundStyle(.white.opacity(0.86))
+        if !caption.isEmpty {
+          Text(caption)
+            .font(Theme.font(11.5, .semibold))
+            .foregroundStyle(.white.opacity(0.7))
+        }
       }
       .padding(.horizontal, 20)
       .padding(.bottom, 22)
@@ -270,17 +283,9 @@ struct CountryChartView: View {
   }
 
   private var countryPickerStrip: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: 8) {
-        ForEach(ChartCountry.all) { c in
-          PrismChip(title: "\(c.flag) \(c.name)", active: c.code == selectedCountry.code) {
-            selectedCountry = c
-          }
-        }
-      }
-      .padding(.horizontal, 20)
+    PlaceChipsBar(selected: selectedCountry.code) { p in
+      withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) { selectedCountry = p.chartCountry }
     }
-    .scrollClipDisabled()
   }
 
   private var scopePicker: some View {
@@ -341,16 +346,20 @@ struct CountryChartView: View {
         .padding(.horizontal, 16)
       }
     case .trending:
-      let list = b.trending.isEmpty ? Array(b.topSongs.prefix(20)) : b.trending
-      VStack(spacing: 14) {
-        PlayShuffleBar(tracks: list, context: "Em alta · \(b.country.name)")
-          .padding(.horizontal, 20)
-        LazyVStack(spacing: 0) {
-          ForEach(Array(list.enumerated()), id: \.element.id) { idx, tr in
-            TrackRow(track: tr, rank: idx + 1, queue: list)
+      if b.trending.isEmpty {
+        EmptyStateView(icon: "play.rectangle", title: "Sem vídeos em alta",
+                       message: "O YouTube Music não trouxe vídeos em alta para este lugar agora.")
+      } else {
+        VStack(spacing: 14) {
+          PlayShuffleBar(tracks: b.trending, context: "Em alta · \(b.country.name)")
+            .padding(.horizontal, 20)
+          LazyVStack(spacing: 0) {
+            ForEach(Array(b.trending.enumerated()), id: \.element.id) { idx, tr in
+              TrackRow(track: tr, rank: idx + 1, queue: b.trending)
+            }
           }
+          .padding(.horizontal, 20)
         }
-        .padding(.horizontal, 20)
       }
     }
   }
@@ -368,19 +377,7 @@ struct GenreHubView: View {
       VStack(alignment: .leading, spacing: 26) {
         hero
         if loading && bundle == nil {
-          VStack(spacing: 12) {
-            ForEach(0..<6, id: \.self) { _ in
-              HStack(spacing: 12) {
-                SkeletonBlock(width: 50, height: 50, radius: 8)
-                VStack(alignment: .leading, spacing: 6) {
-                  SkeletonBlock(width: 180, height: 14, radius: 6)
-                  SkeletonBlock(width: 110, height: 12, radius: 6)
-                }
-                Spacer()
-              }
-            }
-          }
-          .padding(.horizontal, 20)
+          SkeletonTrackRows(count: 6).padding(.horizontal, 20)
         } else if let b = bundle {
           content(b)
         }
@@ -393,8 +390,16 @@ struct GenreHubView: View {
     .navigationBarTitleDisplayMode(.inline)
     .toolbarBackground(.hidden, for: .navigationBar)
     .task(id: genre.id) {
-      loading = true
-      bundle = await CatalogExplorerService.shared.genreHub(for: genre)
+      let svc = CatalogExplorerService.shared
+      if let cached = await svc.cachedGenreHub(for: genre) {
+        bundle = cached
+        loading = false
+      } else {
+        loading = true
+      }
+      let fresh = await svc.genreHub(for: genre)
+      guard !Task.isCancelled else { return }
+      if !fresh.topSongs.isEmpty { withAnimation(.easeOut(duration: 0.2)) { bundle = fresh } }
       if let arts = bundle?.topArtists { ArtworkStore.shared.register(arts) }
       loading = false
     }
@@ -1103,5 +1108,62 @@ struct EqualizerView: View {
     .padding(18)
     .glass(24)
     .padding(.horizontal, 20)
+  }
+}
+
+
+// MARK: - Gêneros (hub): estilos do Brasil, internacionais, climas e décadas
+
+struct GenresHubView: View {
+  @ObservedObject private var app = AppModel.shared
+  private let cols = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+
+  var body: some View {
+    ScrollView(showsIndicators: false) {
+      VStack(alignment: .leading, spacing: 28) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Gêneros")
+            .font(Theme.font(34, .bold))
+            .foregroundStyle(Theme.text)
+          Text("Toque num estilo para ver as mais tocadas, artistas e álbuns")
+            .font(Theme.font(14))
+            .foregroundStyle(Theme.secondary)
+        }
+        .padding(.horizontal, 20)
+
+        group("Estilos do Brasil") {
+          LazyVGrid(columns: cols, spacing: 12) {
+            ForEach(MusicGenre.all.filter { $0.group == .brasil }) { g in GenreCard(genre: g) }
+          }
+        }
+        group("Internacionais") {
+          LazyVGrid(columns: cols, spacing: 12) {
+            ForEach(MusicGenre.all.filter { $0.group == .internacional }) { g in GenreCard(genre: g) }
+          }
+        }
+        group("Climas e momentos") {
+          LazyVGrid(columns: cols, spacing: 12) {
+            ForEach(MoodCategory.activities) { m in MoodCard(mood: m) }
+          }
+        }
+        group("Décadas") {
+          LazyVGrid(columns: cols, spacing: 12) {
+            ForEach(MoodCategory.decades) { m in MoodCard(mood: m) }
+          }
+        }
+      }
+      .padding(.top, 8)
+      .padding(.bottom, 20)
+    }
+    .background(Theme.canvas.ignoresSafeArea())
+    .navigationTitle("")
+    .navigationBarTitleDisplayMode(.inline)
+  }
+
+  private func group<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    VStack(alignment: .leading, spacing: 12) {
+      SectionHeader(title: title)
+      content().padding(.horizontal, 20)
+    }
   }
 }

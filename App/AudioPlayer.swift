@@ -61,6 +61,7 @@ final class AudioPlayer: ObservableObject {
   private var player: AVPlayer?
   private var timeObserver: Any?
   private var endObserver: NSObjectProtocol?
+  private var failObserver: NSObjectProtocol?
   private var statusObs: NSKeyValueObservation?
   private var sleepTimer: Timer?
   private var loadTask: Task<Void, Never>?
@@ -69,6 +70,15 @@ final class AudioPlayer: ObservableObject {
   private var prefetchTask: Task<Void, Never>?
   private var retriedTrackIds: Set<String> = []
   private var nowPlayingArtImage: UIImage?
+  private var nowPlayingArtwork: MPMediaItemArtwork?
+  /// Capa simples da faixa atual (base da arte composta da tela de bloqueio).
+  private var lockCoverImage: UIImage?
+  private var lockArtTask: Task<Void, Never>?
+  /// MP4 progressivo (itag 18) guardado como reserva quando tocamos o áudio puro.
+  private var pendingFallbackURL: URL?
+  /// App em segundo plano / tela bloqueada: não publica o relógio (ninguém está vendo).
+  private var inBackground = false
+  private var lifecycleObservers: [NSObjectProtocol] = []
   private var radioFetching = false
   private var crossfadeTriggered = false
   private var shouldFadeInNext = false
@@ -77,6 +87,39 @@ final class AudioPlayer: ObservableObject {
     configureAudioSession()
     configureRemoteCommands()
     AudioSpectrum.shared.setEQGains(LibraryStore.shared.effectiveEQGains)
+    let nc = NotificationCenter.default
+    lifecycleObservers.append(nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated { self?.inBackground = true }
+    })
+    lifecycleObservers.append(nc.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        self.inBackground = false
+        // Sincroniza o relógio de uma vez ao voltar (no fundo ele não é publicado).
+        if let p = self.player {
+          let sec = p.currentTime().seconds
+          if sec.isFinite && sec >= 0 { self.currentTime = sec }
+          if let d = p.currentItem?.duration.seconds, d.isFinite, d > 1 { self.duration = d }
+        }
+      }
+    })
+  }
+
+  /// Redesenha a arte da tela de bloqueio (ex.: o estilo mudou nos Ajustes).
+  func refreshLockScreenArtwork() {
+    guard let track = currentTrack else { return }
+    scheduleLockArtwork(for: track)
+  }
+
+  /// Ganchos de depuração para o simulador: `-LMDebugPlay <videoId>` toca direto e
+  /// `-LMDebugOpenPlayer` abre o player. Sem argumentos, não faz nada.
+  func runDebugHooksIfNeeded() {
+    let args = ProcessInfo.processInfo.arguments
+    guard let i = args.firstIndex(of: "-LMDebugPlay"), i + 1 < args.count else { return }
+    let vid = args[i + 1]
+    let t = Track(id: vid, videoId: vid, title: "Teste de stream", artist: "Lume", artworkURL: "https://i.ytimg.com/vi/\(vid)/hqdefault.jpg", sourceService: "Debug")
+    play(t)
+    if args.contains("-LMDebugOpenPlayer") { AppModel.shared.openPlayer() }
   }
 
   private func configureAudioSession() {
@@ -345,6 +388,10 @@ final class AudioPlayer: ObservableObject {
 
     currentArtwork = ArtworkStore.shared.url(for: track)
     nowPlayingArtImage = nil
+    nowPlayingArtwork = nil
+    lockCoverImage = nil
+    lockArtTask?.cancel()
+    pendingFallbackURL = nil
 
     // 1. Real album cover (upgrade YouTube thumbnails) + ambient palette + lock-screen art + animated cover
     artTask = Task {
@@ -361,8 +408,10 @@ final class AudioPlayer: ObservableObject {
           self.accentSecondary = pal.vibrant2
         }
         if let img = await ImagePipeline.shared.image(art, maxPixel: 800), self.currentTrack?.id == track.id {
-          self.nowPlayingArtImage = img
-          self.updateNowPlaying()
+          // 1º a capa simples (instantâneo); depois a arte composta (vinil/K7) desenhada em segundo plano.
+          self.lockCoverImage = img
+          self.setNowPlayingImage(img)
+          self.scheduleLockArtwork(for: track)
         }
       }
       if LibraryStore.shared.animatedArtEnabled && track.animatedArtworkURL == nil {
@@ -441,7 +490,8 @@ final class AudioPlayer: ObservableObject {
         return
       }
       guard !Task.isCancelled else { return }
-      self.currentBitrateLabel = "AAC · Estéreo"
+      self.currentBitrateLabel = resolved.audioOnly ? "AAC · \(max(96, resolved.bitrate / 1000)) kbps" : "AAC · Estéreo"
+      self.pendingFallbackURL = resolved.audioOnly ? resolved.fallbackURL : nil
       let asset = resolved.headers.isEmpty
         ? AVURLAsset(url: resolved.url)
         : AVURLAsset(url: resolved.url, options: ["AVURLAssetHTTPHeaderFieldsKey": resolved.headers])
@@ -501,10 +551,16 @@ final class AudioPlayer: ObservableObject {
     }
 
     statusObs = item.observe(\.status, options: [.new]) { [weak self] it, _ in
+      if it.status == .readyToPlay {
+        // O stream progressivo (MP4 itag 18) traz vídeo 360p: desligamos a faixa de vídeo para o
+        // iPhone não decodificar imagem que ninguém vê (menos CPU/GPU, menos calor e bateria).
+        for t in it.tracks where t.assetTrack?.mediaType == .video && t.isEnabled { t.isEnabled = false }
+      }
       if it.status == .failed {
         let msg = it.error?.localizedDescription ?? "Falha ao reproduzir esta faixa."
         Task { @MainActor [weak self] in
           guard let self else { return }
+          if self.tryProgressiveFallback(track: track) { return }
           if let vid = track.videoId,
              !LibraryStore.shared.isDownloaded(track.id),
              !self.retriedTrackIds.contains(track.id),
@@ -525,6 +581,12 @@ final class AudioPlayer: ObservableObject {
           self.errorToast = "Erro no áudio: \(msg)"
         }
       }
+    }
+
+    failObserver = NotificationCenter.default.addObserver(
+      forName: .AVPlayerItemFailedToPlayToEndTime, object: item, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { _ = self?.tryProgressiveFallback(track: track) }
     }
 
     endObserver = NotificationCenter.default.addObserver(
@@ -548,50 +610,107 @@ final class AudioPlayer: ObservableObject {
       }
     }
 
+    // Antes: a cada 0,15 s este bloco reatribuía isPlaying/isLoading/duration mesmo sem mudança —
+    // e todo @Published dispara objectWillChange, re-renderizando ~7x/s TODAS as telas que observam o
+    // player (as 4 abas ficam vivas no RootView). Agora só publica quando o valor muda de verdade,
+    // não cria Task por tick e, em segundo plano/tela bloqueada, não publica o relógio.
     timeObserver = p.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.15, preferredTimescale: 600), queue: .main) { [weak self] cm in
-      Task { @MainActor [weak self] in
-        guard let self, let pl = self.player else { return }
-        let sec = cm.seconds
-        if sec.isFinite && sec >= 0 { self.currentTime = sec }
-        if let d = pl.currentItem?.duration.seconds, d.isFinite && d > 1 {
-          self.duration = d
-        }
-        if pl.timeControlStatus == .playing {
-          self.isLoading = false
-          self.isPlaying = true
-        } else if pl.timeControlStatus == .waitingToPlayAtSpecifiedRate {
-          self.isLoading = true
-        }
-        if self.sleepTimerOption == .endOfTrack {
-          self.sleepRemainingSeconds = max(0, Int(self.duration - self.currentTime))
-        }
-        let xf = LibraryStore.shared.crossfadeSeconds
-        if xf > 0,
-           self.repeatMode != .one,
-           self.sleepTimerOption != .endOfTrack,
-           self.duration > xf + 2,
-           self.isPlaying {
-          let rem = self.duration - self.currentTime
-          let baseVol: Float = LibraryStore.shared.soundProfile == .night ? 0.72 : 1.0
-          if rem <= xf && rem > 0 {
-            let ratio = max(0.05, min(1.0, Float(rem / xf)))
-            pl.volume = baseVol * ratio
-            if rem <= 0.65 && !self.crossfadeTriggered && (self.currentIndex + 1 < self.queue.count || self.repeatMode == .all || self.autoplayRadio) {
-              self.crossfadeTriggered = true
-              self.shouldFadeInNext = true
-              self.nextTrack()
-            }
-          } else if !self.crossfadeTriggered && self.sleepRemainingSeconds == 0 {
-            pl.volume = baseVol
-          }
-        }
-      }
+      MainActor.assumeIsolated { self?.handleTick(cm) }
     }
 
     p.playImmediately(atRate: playbackRate)
     isPlaying = true
     isLoading = false
     updateNowPlaying()
+  }
+
+  private func handleTick(_ cm: CMTime) {
+    guard let pl = player else { return }
+    let clock = PlaybackClock.shared
+    let sec = cm.seconds
+    var now = clock.currentTime
+    var dur = clock.duration
+    if sec.isFinite && sec >= 0 { now = sec }
+    if let d = pl.currentItem?.duration.seconds, d.isFinite && d > 1 { dur = d }
+    if !inBackground {
+      if clock.currentTime != now { clock.currentTime = now }
+      if clock.duration != dur { clock.duration = dur }
+    }
+    switch pl.timeControlStatus {
+    case .playing:
+      if isLoading { isLoading = false }
+      if !isPlaying { isPlaying = true }
+    case .waitingToPlayAtSpecifiedRate:
+      if !isLoading { isLoading = true }
+    default:
+      break
+    }
+    if sleepTimerOption == .endOfTrack {
+      let rem = max(0, Int(dur - now))
+      if sleepRemainingSeconds != rem { sleepRemainingSeconds = rem }
+    }
+    let xf = LibraryStore.shared.crossfadeSeconds
+    if xf > 0, repeatMode != .one, sleepTimerOption != .endOfTrack, dur > xf + 2, isPlaying {
+      let rem = dur - now
+      let baseVol: Float = LibraryStore.shared.soundProfile == .night ? 0.72 : 1.0
+      if rem <= xf && rem > 0 {
+        let ratio = max(0.05, min(1.0, Float(rem / xf)))
+        pl.volume = baseVol * ratio
+        if rem <= 0.65 && !crossfadeTriggered && (currentIndex + 1 < queue.count || repeatMode == .all || autoplayRadio) {
+          crossfadeTriggered = true
+          shouldFadeInNext = true
+          // O relógio pode estar congelado em segundo plano: sincroniza antes de trocar.
+          clock.currentTime = now
+          nextTrack()
+        }
+      } else if !crossfadeTriggered && sleepRemainingSeconds == 0 && pl.volume != baseVol {
+        pl.volume = baseVol
+      }
+    }
+  }
+
+  /// Se o áudio puro (itag 140) falhar, troca para o MP4 progressivo já resolvido, do mesmo ponto.
+  private func tryProgressiveFallback(track: Track) -> Bool {
+    guard let fb = pendingFallbackURL, currentTrack?.id == track.id else { return false }
+    pendingFallbackURL = nil
+    let resumeAt = player.map { $0.currentTime().seconds } ?? 0
+    currentBitrateLabel = "AAC · Estéreo"
+    beginAVPlayback(asset: AVURLAsset(url: fb), track: track)
+    if resumeAt.isFinite && resumeAt > 1 {
+      player?.seek(to: CMTime(seconds: resumeAt, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+    return true
+  }
+
+  private func setNowPlayingImage(_ img: UIImage) {
+    nowPlayingArtImage = img
+    nowPlayingArtwork = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+    updateNowPlaying()
+  }
+
+  /// Arte composta (vinil / fita K7) da tela de bloqueio: desenhada uma vez por faixa+estilo, fora da main.
+  private func scheduleLockArtwork(for track: Track) {
+    lockArtTask?.cancel()
+    guard let cover = lockCoverImage else { return }
+    let style = LibraryStore.shared.resolvedLockArtStyle
+    guard style != .cover else {
+      setNowPlayingImage(cover)
+      return
+    }
+    let palette = self.palette
+    lockArtTask = Task { [weak self] in
+      let img = await LockScreenArtwork.shared.image(for: track, cover: cover, style: style, palette: palette)
+      guard let self, !Task.isCancelled, self.currentTrack?.id == track.id, let img else { return }
+      self.setNowPlayingImage(img)
+      // Depuração: `-LMDebugLockArt` salva as duas artes compostas em tmp/ para inspeção.
+      if ProcessInfo.processInfo.arguments.contains("-LMDebugLockArt") {
+        for st in [LockArtStyle.vinyl, .cassette] {
+          if let out = await LockScreenArtwork.shared.image(for: track, cover: cover, style: st, palette: palette) {
+            try? out.pngData()?.write(to: FileManager.default.temporaryDirectory.appendingPathComponent("lockart-\(st.rawValue).png"))
+          }
+        }
+      }
+    }
   }
 
   private func cleanupPlayerObservers() {
@@ -605,6 +724,10 @@ final class AudioPlayer: ObservableObject {
       NotificationCenter.default.removeObserver(eo)
     }
     endObserver = nil
+    if let fo = failObserver {
+      NotificationCenter.default.removeObserver(fo)
+    }
+    failObserver = nil
     player?.pause()
   }
 
@@ -693,8 +816,8 @@ final class AudioPlayer: ObservableObject {
       MPMediaItemPropertyPlaybackDuration: duration > 0 ? duration : tr.duration,
       MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? playbackRate : 0.0,
     ]
-    if let img = nowPlayingArtImage {
-      info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+    if let art = nowPlayingArtwork {
+      info[MPMediaItemPropertyArtwork] = art
     }
     MPNowPlayingInfoCenter.default().nowPlayingInfo = info
   }

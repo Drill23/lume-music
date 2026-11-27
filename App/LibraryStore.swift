@@ -34,6 +34,23 @@ final class LibraryStore: ObservableObject {
   @Published var introEnabled: Bool = true { didSet { save() } }
   @Published var totalListeningSeconds: Double = 0
 
+  // Preferências 5.0 (UserDefaults: não mexem no formato do snapshot da biblioteca)
+  /// Modo economia: menos quadros por segundo e efeitos mais leves em todo o app.
+  @Published var economyMode: Bool = UserDefaults.standard.bool(forKey: "lume.economyMode") {
+    didSet { UserDefaults.standard.set(economyMode, forKey: "lume.economyMode") }
+  }
+  /// Arte da tela de bloqueio: Automático (segue o palco), Capa, Vinil ou Fita K7.
+  @Published var lockArtStyle: LockArtStyle = LockArtStyle(rawValue: UserDefaults.standard.string(forKey: "lume.lockArtStyle") ?? "") ?? .automatic {
+    didSet { UserDefaults.standard.set(lockArtStyle.rawValue, forKey: "lume.lockArtStyle") }
+  }
+
+  /// Estilo efetivo: no Automático, K7 se o palco preferido for a fita; senão vinil.
+  var resolvedLockArtStyle: LockArtStyle {
+    guard lockArtStyle == .automatic else { return lockArtStyle }
+    let stage = UserDefaults.standard.string(forKey: "lume.playerStyle") ?? ""
+    return stage == PlayerSurfaceTab.cassette.rawValue ? .cassette : .vinyl
+  }
+
   struct ReplaySummary {
     let totalPlays: Int
     let totalMinutes: Int
@@ -202,7 +219,7 @@ final class LibraryStore: ObservableObject {
     let bytes = fileSizeBytes(for: trackId)
     guard bytes > 0 else { return "" }
     let mb = Double(bytes) / (1024.0 * 1024.0)
-    return String(format: "%.1f MB", mb)
+    return Self.formatMB(mb)
   }
 
   func removeAllDownloads() {
@@ -381,7 +398,7 @@ final class LibraryStore: ObservableObject {
       return acc + Int64(sz)
     }
     let mb = Double(total) / (1024.0 * 1024.0)
-    return mb >= 1024 ? String(format: "%.2f GB", mb / 1024.0) : String(format: "%.1f MB", mb)
+    return Self.formatMB(mb)
   }
 
   private func reconcileOfflineFiles() {
@@ -405,7 +422,7 @@ final class LibraryStore: ObservableObject {
     playlists = snap.playlists
     downloadedIds = Set(snap.downloadedIds)
     searchHistory = snap.searchHistory
-    visualizerStyle = snap.visualizerStyle
+    visualizerStyle = snap.visualizerStyle.resolved
     soundProfile = snap.soundProfile
     animatedArtEnabled = snap.animatedArtEnabled
     autoTranslateLyrics = snap.autoTranslateLyrics
@@ -463,5 +480,21 @@ final class LibraryStore: ObservableObject {
         try? data.write(to: url, options: .atomic)
       }
     }
+  }
+}
+
+extension LibraryStore {
+  /// "0 MB", "12,4 MB", "1,25 GB" (vírgula decimal pt-BR).
+  static func formatMB(_ mb: Double) -> String {
+    if mb < 0.05 { return "0 MB" }
+    let f = NumberFormatter()
+    f.locale = Locale(identifier: "pt_BR")
+    f.numberStyle = .decimal
+    if mb >= 1024 {
+      f.minimumFractionDigits = 2; f.maximumFractionDigits = 2
+      return (f.string(from: NSNumber(value: mb / 1024)) ?? "0") + " GB"
+    }
+    f.minimumFractionDigits = 0; f.maximumFractionDigits = 1
+    return (f.string(from: NSNumber(value: mb)) ?? "0") + " MB"
   }
 }

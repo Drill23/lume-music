@@ -1,3 +1,4 @@
+import CoreImage
 import ImageIO
 import SwiftUI
 import UIKit
@@ -391,36 +392,14 @@ struct GlassButton: View {
 struct PrismMark: View {
   var size: CGFloat = 32
 
+  /// 5.0: a mesma arte do ícone novo (disco de vidro claro com anel prisma), nítida em qualquer tamanho.
   var body: some View {
-    ZStack {
-      Circle().fill(
-        RadialGradient(colors: [Color(white: 0.18), Color(white: 0.06), Color(white: 0.02)], center: .center, startRadius: 0, endRadius: size * 0.5)
-      )
-      ForEach(0..<4, id: \.self) { i in
-        Circle()
-          .stroke(Color.white.opacity(0.09), lineWidth: 0.5)
-          .padding(size * (0.08 + CGFloat(i) * 0.06))
-      }
-      // Anel prismático incrustado com brilho suave
-      Circle()
-        .stroke(Theme.prismAngular, lineWidth: size * 0.09)
-        .padding(size * 0.25)
-        .shadow(color: Theme.rose.opacity(0.45), radius: size * 0.08)
-      // Selo central metálico fosco
-      Circle()
-        .fill(LinearGradient(colors: [Color(white: 0.94), Color(white: 0.72)], startPoint: .topLeading, endPoint: .bottomTrailing))
-        .frame(width: size * 0.30, height: size * 0.30)
-        .overlay(Circle().stroke(Color.white.opacity(0.6), lineWidth: 0.5))
-      // Furo spindle
-      Circle().fill(Color(white: 0.08)).frame(width: size * 0.08, height: size * 0.08)
-      // Reflexo especular diagonal
-      Circle()
-        .trim(from: 0.55, to: 0.80)
-        .stroke(Color.white.opacity(0.55), style: StrokeStyle(lineWidth: size * 0.032, lineCap: .round))
-        .padding(size * 0.06)
-    }
-    .frame(width: size, height: size)
-    .shadow(color: Theme.lavender.opacity(0.35), radius: size * 0.18, y: size * 0.06)
+    Image("Mark")
+      .resizable()
+      .interpolation(.high)
+      .antialiased(true)
+      .frame(width: size, height: size)
+      .shadow(color: Theme.lavender.opacity(0.30), radius: size * 0.12, y: size * 0.05)
   }
 }
 
@@ -482,8 +461,19 @@ actor ImagePipeline {
     return URLSession(configuration: cfg)
   }()
 
+  /// Agrupa tamanhos parecidos (160/200, 300/500, 700/800…) num só decode em cache:
+  /// antes cada tela pedia um maxPixel diferente e a mesma capa era decodificada 4–6 vezes.
+  nonisolated static func bucket(_ px: CGFloat) -> CGFloat {
+    switch px {
+    case ..<221: return 220
+    case ..<521: return 520
+    case ..<821: return 820
+    default: return 1200
+    }
+  }
+
   nonisolated static func key(_ url: String, _ px: CGFloat) -> NSString {
-    "\(url)#\(Int(px))" as NSString
+    "\(url)#\(Int(bucket(px)))" as NSString
   }
 
   nonisolated func cached(_ url: String, maxPixel: CGFloat) -> UIImage? {
@@ -493,11 +483,13 @@ actor ImagePipeline {
   func image(_ url: String, maxPixel: CGFloat = 800) async -> UIImage? {
     guard !url.isEmpty, let u = URL(string: url) else { return nil }
     let key = Self.key(url, maxPixel)
+    let maxPixel = Self.bucket(maxPixel)
     if let hit = memory.object(forKey: key) { return hit }
     let k = key as String
     if let running = inflight[k] { return await running.value }
     let session = self.session
-    let task = Task<UIImage?, Never> {
+    // Decodificação/downsampling em tarefa destacada: não serializa todas as capas no actor.
+    let task = Task.detached(priority: .userInitiated) { () -> UIImage? in
       guard let (data, _) = try? await session.data(from: u) else { return nil }
       return Self.downsample(data, maxPixel: maxPixel)
     }
@@ -676,6 +668,64 @@ actor ArtworkColorExtractor {
   }
 }
 
+// MARK: - Capa pré-desfocada (cache)
+
+/// Capa desfocada renderizada uma única vez com CoreImage (fora da main) e guardada em cache.
+struct PreblurredArtwork: View {
+  let url: String
+  @State private var image: UIImage?
+
+  init(url: String) {
+    self.url = url
+    _image = State(initialValue: BlurredArtworkCache.cached(url))
+  }
+
+  var body: some View {
+    Color.clear
+      .overlay {
+        if let image {
+          Image(uiImage: image)
+            .resizable()
+            .scaledToFill()
+            .transition(.opacity)
+        }
+      }
+      .task(id: url) {
+        if let hit = BlurredArtworkCache.cached(url) { image = hit; return }
+        let img = await BlurredArtworkCache.load(url)
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.5)) { image = img }
+      }
+      .allowsHitTesting(false)
+  }
+}
+
+enum BlurredArtworkCache {
+  nonisolated(unsafe) private static let memory: NSCache<NSString, UIImage> = {
+    let c = NSCache<NSString, UIImage>()
+    c.countLimit = 12
+    return c
+  }()
+  private static let ciContext = CIContext(options: [.useSoftwareRenderer: false, .cacheIntermediates: false])
+
+  static func cached(_ url: String) -> UIImage? { memory.object(forKey: url as NSString) }
+
+  static func load(_ url: String) async -> UIImage? {
+    if let hit = cached(url) { return hit }
+    guard let src = await ImagePipeline.shared.image(url, maxPixel: 200) else { return nil }
+    let out = await Task.detached(priority: .utility) { () -> UIImage? in
+      guard let cg = src.cgImage else { return nil }
+      let input = CIImage(cgImage: cg)
+      // 200 px exibidos a ~1,8x da tela: raio 19 px aqui ≈ o antigo blur de 70 pt.
+      let blurred = input.clampedToExtent().applyingGaussianBlur(sigma: 19).cropped(to: input.extent)
+      guard let outCG = ciContext.createCGImage(blurred, from: input.extent) else { return nil }
+      return UIImage(cgImage: outCG)
+    }.value
+    if let out { memory.setObject(out, forKey: url as NSString) }
+    return out
+  }
+}
+
 // MARK: - Ambient animated mesh background (Apple Music-like, driven by artwork)
 
 struct AmbientMeshBackground: View {
@@ -683,17 +733,21 @@ struct AmbientMeshBackground: View {
   var artworkURL: String = ""
   var animate: Bool = true
   @Environment(\.colorScheme) private var scheme
+  @ObservedObject private var gov = PerfGovernor.shared
 
   var body: some View {
     ZStack {
       Theme.canvas
       if !artworkURL.isEmpty {
-        ArtworkImage(url: artworkURL, cornerRadius: 0, maxPixel: 200)
+        // 5.0: a capa chega JÁ desfocada (CoreImage, uma vez, fora da main). Antes era um
+        // `.blur(radius: 70)` ao vivo em tela cheia, recomposto pela GPU a cada quadro do mesh.
+        PreblurredArtwork(url: artworkURL)
           .scaleEffect(1.8)
-          .blur(radius: 70)
           .opacity(scheme == .dark ? 0.55 : 0.45)
       }
-      TimelineView(.animation(minimumInterval: 1 / 20, paused: !animate || !Theme.motion)) { tl in
+      // O mesh se move muito devagar (períodos de 30–50 s): 12 fps são indistinguíveis de 20 e
+      // custam 40% menos. Pausa com app inativo/tela bloqueada, Reduzir Movimento ou modo economia.
+      TimelineView(.animation(minimumInterval: 1 / 12, paused: !animate || !Theme.motion || !gov.isActive || gov.reduced)) { tl in
         let t = tl.date.timeIntervalSinceReferenceDate
         mesh(t: t)
       }

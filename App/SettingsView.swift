@@ -10,6 +10,16 @@ struct SettingsView: View {
 
   var body: some View {
     List {
+      if AccessService.shared.gateEnabled {
+        Section {
+          AccessStatusCard()
+            .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+            .listRowBackground(Color.clear)
+        } header: {
+          Text("Seu acesso")
+        }
+      }
+
       Section {
         PlayerStylePicker()
           .listRowInsets(EdgeInsets())
@@ -31,6 +41,16 @@ struct SettingsView: View {
         Toggle(isOn: $store.introEnabled) {
           Label("Abertura animada", systemImage: "sparkles")
         }
+        Button {
+          Haptics.success()
+          Onboarding.reset()
+        } label: {
+          Label("Rever apresentação", systemImage: "play.rectangle.on.rectangle")
+            .foregroundStyle(Theme.text)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
       }
       .listRowBackground(Theme.canvasRaised)
 
@@ -94,6 +114,37 @@ struct SettingsView: View {
         } label: {
           Label("Estilo da fita K7", systemImage: "recordingtape")
         }
+      }
+      .listRowBackground(Theme.canvasRaised)
+
+      Section {
+        Picker(selection: Binding(
+          get: { store.lockArtStyle },
+          set: { v in
+            Haptics.selection()
+            store.lockArtStyle = v
+            player.refreshLockScreenArtwork()
+          }
+        )) {
+          ForEach(LockArtStyle.allCases) { Text($0.title).tag($0) }
+        } label: {
+          Label("Arte na tela de bloqueio", systemImage: "lock.iphone")
+        }
+      } header: {
+        Text("Tela de bloqueio")
+      } footer: {
+        Text("Com o celular bloqueado aparece o disco de vinil ou a fita K7 com a capa da música. No Automático, segue o estilo do Tocando agora.")
+      }
+      .listRowBackground(Theme.canvasRaised)
+
+      Section {
+        Toggle(isOn: $store.economyMode) {
+          Label("Modo economia", systemImage: "leaf")
+        }
+      } header: {
+        Text("Desempenho")
+      } footer: {
+        Text("Menos quadros por segundo e efeitos mais leves: o celular esquenta menos e a bateria dura mais. Liga sozinho no Modo de Pouca Energia ou quando o aparelho está quente.")
       }
       .listRowBackground(Theme.canvasRaised)
 

@@ -203,8 +203,11 @@ final class AppModel: ObservableObject {
 
 struct RootView: View {
   @ObservedObject private var app = AppModel.shared
-  @ObservedObject private var player = AudioPlayer.shared
-  @ObservedObject private var downloads = DownloadManager.shared
+  // 5.0 (desempenho): o RootView NÃO observa mais o player nem os downloads inteiros — qualquer
+  // @Published deles re-renderizava as 4 abas (todas vivas no ZStack). Assina só o que usa.
+  private let player = AudioPlayer.shared
+  private let downloads = DownloadManager.shared
+  @State private var hasTrack = false
   @Environment(\.scenePhase) private var scenePhase
 
   var body: some View {
@@ -222,6 +225,26 @@ struct RootView: View {
           .accessibilityHidden(!active)
       }
       .animation(.spring(response: 0.30, dampingFraction: 0.90), value: app.tab)
+
+      // Véu da barra de status: o conteúdo rolado some suavemente sob o relógio/bateria
+      // (antes os textos passavam por baixo e se misturavam com a hora).
+      VStack(spacing: 0) {
+        GeometryReader { g in
+          LinearGradient(
+            stops: [
+              .init(color: Theme.canvas, location: 0),
+              .init(color: Theme.canvas.opacity(0.92), location: 0.55),
+              .init(color: Theme.canvas.opacity(0), location: 1),
+            ],
+            startPoint: .top, endPoint: .bottom)
+            .frame(height: g.safeAreaInsets.top + 14)
+            .offset(y: -g.safeAreaInsets.top)
+        }
+        .frame(height: 0)
+        Spacer()
+      }
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
 
       BottomBar()
 
@@ -255,17 +278,19 @@ struct RootView: View {
         .presentationDragIndicator(.visible)
     }
     .task {
+      player.runDebugHooksIfNeeded()
       await app.loadFeed()
       await app.refreshArtistReleases()
     }
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { Task { await app.loadFeed() } }
     }
-    .onChange(of: downloads.lastMessage) { _, msg in if let msg { app.showToast(msg) } }
-    .onChange(of: player.errorToast) { _, msg in if let msg { app.showToast(msg) } }
+    .onReceive(downloads.$lastMessage.removeDuplicates()) { msg in if let msg { app.showToast(msg) } }
+    .onReceive(player.$errorToast.removeDuplicates()) { msg in if let msg { app.showToast(msg) } }
+    .onReceive(player.$currentTrack.map { $0 != nil }.removeDuplicates()) { hasTrack = $0 }
   }
 
-  private var bottomInset: CGFloat { player.currentTrack != nil ? 150 : 92 }
+  private var bottomInset: CGFloat { hasTrack ? 150 : 92 }
 
   private func tabOrder(_ t: AppTab) -> Int {
     switch t {

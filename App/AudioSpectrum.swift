@@ -3,46 +3,103 @@ import AVFoundation
 import Accelerate
 import MediaToolbox
 import Combine
+import UIKit
 import os
 
 // MARK: - AudioSpectrum
 //
-// Analisador de espectro REAL (FFT 1024 + 24 bandas log) alimentado por um
-// MTAudioProcessingTap no AVPlayerItem. Funciona com MP4/AAC progressivo e
-// arquivos locais; em HLS (sem faixa de áudio acessível) fica isLive = false.
+// Analisador de espectro REAL (FFT 1024 + 24 bandas log + detector de batidas) alimentado por um
+// MTAudioProcessingTap no AVPlayerItem. Funciona com M4A/MP4 progressivo e arquivos locais; em HLS
+// (sem faixa de áudio acessível) fica isLive = false e `frame()` devolve uma simulação guiada pelo
+// tempo da faixa (BPM estável, compasso de 4 tempos), nunca aleatória.
+//
+// 5.0 — modelo "pull" para não esquentar o aparelho:
+//  • Só `isLive` é @Published (muda raramente). Bandas/nível/batida são LIDOS sob demanda por quem
+//    desenha (TimelineView/Canvas) — antes um Timer de 30 Hz publicava `bands`, re-renderizando o
+//    corpo inteiro de toda view que observava o objeto, inclusive em segundo plano.
+//  • A FFT na thread de áudio só roda enquanto alguém leu o espectro nos últimos 0,6 s. Tela
+//    bloqueada / app no fundo / palco sem visualizador ⇒ zero FFT (o EQ continua aplicado).
 //
 // Uso:
-//   AudioSpectrum.shared.attach(to: item)   // a cada nova AVPlayerItem
-//   AudioSpectrum.shared.detach()           // ao parar
-//   @ObservedObject var spectrum = AudioSpectrum.shared  // bands, level, isLive
+//   AudioSpectrum.shared.attach(to: item)              // a cada nova AVPlayerItem
+//   let f = AudioSpectrum.shared.frame()               // dentro do TimelineView: bands, level, kick…
+//   @ObservedObject var spectrum = AudioSpectrum.shared // só para `isLive`
+
+/// Um quadro do analisador pronto para desenhar.
+struct SpectrumFrame {
+  var bands: [Float]
+  /// Nível geral 0…1 (suavizado).
+  var level: Float
+  /// Pulso da batida 0…1: sobe na hora do bumbo e decai em ~170 ms.
+  var kick: Float
+  /// Energia dos graves 0…1 (suavizada).
+  var bass: Float
+  /// Contador de batidas (muda a cada batida detectada/simulada).
+  var beat: Int
+  /// Segundos desde a última batida.
+  var sinceBeat: Double
+  var live: Bool
+}
 
 @MainActor
 final class AudioSpectrum: ObservableObject {
   static let shared = AudioSpectrum()
   nonisolated static let bandCount = 24
 
-  @Published private(set) var bands: [Float]
-  @Published private(set) var level: Float = 0
   @Published private(set) var isLive: Bool = false
+
+  /// Compatibilidade: leitura sob demanda (não publica).
+  var bands: [Float] { refresh(); return smoothed }
+  var level: Float { refresh(); return smoothedLevel }
+  var kick: Float { frame().kick }
 
   private var context: SpectrumTapContext?
   private weak var attachedItem: AVPlayerItem?
   private var generation = 0
-  private var timer: Timer?
+  private var statusTimer: Timer?
   private var smoothed: [Float]
+  private var scratch: [Float]
   private var smoothedLevel: Float = 0
-  private var lastTick: UInt64 = 0
+  private var smoothedBass: Float = 0
+  private var lastRefresh: UInt64 = 0
   private var currentEQGains: [Float] = [0, 0, 0, 0, 0]
+  private var inBackground = false
 
-  private static let attackTau: Float = 0.060
-  private static let releaseTau: Float = 0.220
-  private static let freshNs: UInt64 = 120_000_000    // além disso o alvo cai para 0
-  private static let liveNs: UInt64 = 500_000_000     // isLive = false depois disso
+  // batida real
+  private var seenBeatCount = -1
+  private var kickStrength: Float = 0
+  private var kickTimeNs: UInt64 = 0
+  private var beatCounter = 0
+
+  // simulação (HLS): relógio extrapolado entre os ticks de 0,15 s do PlaybackClock
+  private var simAnchorSong: Double = 0
+  private var simAnchorWall: Double = 0
+  private var simLastClock: Double = -1
+
+  private static let attackTau: Float = 0.050
+  private static let releaseTau: Float = 0.200
+  private static let kickDecay: Double = 0.17
+  private static let freshNs: UInt64 = 160_000_000    // além disso o alvo cai para 0
+  private static let liveNs: UInt64 = 700_000_000     // isLive = false depois disso
 
   private init() {
     let zeros = [Float](repeating: 0, count: AudioSpectrum.bandCount)
-    self.bands = zeros
     self.smoothed = zeros
+    self.scratch = zeros
+    let nc = NotificationCenter.default
+    nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.inBackground = true
+        self?.stopStatusTimer()
+      }
+    }
+    nc.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        self.inBackground = false
+        if self.context != nil { self.startStatusTimer() }
+      }
+    }
   }
 
   // MARK: API
@@ -82,6 +139,22 @@ final class AudioSpectrum: ObservableObject {
     context?.setEQGains(normalized)
   }
 
+  /// Quadro atual para desenhar. Chame dentro do TimelineView (a leitura também "acorda" a FFT).
+  /// Sem espectro real, simula batidas guiadas pelo tempo da faixa.
+  func frame() -> SpectrumFrame { frame(isPlaying: AudioPlayer.shared.isPlaying) }
+
+  func frame(isPlaying: Bool) -> SpectrumFrame {
+    refresh()
+    let now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+    if isLive {
+      let since = kickTimeNs == 0 ? 10 : Double(now &- kickTimeNs) / 1e9
+      let k = kickStrength * Float(exp(-max(0, since) / AudioSpectrum.kickDecay))
+      return SpectrumFrame(bands: smoothed, level: smoothedLevel, kick: k, bass: smoothedBass,
+                           beat: beatCounter, sinceBeat: since, live: true)
+    }
+    return simulatedFrame(isPlaying: isPlaying)
+  }
+
   // MARK: Tap
 
   private func releaseCurrent() {
@@ -89,6 +162,7 @@ final class AudioSpectrum: ObservableObject {
     attachedItem = nil
     context?.deactivate()
     context = nil
+    stopStatusTimer()
   }
 
   private func install(track: AVAssetTrack, on item: AVPlayerItem) {
@@ -134,82 +208,142 @@ final class AudioSpectrum: ObservableObject {
 
     ctx.setEQGains(currentEQGains)
     context = ctx
-    lastTick = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
-    startTimer()
+    seenBeatCount = -1
+    if !inBackground { startStatusTimer() }
   }
 
-  // MARK: Timer / suavização
+  // MARK: Status (2 Hz, só para isLive; parado em segundo plano)
 
-  private func startTimer() {
-    guard timer == nil else { return }
-    let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-      MainActor.assumeIsolated { self?.tick() }
+  private func startStatusTimer() {
+    guard statusTimer == nil else { return }
+    let t = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+      MainActor.assumeIsolated { self?.updateLiveFlag() }
     }
+    t.tolerance = 0.2
     RunLoop.main.add(t, forMode: .common)
-    timer = t
+    statusTimer = t
+    updateLiveFlag()
   }
 
-  private func stopTimer() {
-    timer?.invalidate()
-    timer = nil
+  private func stopStatusTimer() {
+    statusTimer?.invalidate()
+    statusTimer = nil
   }
+
+  private func updateLiveFlag() {
+    let now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+    var live = false
+    if let ctx = context {
+      let st = ctx.status()
+      live = st.supported && st.lastProcess != 0 && now &- st.lastProcess < AudioSpectrum.liveNs
+    }
+    if isLive != live { isLive = live }
+    if AudioSpectrum.debugStatus {
+      let line = "isLive=\(live) level=\(String(format: "%.2f", smoothedLevel)) beats=\(beatCounter) label=\(AudioPlayer.shared.currentBitrateLabel)\n"
+      try? line.write(to: FileManager.default.temporaryDirectory.appendingPathComponent("lm-status.txt"), atomically: true, encoding: .utf8)
+    }
+  }
+
+  /// Depuração: `-LMDebugStatus` grava o estado do analisador em tmp/lm-status.txt (2 Hz).
+  private static let debugStatus = ProcessInfo.processInfo.arguments.contains("-LMDebugStatus")
 
   private func resetOutputs() {
-    stopTimer()
-    let zeros = [Float](repeating: 0, count: AudioSpectrum.bandCount)
-    smoothed = zeros
+    stopStatusTimer()
+    for i in 0..<smoothed.count { smoothed[i] = 0 }
     smoothedLevel = 0
-    if bands != zeros { bands = zeros }
-    if level != 0 { level = 0 }
+    smoothedBass = 0
+    kickStrength = 0
     if isLive { isLive = false }
   }
 
-  private func tick() {
+  /// Suaviza (attack/release) o último snapshot da thread de áudio. No máximo 1x a cada 6 ms.
+  private func refresh() {
     let now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
-    let dt = Float(min(max(Double(now &- lastTick) / 1e9, 0.005), 0.1))
-    lastTick = now
+    let elapsed = now &- lastRefresh
+    guard elapsed > 6_000_000 else { return }
+    let dt = Float(min(max(Double(elapsed) / 1e9, 0.005), 0.1))
+    lastRefresh = now
 
-    var target = [Float](repeating: 0, count: AudioSpectrum.bandCount)
     var targetLevel: Float = 0
-    var live = false
+    for i in 0..<scratch.count { scratch[i] = 0 }
 
     if let ctx = context {
-      let snap = ctx.snapshot(into: &target)
-      if snap.hasData {
-        let age = now &- snap.time
-        live = age < AudioSpectrum.liveNs
-        if age < AudioSpectrum.freshNs {
-          targetLevel = snap.level
-        } else {
-          for i in 0..<target.count { target[i] = 0 }
-        }
+      ctx.markDemand(now)
+      let snap = ctx.snapshot(into: &scratch)
+      if snap.hasData && now &- snap.time < AudioSpectrum.freshNs {
+        targetLevel = snap.level
       } else {
-        for i in 0..<target.count { target[i] = 0 }
+        for i in 0..<scratch.count { scratch[i] = 0 }
+      }
+      if snap.beatCount != seenBeatCount {
+        if seenBeatCount >= 0 && snap.beatCount > seenBeatCount {
+          kickStrength = snap.beatStrength
+          kickTimeNs = snap.beatTime
+          beatCounter &+= 1
+        }
+        seenBeatCount = snap.beatCount
       }
     }
 
     let aAttack = 1 - expf(-dt / AudioSpectrum.attackTau)
     let aRelease = 1 - expf(-dt / AudioSpectrum.releaseTau)
-    var allZero = true
     for i in 0..<smoothed.count {
       let cur = smoothed[i]
-      let a = target[i] > cur ? aAttack : aRelease
-      var v = cur + (target[i] - cur) * a
+      let a = scratch[i] > cur ? aAttack : aRelease
+      var v = cur + (scratch[i] - cur) * a
       if v < 0.003 { v = 0 }
       smoothed[i] = v
-      if v > 0 { allZero = false }
     }
     let lcur = smoothedLevel
     var lv = lcur + (targetLevel - lcur) * (targetLevel > lcur ? aAttack : aRelease)
     if lv < 0.003 { lv = 0 }
     smoothedLevel = lv
+    let bassNow = (smoothed[0] + smoothed[1] + smoothed[2] + smoothed[3]) * 0.25
+    smoothedBass += (bassNow - smoothedBass) * (bassNow > smoothedBass ? 0.6 : 0.18)
+  }
 
-    if smoothed != bands { bands = smoothed }
-    if level != lv { level = lv }
-    if isLive != live { isLive = live }
+  // MARK: Simulação plausível (HLS / sem tap)
 
-    // Sem tap ativo e tudo zerado: nada mais a animar.
-    if context == nil && allZero && lv == 0 { stopTimer() }
+  private func simulatedFrame(isPlaying: Bool) -> SpectrumFrame {
+    let n = AudioSpectrum.bandCount
+    let player = AudioPlayer.shared
+    let wall = CACurrentMediaTime()
+    let clockNow = PlaybackClock.shared.currentTime
+    if clockNow != simLastClock {
+      simLastClock = clockNow
+      simAnchorSong = clockNow
+      simAnchorWall = wall
+    }
+    let song = isPlaying ? simAnchorSong + min(0.5, wall - simAnchorWall) : simAnchorSong
+    // BPM estável por faixa (92…127), derivado do id — cada música tem "seu" andamento.
+    var h: UInt32 = 2166136261
+    for b in (player.currentTrack?.id ?? "lume").utf8 { h = (h ^ UInt32(b)) &* 16777619 }
+    let bpm = 92.0 + Double(h % 36)
+    let spb = 60.0 / bpm
+    let beatPos = max(0, song) / spb
+    let beatIdx = Int(beatPos)
+    let phase = beatPos - Double(beatIdx)
+    let since = phase * spb
+    let accent: Double = beatIdx % 4 == 0 ? 1.0 : (beatIdx % 2 == 0 ? 0.8 : 0.68)
+    let amp: Double = isPlaying ? 1 : 0
+    let kick = amp * accent * exp(-since / AudioSpectrum.kickDecay)
+    // chimbal no contratempo, "frase" lenta de 8 tempos para dar dinâmica
+    let hatPhase = (phase + 0.5).truncatingRemainder(dividingBy: 1) * spb
+    let hat = amp * exp(-hatPhase / 0.06)
+    let phrase = 0.75 + 0.25 * sin(beatPos * .pi / 8)
+    var bands = [Float](repeating: 0, count: n)
+    for i in 0..<n {
+      let f = Double(i) / Double(n - 1)
+      let tilt = 0.55 * (1 - f) + 0.12
+      let low = f < 0.25 ? kick * (1 - f * 3) * 0.5 : 0
+      let mid = 0.16 * (0.5 + 0.5 * sin(song * 1.7 + Double(i) * 0.9)) * (f > 0.2 && f < 0.75 ? 1 : 0.4)
+      let high = f > 0.6 ? hat * 0.28 * f : 0
+      bands[i] = Float(min(1, max(0.02, amp * (tilt * phrase + low + mid + high))))
+    }
+    let level = Float(amp * (0.45 + 0.25 * kick + 0.1 * phrase))
+    let bass = Float(amp * (0.35 + 0.55 * kick))
+    return SpectrumFrame(bands: bands, level: level, kick: Float(kick), bass: bass,
+                         beat: beatIdx, sinceBeat: since, live: false)
   }
 }
 
@@ -252,7 +386,16 @@ private final class SpectrumTapContext: @unchecked Sendable {
   private let fftSetup: FFTSetup
 
   private var writeCount = 0
-  private var sinceLast = 0
+  private var analyzedUpTo = 0
+
+  // detector de batidas (fluxo espectral nos graves + limiar adaptativo)
+  private var prevBassE: Float = 0
+  private var fluxMean: Float = 0
+  private var fluxVar: Float = 0
+  private var samplesSinceBeat = 1 << 30
+  private var beatCountLocal = 0
+  private var lastBeatStrength: Float = 0
+  private var lastBeatTime: UInt64 = 0
 
   // estado publicado (protegido por lock)
   private let lock: UnsafeMutablePointer<os_unfair_lock>
@@ -261,12 +404,19 @@ private final class SpectrumTapContext: @unchecked Sendable {
   private var pubTime: UInt64 = 0
   private var pubHasData = false
   private var active = true
+  private var demandTime: UInt64 = 0        // última leitura da main (FFT só roda com demanda)
+  private var lastProcess: UInt64 = 0       // último callback de áudio (para isLive)
+  private var pubBeatCount = 0
+  private var pubBeatStrength: Float = 0
+  private var pubBeatTime: UInt64 = 0
+  private static let demandNs: UInt64 = 600_000_000
 
   // Equalizador 5 bandas (60, 230, 910, 3600, 14000 Hz)
   private let eqLock: UnsafeMutablePointer<os_unfair_lock>
   private let eqGains: UnsafeMutablePointer<Float>
   private let eqCoeffs: UnsafeMutablePointer<Float>    // 5 bandas * 5 coeficientes (b0,b1,b2,a1,a2)
   private let eqStates: UnsafeMutablePointer<Float>    // até 4 canais * 5 bandas * 2 estados (z1,z2)
+  private let eqLocal: UnsafeMutablePointer<Float>     // cópia dos coeficientes (sem alocar na thread de áudio)
   private var eqBypass = true
 
   init() {
@@ -297,6 +447,7 @@ private final class SpectrumTapContext: @unchecked Sendable {
     eqGains = alloc(5)
     eqCoeffs = alloc(25)
     eqStates = alloc(4 * 5 * 2)
+    eqLocal = alloc(25)
     fftSetup = vDSP_create_fftsetup(SpectrumTapContext.log2n, FFTRadix(kFFTRadix2))!
     vDSP_hann_window(window, vDSP_Length(n), Int32(vDSP_HANN_DENORM))
     computeBands()
@@ -309,7 +460,7 @@ private final class SpectrumTapContext: @unchecked Sendable {
     realp.deallocate(); imagp.deallocate(); power.deallocate(); db.deallocate()
     localBands.deallocate(); pubBands.deallocate()
     bandLo.deallocate(); bandHi.deallocate(); bandPos.deallocate()
-    eqGains.deallocate(); eqCoeffs.deallocate(); eqStates.deallocate()
+    eqGains.deallocate(); eqCoeffs.deallocate(); eqStates.deallocate(); eqLocal.deallocate()
     lock.deallocate(); eqLock.deallocate()
   }
 
@@ -341,7 +492,9 @@ private final class SpectrumTapContext: @unchecked Sendable {
       kind = .unsupported
     }
     writeCount = 0
-    sinceLast = 0
+    analyzedUpTo = 0
+    prevBassE = 0; fluxMean = 0; fluxVar = 0
+    samplesSinceBeat = 1 << 30
     ring.update(repeating: 0, count: SpectrumTapContext.ringSize)
     eqStates.update(repeating: 0, count: 40)
     computeBands()
@@ -435,21 +588,54 @@ private final class SpectrumTapContext: @unchecked Sendable {
     let abl = UnsafeMutableAudioBufferListPointer(bufferList)
     guard abl.count > 0 else { return }
 
+    let now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+    os_unfair_lock_lock(lock)
+    lastProcess = now
+    let wanted = demandTime != 0 && now &- demandTime < SpectrumTapContext.demandNs
+    os_unfair_lock_unlock(lock)
+
+    if kind == .float32 { applyEQIfNeeded(abl, n) }
+    // Ninguém olhando (tela bloqueada, outro palco, app no fundo): nada de FFT.
+    guard wanted else {
+      analyzedUpTo = writeCount
+      return
+    }
+
     switch kind {
-    case .float32:
-      applyEQIfNeeded(abl, n)
-      mix(abl, n, Float.self)
+    case .float32: mix(abl, n, Float.self)
     case .int16: mix(abl, n, Int16.self)
     case .int32: mix(abl, n, Int32.self)
     case .unsupported: return
     }
 
     writeCount &+= n
-    sinceLast += n
-    if sinceLast >= SpectrumTapContext.hop && writeCount >= SpectrumTapContext.fftSize {
-      sinceLast = 0
-      analyze()
+    // Uma análise a cada 512 amostras (~86 Hz), mesmo que o callback traga 4096 de uma vez:
+    // o detector de batidas precisa dessa resolução. Só a última janela publica as bandas.
+    let hop = SpectrumTapContext.hop
+    if writeCount - analyzedUpTo > SpectrumTapContext.ringSize - SpectrumTapContext.fftSize {
+      analyzedUpTo = writeCount - SpectrumTapContext.ringSize + SpectrumTapContext.fftSize
     }
+    while analyzedUpTo + hop <= writeCount {
+      analyzedUpTo += hop
+      guard analyzedUpTo >= SpectrumTapContext.fftSize else { continue }
+      let lagSamples = writeCount - analyzedUpTo
+      analyze(endingAt: analyzedUpTo, publish: analyzedUpTo + hop > writeCount, now: now,
+              lagNs: UInt64(Double(lagSamples) / sampleRate * 1e9))
+    }
+  }
+
+  func markDemand(_ t: UInt64) {
+    os_unfair_lock_lock(lock)
+    demandTime = t
+    os_unfair_lock_unlock(lock)
+  }
+
+  struct Status { var supported: Bool; var lastProcess: UInt64 }
+
+  func status() -> Status {
+    os_unfair_lock_lock(lock)
+    defer { os_unfair_lock_unlock(lock) }
+    return Status(supported: kind != .unsupported && active, lastProcess: lastProcess)
   }
 
   @inline(__always)
@@ -460,7 +646,7 @@ private final class SpectrumTapContext: @unchecked Sendable {
       os_unfair_lock_unlock(eqLock)
       return
     }
-    var coeffs = [Float](repeating: 0, count: 25)
+    let coeffs = eqLocal
     for i in 0..<25 { coeffs[i] = eqCoeffs[i] }
     os_unfair_lock_unlock(eqLock)
 
@@ -542,10 +728,10 @@ private final class SpectrumTapContext: @unchecked Sendable {
     }
   }
 
-  private func analyze() {
+  private func analyze(endingAt end: Int, publish: Bool, now: UInt64, lagNs: UInt64) {
     let n = SpectrumTapContext.fftSize
     let mask = SpectrumTapContext.ringSize - 1
-    let start = (writeCount &- n) & mask
+    let start = (end &- n) & mask
 
     // copia os últimos 1024 samples
     let first = min(n, SpectrumTapContext.ringSize - start)
@@ -575,6 +761,40 @@ private final class SpectrumTapContext: @unchecked Sendable {
     power[half] = power[half - 1]
     var eps: Float = 1e-12
     vDSP_vsadd(power, 1, &eps, power, 1, vDSP_Length(half + 1))
+    // Detector de batidas: fluxo positivo da energia dos graves (~40–170 Hz) com limiar adaptativo
+    // (média + 1,5 desvio) e intervalo mínimo de 0,27 s (≤ 220 BPM).
+    let binHz = Float(sampleRate) / Float(n)
+    let bLo = max(1, Int(40 / binHz)), bHi = max(bLo, min(half - 1, Int(170 / binHz)))
+    var bassP: Float = 0
+    for k in bLo...bHi { bassP += power[k] }
+    let bassE = log10f(1 + 2000 * bassP)
+    let flux = max(0, bassE - prevBassE)
+    prevBassE = bassE
+    samplesSinceBeat += SpectrumTapContext.hop
+    let std = sqrtf(max(fluxVar, 1e-6))
+    let thr = fluxMean + 1.5 * std + 0.015
+    if flux > thr && samplesSinceBeat > Int(0.27 * sampleRate) && level > 0.08 {
+      samplesSinceBeat = 0
+      beatCountLocal &+= 1
+      lastBeatStrength = min(1, max(0.35, (flux - fluxMean) / (4 * std + 0.02)))
+      lastBeatTime = now &- min(lagNs, now)
+    }
+    let a: Float = 0.025   // ~0,45 s de memória a 86 Hz
+    let d = flux - fluxMean
+    fluxMean += a * d
+    fluxVar = (1 - a) * (fluxVar + a * d * d)
+
+    guard publish else {
+      os_unfair_lock_lock(lock)
+      if active {
+        pubBeatCount = beatCountLocal
+        pubBeatStrength = lastBeatStrength
+        pubBeatTime = lastBeatTime
+      }
+      os_unfair_lock_unlock(lock)
+      return
+    }
+
     var one: Float = 1
     vDSP_vdbcon(power, 1, &one, db, 1, vDSP_Length(half + 1), 0)
 
@@ -599,20 +819,25 @@ private final class SpectrumTapContext: @unchecked Sendable {
       localBands[i] = min(max((d + 65) / 55, 0), 1)
     }
 
-    let now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
     os_unfair_lock_lock(lock)
     if active {
       for i in 0..<nb { pubBands[i] = localBands[i] }
       pubLevel = level
       pubTime = now
       pubHasData = true
+      pubBeatCount = beatCountLocal
+      pubBeatStrength = lastBeatStrength
+      pubBeatTime = lastBeatTime
     }
     os_unfair_lock_unlock(lock)
   }
 
   // MARK: leitura (main)
 
-  struct Snapshot { var level: Float; var time: UInt64; var hasData: Bool }
+  struct Snapshot {
+    var level: Float; var time: UInt64; var hasData: Bool
+    var beatCount: Int; var beatStrength: Float; var beatTime: UInt64
+  }
 
   func snapshot(into out: inout [Float]) -> Snapshot {
     let nb = SpectrumTapContext.bands
@@ -621,6 +846,7 @@ private final class SpectrumTapContext: @unchecked Sendable {
     if pubHasData {
       for i in 0..<nb { out[i] = pubBands[i] }
     }
-    return Snapshot(level: pubLevel, time: pubTime, hasData: pubHasData)
+    return Snapshot(level: pubLevel, time: pubTime, hasData: pubHasData,
+                    beatCount: pubBeatCount, beatStrength: pubBeatStrength, beatTime: pubBeatTime)
   }
 }

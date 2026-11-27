@@ -1,340 +1,478 @@
 import SwiftUI
 
-/// Toca-discos Direct-Drive 3D de estúdio:
-/// chassi com shader Metal em 4 acabamentos, profundidade 3D chanfrada com pés isoladores,
-/// 4 edições de vinil com microssulcos e reflexo especular estacionário a 120Hz,
-/// braço em S articulado com cálculo analítico O(1) e alavanca Cue real, pitch varispeed e scratch.
+// MARK: - Palco "Vinil"
+
+/// Toca-discos de estúdio. O deck é uma imagem estática (chassi, marcações, parafusos) + prato/disco
+/// pré-renderizados que só giram (rotationEffect) + reflexo parado + braço que só rotaciona em volta do pivô.
+/// Os controles (33/45, iniciar/parar, pitch, estilos) ficam numa doca de vidro com alvos ≥ 44 pt.
 struct TurntableStage: View {
   let track: Track
   @ObservedObject private var player = AudioPlayer.shared
   @ObservedObject private var clock = PlaybackClock.shared
   @ObservedObject private var store = LibraryStore.shared
-  @State private var pitchPercent: Double = 0
+  @State private var rpm45 = false
+  @State private var pitch: Double = 0
 
   var body: some View {
     GeometryReader { g in
-      let availH = max(230, g.size.height - 44)
-      let side = min(g.size.width - 24, availH, 410)
-      ZStack(alignment: .topTrailing) {
-        VStack(spacing: 0) {
-          Spacer(minLength: 20)
+      let dockH: CGFloat = 44
+      let thick: CGFloat = store.turntable3D ? 0.035 : 0
+      let availH = max(170, g.size.height - dockH - 36)
+      let W = min(g.size.width - 24, availH / (1 + thick) * DeckGeo.aspect, 520)
+      let H = W / DeckGeo.aspect
+      let progress = clock.duration > 0 ? min(1, max(0, clock.currentTime / clock.duration)) : 0
+
+      ZStack {
+        VStack(spacing: 14) {
+          Spacer(minLength: 0)
           TurntableDeck(
-            side: side,
+            height: H,
             artworkURL: player.currentArtwork,
             isPlaying: player.isPlaying,
-            progress: clock.duration > 0 ? clock.currentTime / clock.duration : 0,
+            progress: (progress * 400).rounded() / 400,
             finish: store.turntableFinish,
             edition: store.vinylEdition,
             is3D: store.turntable3D,
-            onPitchChange: { pitchPercent = $0 * 8.0 }
+            rpm45: rpm45,
+            pitch: pitch
           )
-          .frame(width: side, height: side)
-          Spacer(minLength: 0)
+          .frame(width: W, height: H * (1 + thick), alignment: .top)
+          dock
+            .padding(.trailing, 52)
+            .padding(.horizontal, 14)
+            .frame(height: dockH)
         }
+        .padding(.bottom, 8)
         .frame(width: g.size.width, height: g.size.height)
 
-        if abs(pitchPercent) >= 0.2 {
-          Text(String(format: "Pitch %+.1f%%", pitchPercent))
-            .font(Theme.font(11, .bold))
-            .foregroundStyle(Theme.accent)
-            .monospacedDigit()
-            .padding(.horizontal, 10)
-            .frame(height: 28)
-            .glassCapsule()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .padding(.trailing, 18)
-            .padding(.bottom, 6)
+        StageStyleOrb(icon: "slider.horizontal.3", accessibilityLabel: "Personalizar toca-discos", title: nil, placement: .bottomTrailing) { _ in
+          orbPanel
         }
+      }
+    }
+  }
 
-        StageStyleOrb(icon: "record.circle", accessibilityLabel: "Personalizar toca-discos") { dismiss in
-          let cols = [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)]
-          VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-              perspectivePill(title: "3D Estúdio", active: store.turntable3D) {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { store.turntable3D = true }
-                dismiss()
-              }
-              perspectivePill(title: "Vista Topo", active: !store.turntable3D) {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { store.turntable3D = false }
-                dismiss()
-              }
-            }
+  // MARK: doca
 
-            sectionHeader("MESA")
-            LazyVGrid(columns: cols, spacing: 6) {
-              ForEach(TurntableFinish.allCases) { f in
-                let active = store.turntableFinish == f
-                orbOptionRow(title: f.rawValue, active: active) {
-                  withAnimation(.easeInOut(duration: 0.25)) { store.turntableFinish = f }
-                  dismiss()
-                }
-              }
-            }
+  private var dock: some View {
+    HStack(spacing: 8) {
+      SpeedPicker(rpm45: $rpm45)
+      Button {
+        Haptics.rigid()
+        player.togglePlayPause()
+      } label: {
+        HStack(spacing: 6) {
+          Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+            .font(.system(size: 16, weight: .bold))
+            .contentTransition(.symbolEffect(.replace))
+          Text(player.isPlaying ? "Parar" : "Iniciar")
+            .font(Theme.font(13.5, .semibold))
+        }
+        .foregroundStyle(Theme.text)
+        .padding(.horizontal, 12)
+        .frame(minWidth: 84, minHeight: 44)
+        .contentShape(Capsule())
+        .glassCapsule(tint: player.isPlaying ? Theme.mint.opacity(0.35) : nil, interactive: true)
+      }
+      .buttonStyle(PressableStyle(scale: 0.94))
+      .accessibilityLabel(player.isPlaying ? "Parar o disco" : "Iniciar o disco")
 
-            sectionHeader("EDIÇÃO DO VINIL")
-            LazyVGrid(columns: cols, spacing: 6) {
-              ForEach(VinylEdition.allCases) { ed in
-                let active = store.vinylEdition == ed
-                orbOptionRow(title: ed.rawValue, active: active) {
-                  withAnimation(.easeInOut(duration: 0.25)) { store.vinylEdition = ed }
-                  dismiss()
-                }
-              }
-            }
+      PitchSlider(value: $pitch) { v in
+        player.setVarispeed(Float(1 + v * 0.08))
+      }
+      .frame(minWidth: 80)
+    }
+    .glassGroup(spacing: 8)
+  }
+
+  // MARK: painel de estilos
+
+  private var orbPanel: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      StageSegmented(items: [(true, "3D Estúdio"), (false, "Vista Topo")], selection: store.turntable3D) { v in
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { store.turntable3D = v }
+      }
+
+      StageSectionHeader(title: "MESA", trailing: store.turntableFinish.rawValue)
+      HStack(spacing: 0) {
+        ForEach(TurntableFinish.allCases) { f in
+          StageSwatch(selected: store.turntableFinish == f, label: f.rawValue) {
+            Image(uiImage: LumeTextures.surfaceImage(styleId: Int(f.shaderIndex)))
+              .resizable().scaledToFill()
+          } action: {
+            withAnimation(.easeInOut(duration: 0.3)) { store.turntableFinish = f }
           }
+          .frame(maxWidth: .infinity)
+        }
+      }
+
+      StageSectionHeader(title: "VINIL", trailing: store.vinylEdition.rawValue)
+      HStack(spacing: 0) {
+        ForEach(VinylEdition.allCases) { e in
+          StageSwatch(selected: store.vinylEdition == e, label: e.rawValue) {
+            vinylSwatch(e)
+          } action: {
+            withAnimation(.easeInOut(duration: 0.3)) { store.vinylEdition = e }
+          }
+          .frame(maxWidth: .infinity)
         }
       }
     }
+    .padding(.bottom, 4)
   }
 
-  private func sectionHeader(_ text: String) -> some View {
-    Text(text)
-      .font(Theme.font(10, .heavy))
-      .tracking(0.8)
-      .foregroundStyle(Theme.secondary)
-      .padding(.horizontal, 4)
-  }
-
-  private func perspectivePill(title: String, active: Bool, action: @escaping () -> Void) -> some View {
-    Button {
-      Haptics.selection()
-      action()
-    } label: {
-      Text(title)
-        .font(Theme.font(11.5, .bold))
-        .foregroundStyle(active ? Theme.onPrism : Theme.text)
-        .frame(maxWidth: .infinity)
-        .frame(height: 30)
-        .background {
-          RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(active ? AnyShapeStyle(Theme.prismDiagonal) : AnyShapeStyle(Color.white.opacity(0.08)))
-        }
+  @ViewBuilder
+  private func vinylSwatch(_ e: VinylEdition) -> some View {
+    switch e {
+    case .classicBlack:
+      RadialGradient(colors: [Color(white: 0.30), Color(white: 0.06)], center: .topLeading, startRadius: 0, endRadius: 40)
+    case .prismCrystal:
+      AngularGradient(colors: [.pink, .orange, .yellow, .mint, .cyan, .purple, .pink], center: .center)
+    case .limitedGold:
+      RadialGradient(colors: [Color(red: 0.98, green: 0.82, blue: 0.40), Color(red: 0.58, green: 0.38, blue: 0.10)], center: .topLeading, startRadius: 0, endRadius: 40)
+    case .whiteMarble:
+      RadialGradient(colors: [.white, Color(white: 0.78)], center: .topLeading, startRadius: 0, endRadius: 40)
     }
-    .buttonStyle(.plain)
-  }
-
-  private func orbOptionRow(title: String, active: Bool, action: @escaping () -> Void) -> some View {
-    Button {
-      Haptics.selection()
-      action()
-    } label: {
-      HStack {
-        Text(title)
-          .font(Theme.font(11, active ? .bold : .semibold))
-          .foregroundStyle(active ? Theme.onPrism : Theme.text)
-          .lineLimit(1)
-          .minimumScaleFactor(0.85)
-        Spacer(minLength: 2)
-        if active {
-          Image(systemName: "checkmark")
-            .font(.system(size: 9.5, weight: .bold))
-            .foregroundStyle(Theme.onPrism)
-        }
-      }
-      .padding(.horizontal, 8)
-      .frame(height: 29)
-      .background {
-        RoundedRectangle(cornerRadius: 9, style: .continuous)
-          .fill(active ? AnyShapeStyle(Theme.prismDiagonal) : AnyShapeStyle(Color.white.opacity(0.06)))
-      }
-    }
-    .buttonStyle(.plain)
   }
 }
 
+// MARK: - Doca: velocidade, pitch
+
+private struct SpeedPicker: View {
+  @Binding var rpm45: Bool
+  @Namespace private var ns
+
+  var body: some View {
+    HStack(spacing: 2) {
+      seg("33⅓", active: !rpm45) { rpm45 = false }
+      seg("45", active: rpm45) { rpm45 = true }
+    }
+    .padding(3)
+    .glassCapsule()
+  }
+
+  private func seg(_ title: String, active: Bool, action: @escaping () -> Void) -> some View {
+    Button {
+      guard !active else { return }
+      Haptics.rigid()
+      withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { action() }
+    } label: {
+      Text(title)
+        .font(Theme.font(14, .bold))
+        .foregroundStyle(active ? Theme.onPrism : Theme.text)
+        .frame(width: 48, height: 44)
+        .background {
+          if active { Capsule().fill(Theme.prismDiagonal).matchedGeometryEffect(id: "speed", in: ns) }
+        }
+        .contentShape(Capsule())
+    }
+    .buttonStyle(PressableStyle(scale: 0.94))
+    .accessibilityLabel("\(title) rotações por minuto")
+    .accessibilityAddTraits(active ? [.isSelected, .isButton] : .isButton)
+  }
+}
+
+private struct PitchSlider: View {
+  @Binding var value: Double
+  let onChange: (Double) -> Void
+
+  var body: some View {
+    GeometryReader { g in
+      let pad: CGFloat = 18
+      let trackW = max(1, g.size.width - pad * 2)
+      let x = pad + CGFloat((value + 1) / 2) * trackW
+      ZStack(alignment: .leading) {
+        Capsule().fill(Color.white.opacity(0.18)).frame(height: 4).padding(.horizontal, pad)
+        Capsule().fill(Theme.prismDiagonal)
+          .frame(width: abs(x - (pad + trackW / 2)), height: 4)
+          .offset(x: min(x, pad + trackW / 2))
+        Rectangle().fill(Color.white.opacity(0.55)).frame(width: 1.5, height: 12).offset(x: pad + trackW / 2 - 0.75)
+        Circle()
+          .fill(Color.white)
+          .frame(width: 22, height: 22)
+          .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+          .offset(x: x - 11)
+      }
+      .frame(maxHeight: .infinity, alignment: .bottom)
+      .padding(.bottom, 8)
+      .overlay(alignment: .top) {
+        Text(String(format: "PITCH %+.1f%%", value * 8))
+          .font(Theme.font(10.5, .heavy))
+          .tracking(0.4)
+          .monospacedDigit()
+          .foregroundStyle(abs(value) < 0.02 ? Theme.secondary : Theme.accent)
+          .padding(.top, 5)
+      }
+      .contentShape(Rectangle())
+      .gesture(
+        DragGesture(minimumDistance: 0)
+          .onChanged { v in
+            var nv = Double((v.location.x - pad) / trackW) * 2 - 1
+            nv = min(1, max(-1, nv))
+            if abs(nv) < 0.07 { nv = 0 }
+            if (nv == 0) != (value == 0) { Haptics.rigid() }
+            value = nv
+            onChange(nv)
+          }
+      )
+      .simultaneousGesture(
+        TapGesture(count: 2).onEnded {
+          Haptics.medium()
+          withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { value = 0 }
+          onChange(0)
+        }
+      )
+    }
+    .frame(height: 44)
+    .glassCapsule()
+    .accessibilityElement()
+    .accessibilityLabel("Ajuste de velocidade")
+    .accessibilityValue(String(format: "%+.1f por cento", value * 8))
+    .accessibilityAdjustableAction { dir in
+      let nv = min(1, max(-1, value + (dir == .increment ? 0.125 : -0.125)))
+      value = abs(nv) < 0.05 ? 0 : nv
+      onChange(value)
+    }
+  }
+}
+
+// MARK: - Deck
+
 struct TurntableDeck: View {
-  let side: CGFloat
+  let height: CGFloat
   let artworkURL: String
   let isPlaying: Bool
   let progress: Double
   var finish: TurntableFinish = .obsidian
   var edition: VinylEdition = .classicBlack
   var is3D: Bool = true
-  var onPitchChange: ((Double) -> Void)? = nil
+  var rpm45: Bool = false
+  var pitch: Double = 0
 
-  @ObservedObject private var player = AudioPlayer.shared
+  @Environment(\.displayScale) private var displayScale
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var baseImage: UIImage?
+  @State private var recordImage: UIImage?
   @State private var spin = SpinModel()
-  @State private var idleTick = false
-  @State private var rpm45 = false
-  @State private var scratchDelta: Double = 0
-  @State private var scratchLastAngle: Double?
+  @State private var spinActive = false
   @State private var scratching = false
-  @State private var startPressed = false
-  @State private var pitch: Double = 0
+  @State private var scratchDelta: Double = 0
+  @State private var scratchLast: Double?
+  @State private var armAngle: Double = DeckGeo.restAngle
+  @State private var armLift: Double = 1
+  @State private var armTask: Task<Void, Never>?
 
-  private var S: CGFloat { side }
-  private var center: CGPoint { CGPoint(x: S * 0.43, y: S * 0.50) }
-  private var recordR: CGFloat { S * 0.385 }
-  private var pivot: CGPoint { CGPoint(x: S * 0.845, y: S * 0.185) }
-  private var armLen: CGFloat { S * 0.60 }
-  private var degPerSec: Double { (rpm45 ? 45 : 33.333) * 6 * (1 + pitch * 0.08) }
+  private var H: CGFloat { height }
+  private var W: CGFloat { height * DeckGeo.aspect }
+  private var platterPx: Int { Int((H * DeckGeo.platterD * displayScale / 2).rounded()) * 2 }
+  private var basePx: Int { Int((W * displayScale).rounded()) }
+  private var degPerSec: Double { (rpm45 ? 45 : 33.3333) * 6 * (1 + pitch * 0.08) }
+  private var spinTarget: Double { (isPlaying && !scratching && !reduceMotion) ? degPerSec : 0 }
+  private var loadKey: String { "\(finish.rawValue)|\(edition.rawValue)|\(is3D)|\(platterPx)|\(basePx)" }
 
   var body: some View {
-    ZStack {
-      // Base 3D física extrudada + pés isoladores
-      if is3D {
-        deckChassisDepth
-      }
-
-      deckTopSurface
+    let arm = LumeTextures.shared.armImages()
+    ZStack(alignment: .topLeading) {
+      baseLayer
+      lampGlow
+      discLayer
+      sheenLayer
+      spindle
+      armLayer(arm)
+      pitchKnob
+      if scratching { scratchBadge }
     }
-    .frame(width: S, height: S)
-    .rotation3DEffect(.degrees(is3D ? 10 : 0), axis: (x: 1, y: -0.04, z: 0), perspective: 0.45)
-    .shadow(color: .black.opacity(is3D ? 0.46 : 0.34), radius: S * (is3D ? 0.07 : 0.048), y: S * (is3D ? 0.05 : 0.032))
-    .onChange(of: isPlaying) { _, now in
-      if !now {
-        Task {
-          try? await Task.sleep(for: .seconds(5))
-          idleTick.toggle()
-        }
+    .frame(width: W, height: H, alignment: .topLeading)
+    .task(id: loadKey) { await load() }
+    .onAppear {
+      spinActive = isPlaying && !reduceMotion
+      armAngle = isPlaying ? DeckGeo.angle(forProgress: progress) : DeckGeo.restAngle
+      armLift = isPlaying ? 0 : 1
+    }
+    .task(id: isPlaying) {
+      if isPlaying {
+        spinActive = !reduceMotion
+      } else {
+        // espera o prato parar por inércia e então desliga o relógio (nada roda com a música pausada)
+        try? await Task.sleep(for: .seconds(2.8))
+        if !Task.isCancelled && !scratching { spinActive = false }
       }
     }
-    .overlay { if idleTick { EmptyView() } }
+    .onChange(of: isPlaying) { _, playing in moveArm(playing) }
+    .onChange(of: progress) { _, _ in
+      if isPlaying && armLift == 0 && !scratching {
+        withAnimation(.linear(duration: 0.5)) { armAngle = DeckGeo.angle(forProgress: progress) }
+      }
+    }
   }
 
-  private var deckChassisDepth: some View {
-    let corner = S * 0.075
+  private func load() async {
+    if let b = LumeTextures.shared.cachedDeck(finish: finish, thick: is3D, px: basePx) { baseImage = b }
+    if let r = LumeTextures.shared.cachedRecord(edition: edition, px: platterPx) { recordImage = r }
+    async let r = LumeTextures.shared.recordImage(edition: edition, px: platterPx)
+    async let b = LumeTextures.shared.deckBase(finish: finish, thick: is3D, px: basePx)
+    let (ri, bi) = await (r, b)
+    guard !Task.isCancelled else { return }
+    recordImage = ri
+    baseImage = bi
+  }
+
+  // MARK: braço
+
+  private func moveArm(_ playing: Bool) {
+    armTask?.cancel()
+    armTask = Task { @MainActor in
+      if playing {
+        withAnimation(.easeInOut(duration: reduceMotion ? 0.2 : 1.15)) { armAngle = DeckGeo.angle(forProgress: progress) }
+        try? await Task.sleep(for: .milliseconds(reduceMotion ? 150 : 980))
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.5)) { armLift = 0 }
+      } else {
+        withAnimation(.easeOut(duration: 0.28)) { armLift = 1 }
+        try? await Task.sleep(for: .milliseconds(240))
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeInOut(duration: reduceMotion ? 0.2 : 1.05)) { armAngle = DeckGeo.restAngle }
+      }
+    }
+  }
+
+  // MARK: camadas
+
+  private var baseLayer: some View {
+    let mx = DeckGeo.marginX * H, mt = DeckGeo.marginTop * H, mb = DeckGeo.marginBottom * H
+    return Color.clear
+      .frame(width: W, height: H)
+      .overlay(alignment: .topLeading) {
+        if let baseImage {
+          Image(uiImage: baseImage)
+            .resizable()
+            .frame(width: W + 2 * mx, height: H + mt + mb)
+            .offset(x: -mx, y: -mt)
+            .transition(.opacity)
+        }
+      }
+      .animation(.easeOut(duration: 0.25), value: baseImage == nil)
+  }
+
+  private var lampGlow: some View {
+    ZStack {
+      Circle().fill(RadialGradient(colors: [Theme.peach.opacity(0.85), Theme.peach.opacity(0)], center: .center, startRadius: 0, endRadius: H * 0.09))
+        .frame(width: H * 0.18, height: H * 0.18)
+      Circle().fill(Color(red: 1, green: 0.85, blue: 0.7)).frame(width: H * 0.020, height: H * 0.020)
+    }
+    .opacity(isPlaying ? 1 : 0)
+    .animation(.easeInOut(duration: 0.5), value: isPlaying)
+    .position(x: 1.17 * H, y: 0.80 * H)
+    .allowsHitTesting(false)
+  }
+
+  private var discLayer: some View {
+    let D = DeckGeo.platterD * H
+    let labelD = DeckGeo.labelD * H
+    let c = CGPoint(x: DeckGeo.platterC.x * H, y: DeckGeo.platterC.y * H)
+    return TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !spinActive && !scratching)) { tl in
+      let a = spin.step(now: tl.date.timeIntervalSinceReferenceDate, target: spinTarget)
+      ZStack {
+        if let recordImage {
+          Image(uiImage: recordImage).resizable().frame(width: D, height: D)
+        }
+        VinylLabel(diameter: labelD, artworkURL: artworkURL, rpmText: rpm45 ? "LADO A · 45 RPM" : "LADO A · 33⅓ RPM")
+      }
+      .rotationEffect(.degrees(a))
+    }
+    .frame(width: D, height: D)
+    .contentShape(Circle())
+    .gesture(scratchGesture(diameter: D))
+    .onTapGesture {
+      Haptics.medium()
+      AudioPlayer.shared.togglePlayPause()
+    }
+    .position(c)
+    .accessibilityLabel("Disco")
+    .accessibilityHint("Toque para tocar ou pausar. Arraste em círculo para avançar ou voltar.")
+    .accessibilityAddTraits(.isButton)
+  }
+
+  private var sheenLayer: some View {
+    Image(uiImage: LumeTextures.shared.vinylSheen(prism: edition == .prismCrystal))
+      .resizable()
+      .frame(width: DeckGeo.recordD * H, height: DeckGeo.recordD * H)
+      .position(x: DeckGeo.platterC.x * H, y: DeckGeo.platterC.y * H)
+      .allowsHitTesting(false)
+  }
+
+  private var spindle: some View {
+    let d = H * 0.030
     return ZStack {
-      // Pés isoladores cromados nos cantos inferiores
-      HStack {
-        isolationFoot
-        Spacer()
-        isolationFoot
-      }
-      .padding(.horizontal, S * 0.09)
-      .offset(y: S * 0.49)
-
-      // Borda lateral extrudada do chassi
-      RoundedRectangle(cornerRadius: corner, style: .continuous)
-        .fill(
-          LinearGradient(
-            colors: finish.isDarkChassis
-              ? [Color(white: 0.06), Color(white: 0.02)]
-              : [Color(white: 0.42), Color(white: 0.24)],
-            startPoint: .leading, endPoint: .trailing
-          )
-        )
-        .frame(width: S, height: S)
-        .overlay(
-          RoundedRectangle(cornerRadius: corner, style: .continuous)
-            .stroke(Color.white.opacity(finish.isDarkChassis ? 0.10 : 0.28), lineWidth: 0.8)
-        )
-        .offset(y: S * 0.036)
+      Circle().fill(RadialGradient(colors: [Color(white: 1), Color(white: 0.62), Color(white: 0.22)], center: UnitPoint(x: 0.35, y: 0.3), startRadius: 0, endRadius: d * 0.7))
+      Circle().stroke(Color.black.opacity(0.5), lineWidth: 0.6)
     }
+    .frame(width: d, height: d)
+    .shadow(color: .black.opacity(0.5), radius: 1.2, y: 1)
+    .position(x: DeckGeo.platterC.x * H, y: DeckGeo.platterC.y * H)
+    .allowsHitTesting(false)
   }
 
-  private var isolationFoot: some View {
-    RoundedRectangle(cornerRadius: S * 0.015, style: .continuous)
-      .fill(LinearGradient(colors: [Color(white: 0.55), Color(white: 0.18), Color(white: 0.4)], startPoint: .leading, endPoint: .trailing))
-      .frame(width: S * 0.11, height: S * 0.038)
-      .shadow(color: .black.opacity(0.6), radius: 4, y: 3)
-  }
-
-  private var deckTopSurface: some View {
-    ZStack {
-      PlinthView(side: S, finish: finish).equatable()
-
-      // Seletor de velocidade 33 / 45
-      HStack(spacing: S * 0.018) {
-        speedKey("33", active: !rpm45) { rpm45 = false }
-        speedKey("45", active: rpm45) { rpm45 = true }
-      }
-      .position(x: S * 0.135, y: S * 0.075)
-
-      Text("LUME DD-1")
-        .font(.system(size: S * 0.020, weight: .heavy, design: .rounded))
-        .tracking(S * 0.002)
-        .foregroundStyle(finish.isDarkChassis ? Color.white.opacity(0.45) : Color.black.opacity(0.42))
-        .position(x: S * 0.132, y: S * 0.128)
-
-      // Poço do prato
-      Circle()
-        .fill(Color.black.opacity(0.55))
-        .frame(width: S * 0.835, height: S * 0.835)
-        .blur(radius: S * 0.012)
-        .position(x: center.x + S * 0.006, y: center.y + S * 0.010)
-      strobeLight
-
-      // Prato + Vinil com shader GPU 120Hz + selo giratório
-      TimelineView(.animation(paused: !isPlaying && !scratching && !spin.isMoving)) { tl in
-        let angle = spin.step(now: tl.date.timeIntervalSinceReferenceDate, target: (isPlaying && !scratching) ? degPerSec : 0)
-        ZStack {
-          PlatterStrobeRim(side: S)
-            .rotationEffect(.degrees(angle))
-          VinylGrooveDisc(side: S, edition: edition, rotationDeg: angle)
-          VinylLabel(side: S, artworkURL: artworkURL, rpmText: rpm45 ? "LADO A · 45 RPM" : "LADO A · 33⅓")
-            .rotationEffect(.degrees(angle))
-        }
-      }
-      .frame(width: S * 0.83, height: S * 0.83)
-      .position(center)
-      .contentShape(Circle())
-      .gesture(scratchGesture)
-      .onTapGesture { Haptics.medium(); player.togglePlayPause() }
-
-      // Descanso do braço
-      ArmRest(side: S)
-        .position(x: pivot.x - armLen * 0.73 * sin(2 * .pi / 180), y: pivot.y + armLen * 0.73 * cos(2 * .pi / 180))
-
-      // Braço em S articulado com alavanca Cue real
-      TonearmView(side: S, pivot: pivot, length: armLen, angle: armAngle, lift: isPlaying ? 0 : 1, darkChassis: finish.isDarkChassis)
-        .allowsHitTesting(false)
-        .animation(.spring(response: 0.95, dampingFraction: 0.86), value: isPlaying)
-        .animation(.linear(duration: 0.4), value: armAngle)
-
-      startStopButton
-        .position(x: S * 0.125, y: S * 0.905)
-
-      PitchFader(side: S, value: $pitch, darkChassis: finish.isDarkChassis) { newValue in
-        player.setVarispeed(Float(1 + newValue * 0.08))
-        onPitchChange?(newValue)
-      }
-      .frame(width: S * 0.05, height: S * 0.30)
-      .position(x: S * 0.935, y: S * 0.77)
-
-      if scratching {
-        let secs = scratchDelta / degPerSec
-        Text((secs >= 0 ? "+" : "−") + String(format: "%.1fs", abs(secs)) + "  ·  " + Theme.formatTime(max(0, player.currentTime + secs)))
-          .font(Theme.font(13, .semibold))
-          .monospacedDigit()
-          .foregroundStyle(Theme.text)
-          .padding(.horizontal, 14)
-          .frame(height: 34)
-          .glassCapsule()
-          .position(x: center.x, y: S * 0.04)
-          .transition(.opacity)
-      }
+  private func armLayer(_ imgs: (arm: UIImage, shadow: UIImage)) -> some View {
+    let aw = LumeTextures.armCanvas.width * H
+    let ah = LumeTextures.armCanvas.height * H
+    let anchor = UnitPoint(x: LumeTextures.armPivot.x / LumeTextures.armCanvas.width, y: LumeTextures.armPivot.y / LumeTextures.armCanvas.height)
+    let cx = DeckGeo.pivot.x * H
+    let cy = DeckGeo.pivot.y * H + (ah / 2 - LumeTextures.armPivot.y * H)
+    return ZStack {
+      Image(uiImage: imgs.shadow)
+        .resizable()
+        .frame(width: aw, height: ah)
+        .opacity(0.55 - 0.22 * armLift)
+        .rotationEffect(.degrees(armAngle), anchor: anchor)
+        .offset(x: H * (0.010 + 0.034 * armLift), y: H * (0.014 + 0.046 * armLift))
+      Image(uiImage: imgs.arm)
+        .resizable()
+        .frame(width: aw, height: ah)
+        .scaleEffect(1 + 0.045 * armLift, anchor: anchor)
+        .rotationEffect(.degrees(armAngle), anchor: anchor)
     }
+    .position(x: cx, y: cy)
+    .allowsHitTesting(false)
   }
 
-  /// Comportamento Cue real: se pausado no meio da música, o braço levanta sobre o sulco atual; só estaciona no início.
-  private var armAngle: Double {
-    guard isPlaying || progress > 0.002 else { return 2 }
-    let p = min(1, max(0, progress))
-    let r = recordR * (0.95 - 0.56 * p)
-    return Self.angle(forRadius: r, pivot: pivot, center: center, length: armLen)
+  private var pitchKnob: some View {
+    let r: CGFloat = H * 0.008
+    let knobShape = RoundedRectangle(cornerRadius: r, style: .continuous)
+    let fillGrad = LinearGradient(colors: [Color(white: 0.40), Color(white: 0.08)], startPoint: .top, endPoint: .bottom)
+    let knobY: CGFloat = (0.57 + 0.144 * CGFloat(pitch)) * H
+    return ZStack {
+      knobShape.fill(fillGrad)
+      Rectangle().fill(Theme.rose).frame(height: 1.3)
+      knobShape.stroke(Color.white.opacity(0.35), lineWidth: 0.6)
+    }
+    .frame(width: H * 0.062, height: H * 0.032)
+    .shadow(color: .black.opacity(0.45), radius: 1.5, y: 1.5)
+    .position(x: 1.395 * H, y: knobY)
+    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: pitch)
+    .allowsHitTesting(false)
   }
 
-  /// Cálculo analítico O(1) do ângulo do braço pela Lei dos Cossenos.
-  static func angle(forRadius r: CGFloat, pivot: CGPoint, center: CGPoint, length: CGFloat) -> Double {
-    let dx = Double(pivot.x - center.x)
-    let dy = Double(center.y - pivot.y)
-    let d = hypot(dx, dy)
-    let L = Double(length)
-    guard d > 0.001, L > 0.001 else { return 0 }
-    let phi = atan2(dx, dy)
-    let cosTheta = min(1.0, max(-1.0, (d * d + L * L - Double(r * r)) / (2.0 * d * L)))
-    let theta = acos(cosTheta)
-    let deg = (phi - theta) * 180.0 / .pi
-    return min(70.0, max(0.0, deg))
+  private var scratchBadge: some View {
+    let secs = scratchDelta / degPerSec
+    return Text((secs >= 0 ? "+" : "−") + String(format: "%.1fs", abs(secs)) + "  ·  " + Theme.formatTime(max(0, AudioPlayer.shared.currentTime + secs)))
+      .font(Theme.font(13, .semibold))
+      .monospacedDigit()
+      .foregroundStyle(Theme.text)
+      .padding(.horizontal, 14)
+      .frame(height: 34)
+      .glassCapsule()
+      .position(x: DeckGeo.platterC.x * H, y: H * 0.06)
+      .transition(.opacity.combined(with: .scale(scale: 0.9)))
   }
 
-  private var scratchGesture: some Gesture {
-    DragGesture(minimumDistance: 6)
+  // MARK: scratch
+
+  private func scratchGesture(diameter D: CGFloat) -> some Gesture {
+    DragGesture(minimumDistance: 10)
       .onChanged { v in
-        let local = CGPoint(x: v.location.x - S * 0.415, y: v.location.y - S * 0.415)
-        let ang = atan2(Double(local.y), Double(local.x)) * 180 / .pi
-        if let last = scratchLastAngle {
+        let ang = atan2(Double(v.location.y - D / 2), Double(v.location.x - D / 2)) * 180 / .pi
+        if let last = scratchLast {
           var d = ang - last
           if d > 180 { d -= 360 }
           if d < -180 { d += 360 }
@@ -343,490 +481,102 @@ struct TurntableDeck: View {
           spin.angle += d
           if Int(scratchDelta / 20) != before { Haptics.soft() }
         } else {
+          spinActive = true
           withAnimation(.easeOut(duration: 0.15)) { scratching = true }
         }
-        scratchLastAngle = ang
+        scratchLast = ang
       }
       .onEnded { _ in
         let secs = scratchDelta / degPerSec
-        if abs(secs) > 0.2 { player.seek(to: max(0, player.currentTime + secs)) }
+        if abs(secs) > 0.2 { AudioPlayer.shared.seek(to: max(0, AudioPlayer.shared.currentTime + secs)) }
         scratchDelta = 0
-        scratchLastAngle = nil
+        scratchLast = nil
         withAnimation(.easeOut(duration: 0.25)) { scratching = false }
+        if !isPlaying { Task { try? await Task.sleep(for: .milliseconds(300)); if !isPlaying && !scratching { spinActive = false } } }
       }
-  }
-
-  private func speedKey(_ label: String, active: Bool, action: @escaping () -> Void) -> some View {
-    Button {
-      Haptics.rigid()
-      withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) { action() }
-    } label: {
-      Text(label)
-        .font(.system(size: S * 0.026, weight: .bold, design: .rounded))
-        .foregroundStyle(active ? Color.white : Color.white.opacity(0.55))
-        .frame(width: S * 0.085, height: S * 0.05)
-        .background(
-          RoundedRectangle(cornerRadius: S * 0.012, style: .continuous)
-            .fill(LinearGradient(colors: active ? [Color(white: 0.16), Color(white: 0.06)] : [Color(white: 0.28), Color(white: 0.14)], startPoint: .top, endPoint: .bottom))
-        )
-        .overlay(alignment: .top) {
-          Capsule().fill(active ? Theme.rose : Color.white.opacity(0.15))
-            .frame(width: S * 0.03, height: S * 0.005)
-            .shadow(color: active ? Theme.rose : .clear, radius: 3)
-            .padding(.top, S * 0.006)
-        }
-        .shadow(color: .black.opacity(active ? 0.15 : 0.35), radius: active ? 1 : 2.5, y: active ? 0.5 : 2)
-        .scaleEffect(active ? 0.96 : 1)
-    }
-    .buttonStyle(.plain)
-  }
-
-  private var startStopButton: some View {
-    Button {
-      Haptics.rigid()
-      player.togglePlayPause()
-    } label: {
-      VStack(spacing: S * 0.006) {
-        Text("START · STOP")
-          .font(.system(size: S * 0.021, weight: .heavy, design: .rounded))
-          .tracking(0.5)
-          .foregroundStyle(.white.opacity(0.85))
-        Circle()
-          .fill(isPlaying ? Theme.mint : Color.white.opacity(0.18))
-          .frame(width: S * 0.012, height: S * 0.012)
-          .shadow(color: isPlaying ? Theme.mint : .clear, radius: 4)
-      }
-      .frame(width: S * 0.19, height: S * 0.085)
-      .background(
-        RoundedRectangle(cornerRadius: S * 0.016, style: .continuous)
-          .fill(LinearGradient(colors: [Color(white: 0.20), Color(white: 0.05)], startPoint: .top, endPoint: .bottom))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: S * 0.016, style: .continuous)
-          .stroke(LinearGradient(colors: [.white.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom), lineWidth: 0.8)
-      )
-      .shadow(color: .black.opacity(0.4), radius: startPressed ? 1 : 3, y: startPressed ? 0.5 : 2.5)
-      .scaleEffect(startPressed ? 0.95 : 1)
-    }
-    .buttonStyle(.plain)
-    .simultaneousGesture(
-      DragGesture(minimumDistance: 0)
-        .onChanged { _ in if !startPressed { withAnimation(.easeOut(duration: 0.08)) { startPressed = true } } }
-        .onEnded { _ in withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) { startPressed = false } }
-    )
-  }
-
-  private var strobeLight: some View {
-    ZStack {
-      Circle()
-        .fill(RadialGradient(colors: [Color(white: 0.35), Color(white: 0.12)], center: .topLeading, startRadius: 0, endRadius: S * 0.03))
-        .frame(width: S * 0.05, height: S * 0.05)
-        .overlay(Circle().stroke(Color.white.opacity(0.4), lineWidth: 0.6))
-      Circle()
-        .fill(isPlaying ? Theme.peach : Color(white: 0.3))
-        .frame(width: S * 0.018, height: S * 0.018)
-        .shadow(color: isPlaying ? Theme.peach : .clear, radius: 6)
-    }
-    .overlay {
-      if isPlaying {
-        Circle()
-          .fill(RadialGradient(colors: [Theme.peach.opacity(0.45), .clear], center: .center, startRadius: 0, endRadius: S * 0.09))
-          .frame(width: S * 0.18, height: S * 0.18)
-          .offset(x: S * 0.05, y: -S * 0.03)
-          .blendMode(.plusLighter)
-          .allowsHitTesting(false)
-      }
-    }
-    .position(x: S * 0.07, y: S * 0.79)
-    .animation(.easeInOut(duration: 0.4), value: isPlaying)
   }
 }
 
-/// Física do prato frame a frame (referência mutável, zero churn no SwiftUI).
+/// Física do prato (referência mutável, zero churn no SwiftUI): aceleração e desaceleração lineares com inércia.
 final class SpinModel {
   var angle: Double = 0
   private(set) var velocity: Double = 0
   private var last: Double = 0
 
-  var isMoving: Bool { abs(velocity) > 0.5 }
-
   func step(now: Double, target: Double) -> Double {
     let dt = last == 0 ? 0 : min(0.1, max(0, now - last))
     last = now
-    let tau = target > velocity ? 0.45 : (target == 0 ? 0.85 : 0.3)
-    velocity += (target - velocity) * (1 - exp(-dt / tau))
+    if velocity < target {
+      velocity = min(target, velocity + 320 * dt)
+    } else if velocity > target {
+      velocity = max(target, velocity - 130 * dt)
+    }
     angle += velocity * dt
-    if angle > 360_000 { angle = angle.truncatingRemainder(dividingBy: 360) }
+    if angle > 360_000 || angle < -360_000 { angle = angle.truncatingRemainder(dividingBy: 360) }
     return angle
   }
 }
 
-// MARK: - Chassi Metal Shader
-
-struct PlinthView: View, Equatable {
-  let side: CGFloat
-  var finish: TurntableFinish = .obsidian
-
-  var body: some View {
-    let corner = side * 0.075
-    Image(uiImage: LumeTextures.shared.brushedSurface(styleId: Int(finish.shaderIndex)))
-      .resizable()
-      .scaledToFill()
-      .frame(width: side, height: side)
-      .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-      .overlay {
-        Canvas { ctx, sz in
-          let rect = CGRect(origin: .zero, size: sz)
-          let shape = Path(roundedRect: rect, cornerRadius: corner, style: .continuous)
-          ctx.stroke(shape, with: .linearGradient(
-            Gradient(colors: [.white.opacity(finish.isDarkChassis ? 0.35 : 0.95), .white.opacity(0.25), .black.opacity(0.35)]),
-            startPoint: .zero, endPoint: CGPoint(x: sz.width, y: sz.height)), lineWidth: 1.6)
-          let inner = Path(roundedRect: rect.insetBy(dx: side * 0.012, dy: side * 0.012), cornerRadius: corner * 0.85, style: .continuous)
-          ctx.stroke(inner, with: .linearGradient(
-            Gradient(colors: [.black.opacity(0.18), .white.opacity(finish.isDarkChassis ? 0.14 : 0.45)]),
-            startPoint: .zero, endPoint: CGPoint(x: sz.width, y: sz.height)), lineWidth: 0.8)
-
-          for p in [CGPoint(x: side * 0.045, y: side * 0.045), CGPoint(x: side * 0.955, y: side * 0.045),
-                    CGPoint(x: side * 0.045, y: side * 0.955), CGPoint(x: side * 0.955, y: side * 0.955)] {
-            let r = side * 0.009
-            let screw = Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2))
-            ctx.fill(screw, with: .radialGradient(Gradient(colors: [Color(white: 0.92), Color(white: 0.45)]), center: CGPoint(x: p.x - r * 0.3, y: p.y - r * 0.3), startRadius: 0, endRadius: r * 1.4))
-            var slot = Path()
-            slot.move(to: CGPoint(x: p.x - r * 0.7, y: p.y + r * 0.2))
-            slot.addLine(to: CGPoint(x: p.x + r * 0.7, y: p.y - r * 0.2))
-            ctx.stroke(slot, with: .color(.black.opacity(0.4)), lineWidth: 0.6)
-          }
-        }
-      }
-      .drawingGroup()
-      .frame(width: side, height: side)
-  }
-}
-
-// MARK: - Prato & Disco GPU
-
-struct PlatterStrobeRim: View {
-  let side: CGFloat
-
-  var body: some View {
-    let platterD = side * 0.81
-    Canvas { ctx, sz in
-      let c = CGPoint(x: sz.width / 2, y: sz.height / 2)
-      let pr = platterD / 2
-      let rim = Path(ellipseIn: CGRect(x: c.x - pr, y: c.y - pr, width: pr * 2, height: pr * 2))
-      ctx.fill(rim, with: .linearGradient(
-        Gradient(colors: [Color(white: 0.88), Color(white: 0.40), Color(white: 0.78), Color(white: 0.30)]),
-        startPoint: CGPoint(x: c.x - pr, y: c.y - pr), endPoint: CGPoint(x: c.x + pr, y: c.y + pr)))
-      let mat = pr * 0.962
-      ctx.fill(Path(ellipseIn: CGRect(x: c.x - mat, y: c.y - mat, width: mat * 2, height: mat * 2)), with: .color(Color(white: 0.08)))
-      // Dupla fileira de pontos estroboscópicos
-      for ring in [0.986, 0.974] {
-        let dots = ring > 0.98 ? 120 : 90
-        for k in 0..<dots {
-          let a = Double(k) / Double(dots) * 2 * .pi
-          let rr = pr * ring
-          let p = CGPoint(x: c.x + rr * CGFloat(cos(a)), y: c.y + rr * CGFloat(sin(a)))
-          let d = side * (ring > 0.98 ? 0.0028 : 0.0020)
-          ctx.fill(Path(ellipseIn: CGRect(x: p.x - d, y: p.y - d, width: d * 2, height: d * 2)), with: .color(Color.black.opacity(k % 2 == 0 ? 0.6 : 0.25)))
-        }
-      }
-    }
-    .frame(width: platterD, height: platterD)
-    .drawingGroup()
-  }
-}
-
-struct VinylGrooveDisc: View {
-  let side: CGFloat
-  let edition: VinylEdition
-  let rotationDeg: Double
-
-  var body: some View {
-    let d = side * 0.77
-    ZStack {
-      Image(uiImage: LumeTextures.shared.vinylDisc(edition: edition))
-        .resizable()
-        .frame(width: d, height: d)
-        .rotationEffect(.degrees(rotationDeg))
-        .overlay(
-          Circle()
-            .stroke(
-              LinearGradient(colors: [.white.opacity(0.22), .clear, .black.opacity(0.35)], startPoint: .topLeading, endPoint: .bottomTrailing),
-              lineWidth: 1.2
-            )
-        )
-
-      // Reflexo especular de estúdio estacionário (não gira com o disco)
-      VinylSpecularSheen(diameter: d, prism: edition == .prismCrystal)
-        .allowsHitTesting(false)
-    }
-  }
-}
-
-struct VinylSpecularSheen: View {
-  let diameter: CGFloat
-  var prism: Bool = false
-
-  var body: some View {
-    AngularGradient(
-      stops: prism ? [
-        .init(color: .clear, location: 0.00),
-        .init(color: Theme.sky.opacity(0.11), location: 0.06),
-        .init(color: .white.opacity(0.20), location: 0.10),
-        .init(color: Theme.rose.opacity(0.11), location: 0.14),
-        .init(color: .clear, location: 0.22),
-        .init(color: .clear, location: 0.50),
-        .init(color: Theme.lavender.opacity(0.09), location: 0.56),
-        .init(color: .white.opacity(0.14), location: 0.60),
-        .init(color: Theme.peach.opacity(0.09), location: 0.64),
-        .init(color: .clear, location: 0.72),
-        .init(color: .clear, location: 1.00),
-      ] : [
-        .init(color: .clear, location: 0.00),
-        .init(color: .white.opacity(0.04), location: 0.05),
-        .init(color: .white.opacity(0.17), location: 0.095),
-        .init(color: .white.opacity(0.04), location: 0.145),
-        .init(color: .clear, location: 0.21),
-        .init(color: .clear, location: 0.51),
-        .init(color: .white.opacity(0.03), location: 0.56),
-        .init(color: .white.opacity(0.10), location: 0.60),
-        .init(color: .white.opacity(0.03), location: 0.64),
-        .init(color: .clear, location: 0.70),
-        .init(color: .clear, location: 1.00),
-      ],
-      center: .center,
-      angle: .degrees(-36)
-    )
-    .frame(width: diameter, height: diameter)
-    .mask(
-      ZStack {
-        Circle().frame(width: diameter * 0.985, height: diameter * 0.985)
-        Circle().frame(width: diameter * 0.37, height: diameter * 0.37).blendMode(.destinationOut)
-      }
-      .compositingGroup()
-    )
-    .blendMode(.plusLighter)
-  }
-}
+// MARK: - Selo do disco (papel com a capa)
 
 struct VinylLabel: View {
-  let side: CGFloat
+  let diameter: CGFloat
   let artworkURL: String
   let rpmText: String
 
   var body: some View {
-    let R = side * 0.385
+    let D = diameter
     ZStack {
-      ArtworkImage(url: artworkURL, cornerRadius: R * 0.34, maxPixel: 600)
-        .frame(width: R * 0.68, height: R * 0.68)
+      ArtworkImage(url: artworkURL, cornerRadius: D / 2, maxPixel: 500)
+        .frame(width: D, height: D)
         .clipShape(Circle())
-        .overlay(Circle().stroke(Color.black.opacity(0.65), lineWidth: 2))
-        // Anel estampado característico de prensa de vinil no papel do selo
-        .overlay(Circle().stroke(Color.black.opacity(0.22), lineWidth: 1).frame(width: R * 0.44, height: R * 0.44))
-        .overlay(
-          Circle().fill(RadialGradient(colors: [.clear, .clear, .black.opacity(0.32)], center: .center, startRadius: 0, endRadius: R * 0.34))
-        )
-        .overlay(alignment: .bottom) {
-          Text(rpmText)
-            .font(.system(size: max(6, R * 0.044), weight: .heavy, design: .rounded))
-            .tracking(0.8)
-            .foregroundStyle(.white.opacity(0.92))
-            .shadow(color: .black.opacity(0.75), radius: 2)
-            .padding(.bottom, R * 0.048)
-        }
-
-      // Eixo metálico torneado central
-      Circle()
-        .fill(RadialGradient(colors: [Color(white: 0.98), Color(white: 0.56), Color(white: 0.22)], center: UnitPoint(x: 0.35, y: 0.35), startRadius: 0, endRadius: R * 0.036))
-        .frame(width: R * 0.066, height: R * 0.066)
-        .overlay(Circle().stroke(Color.black.opacity(0.45), lineWidth: 0.7))
-        .shadow(color: .black.opacity(0.6), radius: 1.5, y: 1)
+      // véu de papel: dá a leitura de selo impresso, não de foto colada
+      Circle().fill(RadialGradient(colors: [.clear, .clear, .black.opacity(0.30)], center: .center, startRadius: 0, endRadius: D / 2))
+      Circle().fill(LinearGradient(colors: [.white.opacity(0.10), .clear, .black.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing))
+      Circle().stroke(Color.black.opacity(0.28), lineWidth: max(0.6, D * 0.006)).frame(width: D * 0.62, height: D * 0.62)
+      Circle().stroke(Color.white.opacity(0.22), lineWidth: max(0.5, D * 0.004)).frame(width: D * 0.92, height: D * 0.92)
+      Circle().stroke(Color.black.opacity(0.7), lineWidth: max(1, D * 0.012))
+      Text(rpmText)
+        .font(.system(size: max(5, D * 0.062), weight: .heavy, design: .rounded))
+        .tracking(0.6)
+        .foregroundStyle(.white.opacity(0.92))
+        .shadow(color: .black.opacity(0.8), radius: 1.5)
+        .offset(y: D * 0.33)
+      Text("STEREO")
+        .font(.system(size: max(4.5, D * 0.050), weight: .heavy, design: .rounded))
+        .tracking(1.2)
+        .foregroundStyle(.white.opacity(0.8))
+        .shadow(color: .black.opacity(0.8), radius: 1.5)
+        .offset(y: -D * 0.33)
+      Circle().fill(Color(white: 0.08)).frame(width: D * 0.075, height: D * 0.075)
     }
+    .frame(width: D, height: D)
   }
 }
 
-/// Prévia compacta reutilizada em SettingsView.
-struct RecordDisc: View, Equatable {
+/// Prévia compacta reutilizada em SettingsView (estática).
+struct RecordDisc: View {
   let side: CGFloat
   let artworkURL: String
   var edition: VinylEdition = .classicBlack
 
+  @Environment(\.displayScale) private var displayScale
+  @State private var image: UIImage?
+
   var body: some View {
+    let D = side * 0.83
+    let px = Int((D * displayScale / 2).rounded()) * 2
     ZStack {
-      PlatterStrobeRim(side: side)
-      VinylGrooveDisc(side: side, edition: edition, rotationDeg: 0)
-      VinylLabel(side: side, artworkURL: artworkURL, rpmText: "LADO A · 33⅓")
+      if let image { Image(uiImage: image).resizable().frame(width: D, height: D) }
+      VinylLabel(diameter: D * DeckGeo.labelD / DeckGeo.platterD, artworkURL: artworkURL, rpmText: "LADO A · 33⅓ RPM")
+      Image(uiImage: LumeTextures.shared.vinylSheen(prism: edition == .prismCrystal))
+        .resizable()
+        .frame(width: D * DeckGeo.recordD / DeckGeo.platterD, height: D * DeckGeo.recordD / DeckGeo.platterD)
     }
-    .frame(width: side * 0.83, height: side * 0.83)
-  }
-}
-
-// MARK: - Braço em S (Tonearm S-Shaped animável)
-
-struct TonearmView: View, Animatable {
-  let side: CGFloat
-  let pivot: CGPoint
-  let length: CGFloat
-  var angle: Double
-  var lift: Double
-  var darkChassis: Bool = true
-
-  var animatableData: AnimatablePair<Double, Double> {
-    get { AnimatablePair(angle, lift) }
-    set { angle = newValue.first; lift = newValue.second }
-  }
-
-  var body: some View {
-    Canvas { ctx, _ in
-      let S = side
-      let shadowOffset = CGSize(width: S * (0.012 + 0.022 * lift), height: S * (0.016 + 0.028 * lift))
-
-      func drawArm(_ c: inout GraphicsContext, shadow: Bool) {
-        c.translateBy(x: pivot.x, y: pivot.y)
-        c.rotate(by: .degrees(angle))
-        let scale = 1 + 0.03 * lift
-        c.scaleBy(x: scale, y: scale)
-        let tubeW = S * 0.021
-        let metal: GraphicsContext.Shading = shadow ? .color(.black) :
-          .linearGradient(Gradient(colors: [Color(white: 0.55), Color(white: 0.98), Color(white: 0.62), Color(white: 0.4)]),
-                          startPoint: CGPoint(x: -tubeW, y: 0), endPoint: CGPoint(x: tubeW, y: 0))
-
-        // Contrapeso graduado
-        let cw = Path(roundedRect: CGRect(x: -S * 0.04, y: -S * 0.17, width: S * 0.08, height: S * 0.085), cornerRadius: S * 0.012)
-        c.fill(cw, with: shadow ? .color(.black) : .linearGradient(
-          Gradient(colors: [Color(white: 0.35), Color(white: 0.85), Color(white: 0.5), Color(white: 0.25)]),
-          startPoint: CGPoint(x: -S * 0.04, y: 0), endPoint: CGPoint(x: S * 0.04, y: 0)))
-        if !shadow {
-          for k in 0..<5 {
-            let yy = -S * 0.165 + CGFloat(k) * S * 0.017
-            c.fill(Path(CGRect(x: -S * 0.04, y: yy, width: S * 0.08, height: 0.6)), with: .color(.black.opacity(0.28)))
-          }
-        }
-        c.fill(Path(roundedRect: CGRect(x: -tubeW * 0.45, y: -S * 0.09, width: tubeW * 0.9, height: S * 0.09), cornerRadius: tubeW * 0.45), with: metal)
-
-        // Tubo em curva S realista
-        var sTube = Path()
-        sTube.move(to: .zero)
-        sTube.addCurve(
-          to: CGPoint(x: S * 0.012, y: length * 0.85),
-          control1: CGPoint(x: S * 0.042, y: length * 0.28),
-          control2: CGPoint(x: -S * 0.036, y: length * 0.58)
-        )
-        c.stroke(sTube, with: metal, style: StrokeStyle(lineWidth: tubeW, lineCap: .round))
-
-        // Headshell perfurado inclinado 22°
-        var hs = c
-        hs.translateBy(x: S * 0.012, y: length * 0.84)
-        hs.rotate(by: .degrees(22))
-        let shell = Path(roundedRect: CGRect(x: -S * 0.03, y: 0, width: S * 0.06, height: S * 0.115), cornerRadius: S * 0.012)
-        hs.fill(shell, with: shadow ? .color(.black) : .linearGradient(
-          Gradient(colors: [Color(white: 0.22), Color(white: 0.08)]), startPoint: .zero, endPoint: CGPoint(x: 0, y: S * 0.115)))
-        if !shadow {
-          let cart = Path(roundedRect: CGRect(x: -S * 0.022, y: S * 0.035, width: S * 0.044, height: S * 0.058), cornerRadius: S * 0.006)
-          hs.fill(cart, with: .linearGradient(Gradient(colors: [Theme.rose, Theme.lavender]), startPoint: CGPoint(x: 0, y: S * 0.035), endPoint: CGPoint(x: 0, y: S * 0.093)))
-          hs.stroke(shell, with: .color(.white.opacity(0.28)), lineWidth: 0.6)
-          // Furos do headshell
-          for yHole in [S * 0.015, S * 0.027] {
-            hs.fill(Path(ellipseIn: CGRect(x: -S * 0.005, y: yHole, width: S * 0.01, height: S * 0.01)), with: .color(.black.opacity(0.75)))
-          }
-          var liftBar = Path()
-          liftBar.move(to: CGPoint(x: S * 0.03, y: S * 0.02))
-          liftBar.addLine(to: CGPoint(x: S * 0.06, y: S * 0.005))
-          hs.stroke(liftBar, with: .color(Color(white: 0.88)), style: StrokeStyle(lineWidth: S * 0.008, lineCap: .round))
-        }
-      }
-
-      var sh = ctx
-      sh.opacity = 0.34 - 0.12 * lift
-      sh.addFilter(.blur(radius: S * (0.008 + 0.012 * lift)))
-      sh.translateBy(x: shadowOffset.width, y: shadowOffset.height)
-      drawArm(&sh, shadow: true)
-
-      var arm = ctx
-      drawArm(&arm, shadow: false)
-
-      // Base do pivô + dial anti-skating
-      let pr = S * 0.072
-      ctx.fill(Path(ellipseIn: CGRect(x: pivot.x - pr, y: pivot.y - pr, width: pr * 2, height: pr * 2)),
-               with: .radialGradient(Gradient(colors: [Color(white: 0.97), Color(white: 0.7), Color(white: 0.45)]),
-                                     center: CGPoint(x: pivot.x - pr * 0.4, y: pivot.y - pr * 0.4), startRadius: 0, endRadius: pr * 1.6))
-      ctx.stroke(Path(ellipseIn: CGRect(x: pivot.x - pr, y: pivot.y - pr, width: pr * 2, height: pr * 2)), with: .color(.black.opacity(0.22)), lineWidth: 0.8)
-      let gr = S * 0.038
-      ctx.fill(Path(ellipseIn: CGRect(x: pivot.x - gr, y: pivot.y - gr, width: gr * 2, height: gr * 2)),
-               with: .radialGradient(Gradient(colors: [Color(white: 0.3), Color(white: 0.08)]), center: CGPoint(x: pivot.x - gr * 0.3, y: pivot.y - gr * 0.3), startRadius: 0, endRadius: gr * 1.4))
-      let cr = S * 0.013
-      ctx.fill(Path(ellipseIn: CGRect(x: pivot.x - cr, y: pivot.y - cr, width: cr * 2, height: cr * 2)), with: .color(Color(white: 0.85)))
-    }
-    .frame(width: side, height: side)
-  }
-}
-
-struct ArmRest: View {
-  let side: CGFloat
-  var body: some View {
-    ZStack {
-      Circle()
-        .fill(RadialGradient(colors: [Color(white: 0.95), Color(white: 0.55)], center: UnitPoint(x: 0.35, y: 0.3), startRadius: 0, endRadius: side * 0.03))
-        .frame(width: side * 0.045, height: side * 0.045)
-        .shadow(color: .black.opacity(0.35), radius: 2, x: 1, y: 2)
-      Capsule()
-        .fill(Color(white: 0.15))
-        .frame(width: side * 0.035, height: side * 0.012)
-    }
-  }
-}
-
-struct PitchFader: View {
-  let side: CGFloat
-  @Binding var value: Double
-  var darkChassis: Bool = true
-  let onChange: (Double) -> Void
-
-  var body: some View {
-    GeometryReader { g in
-      let h = g.size.height
-      ZStack {
-        RoundedRectangle(cornerRadius: g.size.width * 0.25)
-          .fill(Color.black.opacity(0.62))
-          .frame(width: g.size.width * 0.28)
-          .overlay(RoundedRectangle(cornerRadius: g.size.width * 0.25).stroke(Color.white.opacity(0.4), lineWidth: 0.5).offset(x: 0.5, y: 0.8))
-        ForEach(-4...4, id: \.self) { k in
-          Rectangle()
-            .fill((darkChassis ? Color.white : Color.black).opacity(k == 0 ? 0.65 : 0.3))
-            .frame(width: g.size.width * (k == 0 ? 0.9 : 0.55), height: 0.7)
-            .offset(x: -g.size.width * 0.6, y: CGFloat(k) * h * 0.1)
-        }
-        RoundedRectangle(cornerRadius: g.size.width * 0.12, style: .continuous)
-          .fill(LinearGradient(colors: [Color(white: 0.34), Color(white: 0.08)], startPoint: .top, endPoint: .bottom))
-          .frame(width: g.size.width * 0.95, height: h * 0.13)
-          .overlay(Rectangle().fill(Theme.rose).frame(height: 1.2))
-          .shadow(color: .black.opacity(0.45), radius: 2.5, y: 2)
-          .offset(y: CGFloat(value) * h * 0.42)
-      }
-      .frame(width: g.size.width, height: h)
-      .contentShape(Rectangle())
-      .gesture(
-        DragGesture(minimumDistance: 0)
-          .onChanged { v in
-            var nv = Double((v.location.y - h / 2) / (h * 0.42))
-            nv = min(1, max(-1, nv))
-            if abs(nv) < 0.08 { nv = 0 }
-            if (nv == 0) != (value == 0) { Haptics.rigid() }
-            value = nv
-            onChange(nv)
-          }
-      )
-      .onTapGesture(count: 2) {
-        withAnimation(.spring) { value = 0 }
-        onChange(0)
-      }
-    }
-    .overlay(alignment: .bottom) {
-      Text("PITCH")
-        .font(.system(size: side * 0.018, weight: .heavy, design: .rounded))
-        .foregroundStyle((darkChassis ? Color.white : Color.black).opacity(0.45))
-        .fixedSize()
-        .offset(y: side * 0.03)
+    .frame(width: D, height: D)
+    .task(id: "\(edition.rawValue)|\(px)") {
+      if let hit = LumeTextures.shared.cachedRecord(edition: edition, px: px) { image = hit; return }
+      image = await LumeTextures.shared.recordImage(edition: edition, px: px)
     }
   }
 }
