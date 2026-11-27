@@ -59,6 +59,9 @@ import com.adriano.lumemusic.ui.ArtworkImage
 import com.adriano.lumemusic.ui.glass
 import com.adriano.lumemusic.ui.theme.Theme
 import com.adriano.lumemusic.ui.theme.sf
+import com.adriano.lumemusic.ui.stage.CassetteStage
+import com.adriano.lumemusic.ui.stage.VinylStage
+import com.adriano.lumemusic.ui.stage.WavesStage
 import kotlin.math.max
 
 /**

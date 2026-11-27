@@ -201,13 +201,8 @@ fun EmptyState(icon: String, title: String, message: String, modifier: Modifier 
 
 @Composable
 fun LumeMark(size: Dp = 32.dp) {
-    Box(Modifier.size(size).drawBehind {
-        val r = this.size.minDimension / 2
-        drawCircle(Brush.radialGradient(listOf(Color(0.18f, 0.18f, 0.2f), Color(0.06f, 0.06f, 0.08f), Color(0.02f, 0.02f, 0.03f)), radius = r))
-        drawCircle(Theme.prismSweep, radius = r * 0.5f, style = Stroke(r * 0.18f))
-        drawCircle(Color(0.94f, 0.94f, 0.95f), radius = r * 0.3f)
-        drawCircle(Color(0.08f, 0.08f, 0.1f), radius = r * 0.08f)
-    })
+    // a mesma arte do ícone novo (PrismMark do iOS)
+    androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(com.adriano.lumemusic.R.drawable.lume_mark), null, Modifier.size(size))
 }
 
 @Composable
