@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -136,7 +137,7 @@ private fun CassetteStageContent(track: Track, artwork: String, modifier: Modifi
             Spacer(Modifier.weight(1f))
             Box(
                 Modifier.size(w.dp, (w / TapeGeo.aspect).dp)
-                    .graphicsLayer { rotationY = flip; cameraDistance = 2.2f * w * density.density }
+                    .graphicsLayer { rotationY = flip; cameraDistance = 2.2f * w / 160f }
                     .pointerInput(Unit) { detectTapGestures { Haptics.medium(); AudioPlayer.togglePlayPause() } },
             ) {
                 if (flip < 90f) CassetteTape(w, track.title, track.artist, artwork, false, style, Modifier.fillMaxSize())
@@ -293,7 +294,7 @@ fun CassetteTape(
             val sh = h + w * (TapeGeo.shadowMarginTop + TapeGeo.shadowMarginBottom)
             Image(
                 L.shadow.asImageBitmap(), null,
-                Modifier.offset(x = (-(w * TapeGeo.shadowMarginX)).dp, y = (-(w * TapeGeo.shadowMarginTop)).dp).requiredSize(sw.dp, sh.dp),
+                Modifier.offset(x = (-(w * TapeGeo.shadowMarginX)).dp, y = (-(w * TapeGeo.shadowMarginTop)).dp).wrapContentSize(Alignment.TopStart, unbounded = true).requiredSize(sw.dp, sh.dp),
                 contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
             )
             Image(L.back.asImageBitmap(), null, Modifier.size(w.dp, h.dp))

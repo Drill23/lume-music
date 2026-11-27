@@ -588,7 +588,7 @@ private fun CoverFlowCard(item: CoverFlowItem, size: Float, aspect: Float, flipp
         ) {
             ArtworkImage(item.artworkURL, Modifier.size(size.dp).graphicsLayer { scaleY = -1f }, cornerRadius = 2.dp)
         }
-        Box(Modifier.size(w.dp, size.dp).graphicsLayer { rotationY = angle; cameraDistance = 2.2f * w * density }, contentAlignment = Alignment.Center) {
+        Box(Modifier.size(w.dp, size.dp).graphicsLayer { rotationY = angle; cameraDistance = 2.2f * w / 160f }, contentAlignment = Alignment.Center) {
             if (angle < 90f) {
                 Box(Modifier.size(size.dp)) {
                     ArtworkImage(item.artworkURL, Modifier.fillMaxSize(), cornerRadius = 2.dp)
@@ -805,7 +805,7 @@ private fun Phone() {
             for (i in 0 until 3) {
                 Box(
                     Modifier.size(if (i == 1) 26.dp else 16.dp, if (i == 1) 26.dp else 22.dp).zIndex(if (i == 1) 1f else 0f)
-                        .graphicsLayer { rotationY = if (i == 0) 55f else if (i == 2) -55f else 0f; cameraDistance = 60f * density; alpha = 1f }
+                        .graphicsLayer { rotationY = if (i == 0) 55f else if (i == 2) -55f else 0f; cameraDistance = 8f; alpha = 1f }
                         .clip(RoundedCornerShape(3.dp)).background(Theme.prismDiagonal, RoundedCornerShape(3.dp)).graphicsLayer { alpha = if (i == 1) 1f else 0.55f },
                 )
             }

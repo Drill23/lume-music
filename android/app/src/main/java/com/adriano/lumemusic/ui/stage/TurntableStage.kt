@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -117,7 +118,8 @@ private fun TurntableStage(track: Track, artwork: String, modifier: Modifier) {
         val gh = maxHeight.value
         val thick = if (store.turntable3D) 0.035f else 0f
         val availH = max(170f, gh - 44f - 36f)
-        val w = min(min(gw - 24f, availH / (1 + thick) * DeckGeo.aspect), 520f)
+        // largura útil inclui as margens da base (sombra/pés): base = w·(1 + 2·marginX/aspect)
+        val w = min(min((gw - 16f) / (1f + 2f * DeckGeo.marginX / DeckGeo.aspect), availH / (1 + thick) * DeckGeo.aspect), 520f)
         val h = w / DeckGeo.aspect
 
         Column(Modifier.fillMaxSize().padding(bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -338,7 +340,7 @@ private fun TurntableDeck(
     Box(modifier) {
         val mx = DeckGeo.marginX * h; val mt = DeckGeo.marginTop * h; val mb = DeckGeo.marginBottom * h
         // base estática
-        baseBmp?.let { Image(it.asImageBitmap(), null, Modifier.offset(x = (-mx).dp, y = (-mt).dp).requiredSize((w + 2 * mx).dp, (h + mt + mb).dp), contentScale = androidx.compose.ui.layout.ContentScale.FillBounds) }
+        baseBmp?.let { Image(it.asImageBitmap(), null, Modifier.offset(x = (-mx).dp, y = (-mt).dp).wrapContentSize(Alignment.TopStart, unbounded = true).requiredSize((w + 2 * mx).dp, (h + mt + mb).dp), contentScale = androidx.compose.ui.layout.ContentScale.FillBounds) }
 
         // lâmpada do estroboscópio
         val lampA by animateFloatAsState(if (playing) 1f else 0f, tween(500), label = "lamp")
@@ -412,7 +414,7 @@ private fun TurntableDeck(
             val ox = (cx - aw / 2).dp; val oy = (cy - ah / 2).dp
             Image(
                 imgs.shadow.asImageBitmap(), null,
-                Modifier.offset(x = ox, y = oy).requiredSize(aw.dp, ah.dp).graphicsLayer {
+                Modifier.offset(x = ox, y = oy).wrapContentSize(Alignment.TopStart, unbounded = true).requiredSize(aw.dp, ah.dp).graphicsLayer {
                     val lift = armLift.value
                     alpha = 0.55f - 0.22f * lift
                     transformOrigin = origin
@@ -423,7 +425,7 @@ private fun TurntableDeck(
             )
             Image(
                 imgs.arm.asImageBitmap(), null,
-                Modifier.offset(x = ox, y = oy).requiredSize(aw.dp, ah.dp).graphicsLayer {
+                Modifier.offset(x = ox, y = oy).wrapContentSize(Alignment.TopStart, unbounded = true).requiredSize(aw.dp, ah.dp).graphicsLayer {
                     val s = 1f + 0.045f * armLift.value
                     transformOrigin = origin
                     scaleX = s; scaleY = s
