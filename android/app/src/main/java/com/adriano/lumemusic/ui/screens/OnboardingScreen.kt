@@ -115,6 +115,8 @@ import com.adriano.lumemusic.data.ArtistInfo
 import com.adriano.lumemusic.data.LibraryStore
 import com.adriano.lumemusic.data.MusicGenre
 import com.adriano.lumemusic.engine.CatalogExplorerService
+import com.adriano.lumemusic.engine.DiscoveryService
+import com.adriano.lumemusic.engine.GenreSources
 import com.adriano.lumemusic.engine.SearchService
 import com.adriano.lumemusic.platform.Haptics
 import com.adriano.lumemusic.ui.AppModel
@@ -131,6 +133,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
@@ -143,8 +147,9 @@ object Onboarding {
     private fun prefs(c: Context) = c.getSharedPreferences("lume_prefs", Context.MODE_PRIVATE)
     fun isDone(c: Context) = prefs(c).getBoolean("onboarded", false)
     fun setDone(c: Context) = prefs(c).edit().putBoolean("onboarded", true).apply()
-    fun saveGenres(c: Context, ids: Set<String>) = prefs(c).edit().putStringSet("genres", ids).apply()
-    fun genres(c: Context): Set<String> = prefs(c).getStringSet("genres", emptySet()) ?: emptySet()
+    /** Grava os ids (ex. "sertanejo", "rock") na chave única `lume.onboarding.genres` — a mesma que a Home lê. */
+    fun saveGenres(c: Context, ids: Set<String>) = prefs(c).edit().putStringSet(com.adriano.lumemusic.ui.OnboardingGenres.KEY, ids).apply()
+    fun genres(c: Context): Set<String> = (prefs(c).getStringSet(com.adriano.lumemusic.ui.OnboardingGenres.KEY, null) ?: emptySet()).toSet()
     fun saveArtists(c: Context, names: Set<String>) = prefs(c).edit().putStringSet("artists", names).apply()
     fun artists(c: Context): Set<String> = prefs(c).getStringSet("artists", emptySet()) ?: emptySet()
 }
@@ -221,8 +226,9 @@ private fun PrismCta(title: String, icon: String?, height: Int, enabled: Boolean
             .shadow(12.dp, shape, spotColor = Theme.rose.copy(0.45f)).clip(shape).background(Theme.prismDiagonal).border(0.8.dp, Color.White.copy(0.5f), shape),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
     ) {
+        // iOS (PrismButton): ícone ANTES do texto, 8 pt de espaço.
+        if (icon != null) { Icon(sf(icon), null, tint = Theme.onPrism, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(8.dp)) }
         Text(title, style = Theme.font(16f, FontWeight.SemiBold, Theme.onPrism))
-        if (icon != null) { Spacer(Modifier.width(8.dp)); Icon(sf(icon), null, tint = Theme.onPrism, modifier = Modifier.size(17.dp)) }
     }
 }
 
@@ -282,6 +288,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
         Onboarding.setDone(ctx)
         Onboarding.saveGenres(ctx, LinkedHashSet(selectedGenres))
         Onboarding.saveArtists(ctx, LinkedHashSet(selectedArtists))
+        com.adriano.lumemusic.ui.HomeStore.onboardingGenresChanged()
         for (n in selectedArtists) if (!LibraryStore.isFollowing(n)) LibraryStore.toggleFollow(n)
         SoundFX.play(SoundFX.Effect.CHORD); Haptics.success()
         loading = true
@@ -703,13 +710,25 @@ private class LoadingMusicModel {
         val hub = genres.take(3)
         totalTasks = 2 + hub.size
         val lists = MutableList(hub.size) { emptyList<String>() }
+        // Capas do cache aparecem na hora (nada de esperar a rede para trocar os quadrados coloridos).
+        withContext(Dispatchers.IO) { runCatching { DiscoveryService.cachedFeed() } }.getOrNull()?.let { AppModel.setFeedIfEmpty(it); fillFromFeedNow() }
         launch { runCatching { AppModel.loadFeed() }; doneTasks++ }
         launch {
-            hub.mapIndexed { i, g -> async { runCatching { CatalogExplorerService.genreHub(g).topAlbums.map { it.artworkURL }.filter { it.isNotEmpty() } }.getOrDefault(emptyList()).also { synchronized(lists) { lists[i] = it; merge(lists) }; doneTasks++ } } }.awaitAll()
+            // Uma vitrine leve por gênero (álbuns do Apple Music): cada uma publica as capas assim que chega,
+            // sem esperar o pacote completo do gênero (músicas, artistas, playlists), que só aquece o cache da Home.
+            hub.mapIndexed { i, g ->
+                async {
+                    runCatching { GenreSources.albums(g, 16).map { it.artworkURL }.filter { it.isNotEmpty() } }.getOrDefault(emptyList())
+                        .also { synchronized(lists) { lists[i] = it; merge(lists) }; doneTasks++ }
+                    launch(Dispatchers.IO) { runCatching { CatalogExplorerService.genreHub(g) } }
+                }
+            }.awaitAll()
             fillFromFeed()
             decode(ctx)
             doneTasks++
         }
+        // O feed chega em paralelo: completa a estante assim que existir.
+        launch { fillFromFeed() }
     }
 
     private fun merge(lists: List<List<String>>) {
@@ -720,16 +739,23 @@ private class LoadingMusicModel {
             round++
         }
         if (out.isNotEmpty()) covers = out
+        fillFromFeedNow()
     }
 
     private suspend fun fillFromFeed() {
         if (covers.size >= 12) return
-        for (n in 0 until 10) { if (AppModel.feed != null) break; delay(200) }
+        for (n in 0 until 25) { if (AppModel.feed != null) break; delay(200) }
+        fillFromFeedNow()
+    }
+
+    /** Completa a estante (até 12) com lançamentos/top do feed. */
+    private fun fillFromFeedNow() {
+        if (covers.size >= 12) return
         val feed = AppModel.feed ?: return
         val pool = (feed.newReleases + feed.brazilReleases + (feed.topAlbumsBrazil ?: emptyList()) + (feed.topAlbumsGlobal ?: emptyList())).shuffled()
         val out = covers.toMutableList()
         for (a in pool) if (a.artworkURL.isNotEmpty() && a.artworkURL !in out && out.size < 12) out.add(a.artworkURL)
-        covers = out
+        if (out.size > covers.size) covers = out
     }
 
     private suspend fun decode(ctx: Context) {

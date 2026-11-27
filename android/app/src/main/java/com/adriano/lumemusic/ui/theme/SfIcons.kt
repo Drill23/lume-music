@@ -2,6 +2,7 @@ package com.adriano.lumemusic.ui.theme
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
@@ -200,6 +201,7 @@ fun sf(name: String): ImageVector = when (name) {
     "person.outline" -> Icons.Rounded.PersonOutline
     "arrow.down.line" -> Icons.Rounded.ArrowDownward
     "dark" -> Icons.Rounded.DarkMode
+    "arrow.right" -> Icons.AutoMirrored.Rounded.ArrowForward
     "square.grid.2x2.fill" -> Icons.Rounded.GridView
     "sparkles.rectangle.stack.fill" -> Icons.Rounded.NewReleases
     "square.stack.3d.down.right.fill" -> Icons.Rounded.ViewCarousel

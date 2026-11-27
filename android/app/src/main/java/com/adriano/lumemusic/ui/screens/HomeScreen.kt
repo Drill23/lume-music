@@ -206,7 +206,7 @@ private fun Shortcuts() {
                         Modifier.weight(1f).height(80.dp).pressable(0.96f) { Haptics.light(); click() }.glass(RoundedCornerShape(22.dp)),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
                     ) {
-                        Icon(sf(icon), null, tint = Theme.rose, modifier = Modifier.size(24.dp))
+                        com.adriano.lumemusic.ui.PrismIcon(icon, 24.dp)
                         Text(title, style = Theme.font(12.5f, FontWeight.SemiBold, Theme.text), modifier = Modifier.padding(top = 8.dp), maxLines = 1)
                     }
                 }

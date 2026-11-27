@@ -77,6 +77,17 @@ class HomeEngineTest {
         assertEquals("mpb", OnboardingGenres.match("MPB & Bossa")!!.id)
     }
 
+    @Test fun onboardingSavedIdsAreWhatHomeReads() {
+        // o onboarding grava ids em lume.onboarding.genres; a Home lê exatamente a mesma chave
+        assertEquals("lume.onboarding.genres", OnboardingGenres.KEY)
+        val saved = linkedSetOf("sertanejo", "rock")
+        assertEquals(listOf("sertanejo", "rock"), OnboardingGenres.parse(listOf(saved)).map { it.id })
+        // leitura tolerante: lista, texto separado e nomes soltos, sem repetir
+        assertEquals(listOf("sertanejo", "rock"), OnboardingGenres.parse(listOf("Sertanejo, rock; sertanejo")).map { it.id })
+        assertEquals(listOf("hiphop", "pop"), OnboardingGenres.parse(listOf(listOf("hiphop", "pop"), setOf("pop"))).map { it.id })
+        assertTrue(OnboardingGenres.parse(emptyList()).isEmpty())
+    }
+
     @Test fun brazilRadarUsesBrazilianHitsWhenPresent() {
         val t = { n: String -> newTrack(title = n, artist = "x") }
         val feed = DiscoverFeed(0, emptyList(), emptyList(), topBrazil = listOf(t("apple")), topGlobal = listOf(t("g")),

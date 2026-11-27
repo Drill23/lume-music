@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -292,7 +293,8 @@ fun CassetteTape(
             val sh = h + w * (TapeGeo.shadowMarginTop + TapeGeo.shadowMarginBottom)
             Image(
                 L.shadow.asImageBitmap(), null,
-                Modifier.offset(x = (-(w * TapeGeo.shadowMarginX)).dp, y = (-(w * TapeGeo.shadowMarginTop)).dp).size(sw.dp, sh.dp),
+                Modifier.offset(x = (-(w * TapeGeo.shadowMarginX)).dp, y = (-(w * TapeGeo.shadowMarginTop)).dp).requiredSize(sw.dp, sh.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
             )
             Image(L.back.asImageBitmap(), null, Modifier.size(w.dp, h.dp))
             parts?.let { (hub, pack) -> Reels(w, h, hub, pack) }

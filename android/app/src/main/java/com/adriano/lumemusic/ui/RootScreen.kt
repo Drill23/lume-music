@@ -98,6 +98,18 @@ fun RootScreen() {
     val appCtx = androidx.compose.ui.platform.LocalContext.current
     var onboarding by remember { androidx.compose.runtime.mutableStateOf(LibraryStore.introEnabled && !com.adriano.lumemusic.ui.screens.Onboarding.isDone(appCtx)) }
 
+    // Permissão de notificações (Android 13+): só depois do onboarding, na primeira vez que uma música começa a tocar.
+    val notifLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(onboarding, AudioPlayer.isPlaying) {
+        if (onboarding || !AudioPlayer.isPlaying || android.os.Build.VERSION.SDK_INT < 33) return@LaunchedEffect
+        val prefs = appCtx.getSharedPreferences("lume_prefs", android.content.Context.MODE_PRIVATE)
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(appCtx, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!granted && !prefs.getBoolean("notifAsked", false)) {
+            prefs.edit().putBoolean("notifAsked", true).apply()
+            notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     LaunchedEffect(Unit) {
         AppModel.loadFeed()
         AppModel.refreshArtistReleases()
@@ -127,6 +139,14 @@ fun RootScreen() {
                 }
             }
 
+            // Véu da barra de status (RootView do iOS): cobre a barra + 14dp, opaco → 0.92 → transparente; não captura toques.
+            val statusH = with(LocalDensity.current) { WindowInsets.statusBars.getTop(this).toDp() }
+            Box(
+                Modifier.align(Alignment.TopCenter).fillMaxWidth().height(statusH + 14.dp).background(
+                    Brush.verticalGradient(0f to Theme.canvas, 0.55f to Theme.canvas.copy(0.92f), 1f to Theme.canvas.copy(0f)),
+                ),
+            )
+
             Box(Modifier.align(Alignment.BottomCenter)) { BottomBar() }
             Toast(Modifier.align(Alignment.TopCenter))
 
@@ -137,9 +157,6 @@ fun RootScreen() {
             ) { NowPlayingScreen() }
 
             SheetsHost()
-
-            // véu da barra de status (some o conteúdo que rola por baixo)
-            Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).height(10.dp).background(Brush.verticalGradient(listOf(Theme.canvas.copy(0.85f), androidx.compose.ui.graphics.Color.Transparent))))
 
             AnimatedVisibility(AppModel.showCoverFlow, enter = fadeIn(tween(250)), exit = fadeOut(tween(200))) { com.adriano.lumemusic.ui.screens.CoverFlowScreen() }
 

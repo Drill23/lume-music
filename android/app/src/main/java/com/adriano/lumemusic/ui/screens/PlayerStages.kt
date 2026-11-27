@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -141,7 +142,17 @@ private fun LyricsList(bundle: com.adriano.lumemusic.data.LyricsBundle) {
     LaunchedEffect(active) {
         if (active >= 0) state.animateScrollToItem(active, scrollOffset = -with(density) { 120.dp.roundToPx() })
     }
-    LazyColumn(state = state, modifier = Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 28.dp, vertical = 80.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    LazyColumn(
+        state = state,
+        // Máscara de esmaecimento do iOS (LyricsStage): topo 0→8%, base 82%→100%; as linhas somem antes de tocar a pílula de palcos.
+        modifier = Modifier.fillMaxSize().graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }.drawWithContent {
+            drawContent()
+            drawRect(
+                Brush.verticalGradient(0f to Color.Transparent, 0.08f to Color.Black, 0.82f to Color.Black, 1f to Color.Transparent),
+                blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+            )
+        },
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 28.dp, vertical = 80.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         items(lines.size, key = { lines[it].id }) { i ->
             val l = lines[i]
             val isActive = i == active

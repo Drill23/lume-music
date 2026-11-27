@@ -19,6 +19,11 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -280,6 +285,16 @@ private fun LandscapeLayout(
     val m = Metrics.landscape(w, h)
     val captionH = 56f
     val flipA by animateFloatAsState(if (flippedId == null) 1f else 0f, tween(200), label = "chrome")
+    // Modo imersivo em paisagem (sem barra de status/navegação); restaura ao sair.
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val window = (view.context as? Activity)?.window
+        val ctrl = window?.let { WindowInsetsControllerCompat(it, view) }
+        ctrl?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        ctrl?.hide(WindowInsetsCompat.Type.systemBars())
+        onDispose { ctrl?.show(WindowInsetsCompat.Type.systemBars()) }
+    }
+    val navBottom = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp().value }
     Box(Modifier.fillMaxSize()) {
         CoverFlowStage(items, m, pos, sel, setSel, flippedId, setFlipped, tracks)
         if (items.isEmpty()) CoverFlowEmpty(source)
@@ -294,7 +309,7 @@ private fun LandscapeLayout(
             GlassIconButton("play.fill", 44.dp, 17.dp, foreground = Color.White, desc = "Tocar") { if (flippedId == null) onPlay() }
         }
         if (items.isNotEmpty()) {
-            Box(Modifier.fillMaxWidth().padding(top = (h - captionH - 4).dp).height(captionH.dp).graphicsLayer { alpha = flipA }, contentAlignment = Alignment.TopCenter) {
+            Box(Modifier.fillMaxWidth().padding(top = (h - captionH - 4 - navBottom).dp).height(captionH.dp).graphicsLayer { alpha = flipA }, contentAlignment = Alignment.TopCenter) {
                 CoverFlowCaption(items, sel, Modifier.fillMaxSize())
             }
         }
@@ -514,7 +529,8 @@ private fun CoverFlowCardSlot(
                 val fade = if (a > 3.2f) max(0f, 1f - (a - 3.2f) / 1.2f) else 1f
                 val shade = 1f - 0.55f * near
                 transformOrigin = TransformOrigin(0.5f, 1f / 3f)
-                cameraDistance = 2f * cardW * density
+                // RenderNode mede a distância da câmera em "polegadas" (valor × densityDpi px = valor × 160 dp). iOS: perspectiva ~6,3× a capa.
+                cameraDistance = (6.3f * m.cover / 160f).coerceAtLeast(2f * cardW / 160f)
                 rotationY = angle
                 scaleX = scale; scaleY = scale
                 translationX = x * density

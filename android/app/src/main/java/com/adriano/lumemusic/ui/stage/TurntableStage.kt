@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -337,7 +338,7 @@ private fun TurntableDeck(
     Box(modifier) {
         val mx = DeckGeo.marginX * h; val mt = DeckGeo.marginTop * h; val mb = DeckGeo.marginBottom * h
         // base estática
-        baseBmp?.let { Image(it.asImageBitmap(), null, Modifier.offset(x = (-mx).dp, y = (-mt).dp).size((w + 2 * mx).dp, (h + mt + mb).dp)) }
+        baseBmp?.let { Image(it.asImageBitmap(), null, Modifier.offset(x = (-mx).dp, y = (-mt).dp).requiredSize((w + 2 * mx).dp, (h + mt + mb).dp), contentScale = androidx.compose.ui.layout.ContentScale.FillBounds) }
 
         // lâmpada do estroboscópio
         val lampA by animateFloatAsState(if (playing) 1f else 0f, tween(500), label = "lamp")
@@ -411,7 +412,7 @@ private fun TurntableDeck(
             val ox = (cx - aw / 2).dp; val oy = (cy - ah / 2).dp
             Image(
                 imgs.shadow.asImageBitmap(), null,
-                Modifier.offset(x = ox, y = oy).size(aw.dp, ah.dp).graphicsLayer {
+                Modifier.offset(x = ox, y = oy).requiredSize(aw.dp, ah.dp).graphicsLayer {
                     val lift = armLift.value
                     alpha = 0.55f - 0.22f * lift
                     transformOrigin = origin
@@ -422,7 +423,7 @@ private fun TurntableDeck(
             )
             Image(
                 imgs.arm.asImageBitmap(), null,
-                Modifier.offset(x = ox, y = oy).size(aw.dp, ah.dp).graphicsLayer {
+                Modifier.offset(x = ox, y = oy).requiredSize(aw.dp, ah.dp).graphicsLayer {
                     val s = 1f + 0.045f * armLift.value
                     transformOrigin = origin
                     scaleX = s; scaleY = s

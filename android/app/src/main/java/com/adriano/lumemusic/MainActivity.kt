@@ -1,29 +1,20 @@
 package com.adriano.lumemusic
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
-import androidx.core.content.ContextCompat
 import com.adriano.lumemusic.access.Access
 import com.adriano.lumemusic.ui.RootScreen
 import com.adriano.lumemusic.ui.theme.LumeTheme
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
-    private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        // A permissão de notificações NÃO é pedida aqui: só depois do onboarding, quando a primeira música começar (RootScreen).
 
         setContent {
             LumeTheme {

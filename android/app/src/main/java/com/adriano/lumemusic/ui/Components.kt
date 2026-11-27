@@ -41,6 +41,9 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -366,3 +369,14 @@ fun DetailTopBar(title: String, trailing: @Composable (() -> Unit)? = null) {
     }
 }
 
+
+/** Preenche o glifo com o gradiente prisma horizontal (Theme.prism do iOS: pêssego → rosa → lavanda → céu). */
+@Composable
+fun PrismIcon(name: String, size: Dp, modifier: Modifier = Modifier) {
+    val brush = Theme.prismHorizontal
+    Icon(
+        sf(name), null, tint = Color.Black,
+        modifier = modifier.size(size).graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent { drawContent(); drawRect(brush, blendMode = BlendMode.SrcIn) },
+    )
+}

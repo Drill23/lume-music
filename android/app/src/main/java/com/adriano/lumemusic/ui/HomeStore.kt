@@ -21,11 +21,16 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // ---------------- Gêneros do onboarding ----------------
 
 object OnboardingGenres {
+    /** Chave ÚNICA (a mesma do iOS): o onboarding grava os ids ("sertanejo", "rock"...) e a Home lê exatamente isto. */
     const val KEY = "lume.onboarding.genres"
+    /** Nome antigo (versões anteriores do onboarding Android); só leitura tolerante. */
+    const val LEGACY_KEY = "genres"
+    const val PREFS = "lume_prefs"
 
     private val aliases = mapOf(
         "funk" to "funk_br", "trap" to "funk_br", "baile funk" to "funk_br", "funk carioca" to "funk_br",
@@ -43,24 +48,30 @@ object OnboardingGenres {
     )
 
     /**
-     * Gêneros escolhidos no onboarding. Leitura tolerante: a chave `lume.onboarding.genres` (ou "genres", gravada pelo
-     * onboarding atual) pode vir como conjunto de strings, texto separado por vírgula/;/| ou nomes soltos, em qualquer
+     * Gêneros escolhidos no onboarding. Leitura tolerante: a chave `lume.onboarding.genres` (ou o antigo "genres") pode vir como conjunto de strings, texto separado por vírgula/;/| ou nomes soltos, em qualquer
      * um dos arquivos de preferências do app.
      */
     fun selected(ctx: Context?): List<MusicGenre> {
         if (ctx == null) return emptyList()
-        val names = LinkedHashSet<String>()
-        for (file in listOf("lume_prefs", "lume.onboarding", "lume_onboarding", ctx.packageName + "_preferences")) {
+        val raw = ArrayList<Any?>()
+        for (file in listOf(PREFS, "lume.onboarding", "lume_onboarding", ctx.packageName + "_preferences")) {
             val prefs = try { ctx.getSharedPreferences(file, Context.MODE_PRIVATE) } catch (_: Exception) { continue }
-            for (key in listOf(KEY, "genres")) {
+            for (key in listOf(KEY, LEGACY_KEY)) {
                 val v = try { prefs.all[key] } catch (_: Exception) { null } ?: continue
-                when (v) {
-                    is Set<*> -> v.forEach { names.add(it.toString()) }
-                    is String -> v.split(',', ';', '|').forEach { names.add(it) }
-                    is Collection<*> -> v.forEach { names.add(it.toString()) }
-                }
+                raw.add(v)
             }
-            if (names.isNotEmpty()) break
+            if (raw.isNotEmpty() && parse(raw).isNotEmpty()) break
+        }
+        return parse(raw)
+    }
+
+    /** Converte o que estiver gravado (conjunto/lista de ids, texto "a, b" ou nomes soltos) em gêneros, sem repetir. */
+    fun parse(values: Collection<Any?>): List<MusicGenre> {
+        val names = LinkedHashSet<String>()
+        for (v in values) when (v) {
+            is Collection<*> -> v.forEach { if (it != null) names.add(it.toString()) }
+            is Array<*> -> v.forEach { if (it != null) names.add(it.toString()) }
+            is String -> v.split(',', ';', '|').forEach { names.add(it) }
         }
         val out = mutableListOf<MusicGenre>()
         for (n in names) {
@@ -211,6 +222,15 @@ object HomeStore {
         if (LibraryStore.recentTracks.isNotEmpty()) return emptyList()
         val ids = if (homePlace.id == "br") listOf("sertanejo", "pop", "funk_br") else listOf("pop", "hiphop", "rock")
         return ids.mapNotNull { id -> MusicGenre.all.firstOrNull { it.id == id } }
+    }
+
+    /** Chamado quando o onboarding grava os gêneros: troca na hora os mixes "Para você" (sem sobrar Pop/Hip-Hop do padrão). */
+    fun onboardingGenresChanged() {
+        scope.launch {
+            val genres = preferredGenres()
+            genreMixes = withContext(Dispatchers.IO) { genres.mapNotNull { g -> ChartsService.cachedGenreSongs(g)?.let { mix(g, it) } } }
+            refreshGenreMixes()
+        }
     }
 
     private suspend fun reloadGenreMixesFromCache() {
