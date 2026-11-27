@@ -392,36 +392,14 @@ struct GlassButton: View {
 struct PrismMark: View {
   var size: CGFloat = 32
 
+  /// 5.0: a mesma arte do ícone novo (disco de vidro claro com anel prisma), nítida em qualquer tamanho.
   var body: some View {
-    ZStack {
-      Circle().fill(
-        RadialGradient(colors: [Color(white: 0.18), Color(white: 0.06), Color(white: 0.02)], center: .center, startRadius: 0, endRadius: size * 0.5)
-      )
-      ForEach(0..<4, id: \.self) { i in
-        Circle()
-          .stroke(Color.white.opacity(0.09), lineWidth: 0.5)
-          .padding(size * (0.08 + CGFloat(i) * 0.06))
-      }
-      // Anel prismático incrustado com brilho suave
-      Circle()
-        .stroke(Theme.prismAngular, lineWidth: size * 0.09)
-        .padding(size * 0.25)
-        .shadow(color: Theme.rose.opacity(0.45), radius: size * 0.08)
-      // Selo central metálico fosco
-      Circle()
-        .fill(LinearGradient(colors: [Color(white: 0.94), Color(white: 0.72)], startPoint: .topLeading, endPoint: .bottomTrailing))
-        .frame(width: size * 0.30, height: size * 0.30)
-        .overlay(Circle().stroke(Color.white.opacity(0.6), lineWidth: 0.5))
-      // Furo spindle
-      Circle().fill(Color(white: 0.08)).frame(width: size * 0.08, height: size * 0.08)
-      // Reflexo especular diagonal
-      Circle()
-        .trim(from: 0.55, to: 0.80)
-        .stroke(Color.white.opacity(0.55), style: StrokeStyle(lineWidth: size * 0.032, lineCap: .round))
-        .padding(size * 0.06)
-    }
-    .frame(width: size, height: size)
-    .shadow(color: Theme.lavender.opacity(0.35), radius: size * 0.18, y: size * 0.06)
+    Image("Mark")
+      .resizable()
+      .interpolation(.high)
+      .antialiased(true)
+      .frame(width: size, height: size)
+      .shadow(color: Theme.lavender.opacity(0.30), radius: size * 0.12, y: size * 0.05)
   }
 }
 

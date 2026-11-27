@@ -19,15 +19,16 @@ actor LockScreenArtwork {
 
   func image(for track: Track, cover: UIImage, style: LockArtStyle, palette: ArtworkPalette) async -> UIImage? {
     guard style != .cover, style != .automatic else { return cover }
-    let key = "\(track.id)#\(style.rawValue)"
+    let (edition, tapeStyle) = await MainActor.run { (LibraryStore.shared.vinylEdition, LibraryStore.shared.cassetteStyle) }
+    let key = "\(track.id)#\(style.rawValue)#\(edition.rawValue)#\(tapeStyle.rawValue)"
     if let hit = cache[key] { return hit }
     let accent = await MainActor.run { (UIColor(palette.vibrant), UIColor(palette.vibrant2)) }
     let title = track.title
     let artist = track.artist
     let img = await Task.detached(priority: .utility) { () -> UIImage? in
       switch style {
-      case .vinyl: return Self.renderVinyl(cover: cover, accent: accent.0)
-      case .cassette: return Self.renderCassette(cover: cover, title: title, artist: artist, accent: accent.0, accent2: accent.1)
+      case .vinyl: return Self.renderVinyl(cover: cover, accent: accent.0, edition: edition)
+      case .cassette: return Self.renderTape(cover: cover, title: title, artist: artist, style: tapeStyle)
       default: return cover
       }
     }.value
@@ -72,7 +73,7 @@ actor LockScreenArtwork {
 
   // MARK: - Vinil
 
-  static func renderVinyl(cover: UIImage, accent: UIColor) -> UIImage {
+  static func renderVinyl(cover: UIImage, accent: UIColor, edition: VinylEdition) -> UIImage {
     let S = side
     let fmt = UIGraphicsImageRendererFormat()
     fmt.scale = 1
@@ -81,68 +82,21 @@ actor LockScreenArtwork {
       let ctx = rc.cgContext
       drawBackdrop(ctx, cover: cover, size: S)
 
+      // Mesmas texturas do palco Vinil do app: prato de alumínio com estroboscópio + disco + reflexo parado.
       let c = CGPoint(x: S * 0.47, y: S * 0.52)
-      let R = S * 0.42
+      let R = S * 0.40                                         // raio do disco
+      let P = 2 * R * DeckGeo.platterD / DeckGeo.recordD       // diâmetro do prato
+      let platter = CGRect(x: c.x - P / 2, y: c.y - P / 2, width: P, height: P)
       let disc = CGRect(x: c.x - R, y: c.y - R, width: 2 * R, height: 2 * R)
-
-      // Sombra do disco
       ctx.saveGState()
       ctx.setShadow(offset: CGSize(width: 0, height: S * 0.02), blur: S * 0.05, color: UIColor.black.withAlphaComponent(0.7).cgColor)
-      UIColor(red: 0.035, green: 0.035, blue: 0.045, alpha: 1).setFill()
-      ctx.fillEllipse(in: disc)
+      LumeTextures.renderRecord(edition: edition, px: Int(P)).draw(in: platter)
       ctx.restoreGState()
-
-      ctx.saveGState()
-      ctx.addEllipse(in: disc)
-      ctx.clip()
-
-      // Sulcos: anéis finos com brilho levemente variável + faixas de separação entre músicas
-      var r = R * 0.36
-      var i = 0
-      while r < R * 0.985 {
-        let a = 0.035 + 0.03 * (0.5 + 0.5 * sin(Double(i) * 0.37)) + 0.015 * sin(Double(i) * 2.1)
-        ctx.setStrokeColor(UIColor(white: 1, alpha: CGFloat(a)).cgColor)
-        ctx.setLineWidth(0.9)
-        ctx.strokeEllipse(in: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r))
-        r += 2.4
-        i += 1
-      }
-      for gap in [0.55, 0.71, 0.86] as [CGFloat] {
-        let gr = R * gap
-        ctx.setStrokeColor(UIColor(white: 0, alpha: 0.85).cgColor)
-        ctx.setLineWidth(3.2)
-        ctx.strokeEllipse(in: CGRect(x: c.x - gr, y: c.y - gr, width: 2 * gr, height: 2 * gr))
-      }
-
-      // Reflexos de luz: duas "gravatas" opostas com bordas suaves (camadas sobrepostas)
-      for base in [-0.62, -0.62 + Double.pi] {
-        for layer in 0..<7 {
-          let half = 0.30 - Double(layer) * 0.036
-          let path = CGMutablePath()
-          path.move(to: c)
-          path.addArc(center: c, radius: R * 1.02, startAngle: CGFloat(base - half), endAngle: CGFloat(base + half), clockwise: false)
-          path.closeSubpath()
-          ctx.addPath(path)
-          ctx.setFillColor(UIColor(white: 1, alpha: 0.022).cgColor)
-          ctx.fillPath()
-        }
-      }
-      // Brilho iridescente sutil com a cor da capa
-      ctx.setBlendMode(.screen)
-      let iri = [accent.withAlphaComponent(0.0).cgColor, accent.withAlphaComponent(0.16).cgColor, accent.withAlphaComponent(0.0).cgColor] as CFArray
-      if let g = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: iri, locations: [0, 0.5, 1]) {
-        ctx.drawLinearGradient(g, start: CGPoint(x: disc.minX, y: disc.maxY), end: CGPoint(x: disc.maxX, y: disc.minY), options: [])
-      }
-      ctx.setBlendMode(.normal)
-      ctx.restoreGState()
-
-      // Borda do disco
-      ctx.setStrokeColor(UIColor(white: 1, alpha: 0.10).cgColor)
-      ctx.setLineWidth(2)
-      ctx.strokeEllipse(in: disc.insetBy(dx: 1, dy: 1))
+      LumeTextures.renderSheen(prism: edition == .prismCrystal, size: Int(2 * R)).draw(in: disc, blendMode: .normal, alpha: 1)
+      _ = accent
 
       // Selo = capa
-      let L = R * 0.36
+      let L = R * DeckGeo.labelD / DeckGeo.recordD
       let label = CGRect(x: c.x - L, y: c.y - L, width: 2 * L, height: 2 * L)
       ctx.saveGState()
       ctx.addEllipse(in: label)
@@ -213,179 +167,64 @@ actor LockScreenArtwork {
     }
   }
 
-  // MARK: - Fita K7
+  // MARK: - Fita K7 (mesmas camadas do palco K7 do app)
 
-  static func renderCassette(cover: UIImage, title: String, artist: String, accent: UIColor, accent2: UIColor) -> UIImage {
+  static func renderTape(cover: UIImage, title: String, artist: String, style: CassetteStyle) -> UIImage {
     let S = side
     let fmt = UIGraphicsImageRendererFormat()
     fmt.scale = 1
     fmt.opaque = true
+    let w = S * 0.86
+    let h = w / TapeGeo.aspect
+    let layers = LumeTextures.renderCassette(style: style, sideB: false, wpx: Int(w))
+    let hub = LumeTextures.renderHub(px: Int(TapeGeo.hubR * 2 * w))
+    let pack = LumeTextures.renderPack(px: Int(TapeGeo.rFull * 2 * w))
     return UIGraphicsImageRenderer(size: CGSize(width: S, height: S), format: fmt).image { rc in
       let ctx = rc.cgContext
       drawBackdrop(ctx, cover: cover, size: S)
-      let space = CGColorSpaceCreateDeviceRGB()
-
-      let W = S * 0.90, H = W * 0.64
-      let body = CGRect(x: (S - W) / 2, y: (S - H) / 2 + S * 0.01, width: W, height: H)
-      let bodyPath = UIBezierPath(roundedRect: body, cornerRadius: W * 0.035)
-
-      // Corpo de plástico fumê
-      ctx.saveGState()
-      ctx.setShadow(offset: CGSize(width: 0, height: S * 0.025), blur: S * 0.05, color: UIColor.black.withAlphaComponent(0.7).cgColor)
-      UIColor(red: 0.11, green: 0.11, blue: 0.13, alpha: 1).setFill()
-      bodyPath.fill()
-      ctx.restoreGState()
-      ctx.saveGState()
-      bodyPath.addClip()
-      let shell = [UIColor(white: 0.26, alpha: 1).cgColor, UIColor(white: 0.09, alpha: 1).cgColor] as CFArray
-      if let g = CGGradient(colorsSpace: space, colors: shell, locations: [0, 1]) {
-        ctx.drawLinearGradient(g, start: CGPoint(x: body.minX, y: body.minY), end: CGPoint(x: body.minX, y: body.maxY), options: [])
-      }
-      // textura de plástico: riscas horizontais finíssimas
-      for k in stride(from: body.minY, to: body.maxY, by: 3) {
-        ctx.setStrokeColor(UIColor(white: 1, alpha: 0.012).cgColor)
-        ctx.setLineWidth(1)
-        ctx.move(to: CGPoint(x: body.minX, y: k)); ctx.addLine(to: CGPoint(x: body.maxX, y: k))
-        ctx.strokePath()
-      }
-      ctx.restoreGState()
-      ctx.setStrokeColor(UIColor(white: 1, alpha: 0.16).cgColor)
-      ctx.setLineWidth(2)
-      UIBezierPath(roundedRect: body.insetBy(dx: 1, dy: 1), cornerRadius: W * 0.034).stroke()
-
-      // Parafusos
-      func screw(_ p: CGPoint) {
-        let r = W * 0.014
-        UIColor(white: 0.55, alpha: 1).setFill()
-        ctx.fillEllipse(in: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
-        ctx.setStrokeColor(UIColor(white: 0.2, alpha: 1).cgColor)
-        ctx.setLineWidth(2)
-        ctx.move(to: CGPoint(x: p.x - r * 0.6, y: p.y)); ctx.addLine(to: CGPoint(x: p.x + r * 0.6, y: p.y))
-        ctx.move(to: CGPoint(x: p.x, y: p.y - r * 0.6)); ctx.addLine(to: CGPoint(x: p.x, y: p.y + r * 0.6))
-        ctx.strokePath()
-      }
-      let m = W * 0.03
-      screw(CGPoint(x: body.minX + m, y: body.minY + m))
-      screw(CGPoint(x: body.maxX - m, y: body.minY + m))
-      screw(CGPoint(x: body.minX + m, y: body.maxY - m))
-      screw(CGPoint(x: body.maxX - m, y: body.maxY - m))
-      screw(CGPoint(x: body.midX, y: body.maxY - m * 0.9))
-
-      // Rótulo = capa do álbum impressa
-      let label = CGRect(x: body.minX + W * 0.065, y: body.minY + H * 0.075, width: W * 0.87, height: H * 0.64)
-      let labelPath = UIBezierPath(roundedRect: label, cornerRadius: W * 0.018)
-      ctx.saveGState()
-      labelPath.addClip()
-      drawCover(cover, in: label)
-      // faixa de título (papel claro) com listras de cor da capa
-      let band = CGRect(x: label.minX, y: label.minY, width: label.width, height: label.height * 0.25)
-      UIColor(white: 0.97, alpha: 0.92).setFill()
-      ctx.fill(band)
-      accent.withAlphaComponent(0.95).setFill()
-      ctx.fill(CGRect(x: band.minX, y: band.maxY, width: band.width, height: H * 0.016))
-      accent2.withAlphaComponent(0.95).setFill()
-      ctx.fill(CGRect(x: band.minX, y: band.maxY + H * 0.016, width: band.width, height: H * 0.010))
-      ctx.restoreGState()
-      ctx.setStrokeColor(UIColor(white: 0, alpha: 0.35).cgColor)
-      ctx.setLineWidth(1.5)
-      labelPath.stroke()
-
-      // Lado "A" + título/artista
-      let aR = band.height * 0.30
-      let aC = CGPoint(x: band.minX + band.height * 0.5, y: band.midY)
-      UIColor(white: 0.12, alpha: 1).setFill()
-      ctx.fillEllipse(in: CGRect(x: aC.x - aR, y: aC.y - aR, width: 2 * aR, height: 2 * aR))
-      let aStyle = NSMutableParagraphStyle(); aStyle.alignment = .center
-      ("A" as NSString).draw(in: CGRect(x: aC.x - aR, y: aC.y - aR * 0.62, width: 2 * aR, height: 2 * aR),
-                             withAttributes: [.font: UIFont.systemFont(ofSize: aR * 1.05, weight: .black), .foregroundColor: UIColor.white, .paragraphStyle: aStyle])
-      let textX = aC.x + aR * 1.6
-      let textW = band.maxX - textX - W * 0.03
-      let para = NSMutableParagraphStyle(); para.lineBreakMode = .byTruncatingTail
-      (title as NSString).draw(in: CGRect(x: textX, y: band.minY + band.height * 0.14, width: textW, height: band.height * 0.45),
-                               withAttributes: [.font: UIFont.systemFont(ofSize: band.height * 0.34, weight: .heavy), .foregroundColor: UIColor(white: 0.1, alpha: 1), .paragraphStyle: para])
-      (artist as NSString).draw(in: CGRect(x: textX, y: band.minY + band.height * 0.56, width: textW, height: band.height * 0.36),
-                                withAttributes: [.font: UIFont.systemFont(ofSize: band.height * 0.24, weight: .semibold), .foregroundColor: UIColor(white: 0.3, alpha: 1), .paragraphStyle: para])
-
-      // Janela com carretéis
-      let win = CGRect(x: body.midX - W * 0.27, y: label.minY + label.height * 0.46, width: W * 0.54, height: H * 0.22)
-      let winPath = UIBezierPath(roundedRect: win, cornerRadius: win.height * 0.5)
-      ctx.saveGState()
-      winPath.addClip()
-      UIColor(red: 0.05, green: 0.05, blue: 0.06, alpha: 0.95).setFill()
-      ctx.fill(win)
-      let hubY = win.midY
-      let hubs = [CGPoint(x: win.minX + win.width * 0.21, y: hubY), CGPoint(x: win.maxX - win.width * 0.21, y: hubY)]
-      let packs: [CGFloat] = [win.height * 0.95, win.height * 0.62]   // lado A no começo: mais fita à esquerda
-      for (k, hub) in hubs.enumerated() {
-        let pr = packs[k]
-        let tape = [UIColor(red: 0.36, green: 0.22, blue: 0.13, alpha: 1).cgColor, UIColor(red: 0.18, green: 0.10, blue: 0.06, alpha: 1).cgColor] as CFArray
+      let o = CGPoint(x: (S - w) / 2, y: (S - h) / 2 - S * 0.02)
+      // sombra
+      let sw = w * (1 + 2 * TapeGeo.shadowMarginX)
+      let sh = h + w * (TapeGeo.shadowMarginTop + TapeGeo.shadowMarginBottom)
+      layers.shadow.draw(in: CGRect(x: o.x - w * TapeGeo.shadowMarginX, y: o.y - w * TapeGeo.shadowMarginTop, width: sw, height: sh))
+      layers.back.draw(in: CGRect(x: o.x, y: o.y, width: w, height: h))
+      // carretéis no meio da faixa (rolo da esquerda um pouco maior)
+      let q: CGFloat = 0.38
+      let a = TapeGeo.rFull * TapeGeo.rFull - TapeGeo.rEmpty * TapeGeo.rEmpty
+      let rL = sqrt(TapeGeo.rFull * TapeGeo.rFull - q * a)
+      let rR = sqrt(TapeGeo.rEmpty * TapeGeo.rEmpty + q * a)
+      for (center, r, ang) in [(TapeGeo.reelL, rL, 0.4), (TapeGeo.reelR, rR, 1.1)] as [(CGPoint, CGFloat, CGFloat)] {
+        let cc = CGPoint(x: o.x + center.x * w, y: o.y + center.y * w)
+        pack.draw(in: CGRect(x: cc.x - r * w, y: cc.y - r * w, width: 2 * r * w, height: 2 * r * w))
         ctx.saveGState()
-        ctx.addEllipse(in: CGRect(x: hub.x - pr, y: hub.y - pr, width: 2 * pr, height: 2 * pr))
-        ctx.clip()
-        if let g = CGGradient(colorsSpace: space, colors: tape, locations: [0, 1]) {
-          ctx.drawRadialGradient(g, startCenter: hub, startRadius: 0, endCenter: hub, endRadius: pr, options: [])
-        }
-        for rr in stride(from: pr * 0.4, to: pr, by: 3) {
-          ctx.setStrokeColor(UIColor(white: 1, alpha: 0.03).cgColor)
-          ctx.setLineWidth(0.8)
-          ctx.strokeEllipse(in: CGRect(x: hub.x - rr, y: hub.y - rr, width: 2 * rr, height: 2 * rr))
-        }
+        ctx.translateBy(x: cc.x, y: cc.y)
+        ctx.rotate(by: ang)
+        let hr = TapeGeo.hubR * w
+        hub.draw(in: CGRect(x: -hr, y: -hr, width: 2 * hr, height: 2 * hr))
         ctx.restoreGState()
       }
-      // fita esticada entre os carretéis (embaixo)
-      ctx.setStrokeColor(UIColor(red: 0.30, green: 0.18, blue: 0.10, alpha: 1).cgColor)
-      ctx.setLineWidth(3)
-      ctx.move(to: CGPoint(x: hubs[0].x, y: hubY + packs[0] - 2)); ctx.addLine(to: CGPoint(x: hubs[1].x, y: hubY + packs[1] - 2))
-      ctx.strokePath()
-      // cubos brancos dentados
-      for hub in hubs {
-        let hr = win.height * 0.24
-        UIColor(white: 0.93, alpha: 1).setFill()
-        ctx.fillEllipse(in: CGRect(x: hub.x - hr, y: hub.y - hr, width: 2 * hr, height: 2 * hr))
-        UIColor(white: 0.08, alpha: 1).setFill()
-        ctx.fillEllipse(in: CGRect(x: hub.x - hr * 0.55, y: hub.y - hr * 0.55, width: hr * 1.1, height: hr * 1.1))
-        for t in 0..<6 {
-          let a = CGFloat(t) / 6 * 2 * .pi
-          let tp = CGPoint(x: hub.x + cos(a) * hr * 0.55, y: hub.y + sin(a) * hr * 0.55)
-          UIColor(white: 0.93, alpha: 1).setFill()
-          ctx.fillEllipse(in: CGRect(x: tp.x - hr * 0.13, y: tp.y - hr * 0.13, width: hr * 0.26, height: hr * 0.26))
-        }
+      layers.front.draw(in: CGRect(x: o.x, y: o.y, width: w, height: h))
+      // escrita à mão na etiqueta (mesmas posições do app)
+      let hand = UIFont(name: "BradleyHandITCTT-Bold", size: w * 0.054) ?? UIFont(name: "Noteworthy-Bold", size: w * 0.054) ?? .boldSystemFont(ofSize: w * 0.05)
+      let hand2 = hand.withSize(w * 0.040)
+      func write(_ text: String, font: UIFont, color: UIColor, y: CGFloat) {
+        let para = NSMutableParagraphStyle(); para.lineBreakMode = .byTruncatingTail
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color, .paragraphStyle: para]
+        let rect = CGRect(x: o.x + w * 0.085, y: o.y + w * y - font.lineHeight / 2, width: w * 0.69, height: font.lineHeight * 1.2)
+        ctx.saveGState()
+        ctx.translateBy(x: rect.midX, y: rect.midY); ctx.rotate(by: -0.012); ctx.translateBy(x: -rect.midX, y: -rect.midY)
+        (text as NSString).draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attrs, context: nil)
+        ctx.restoreGState()
       }
-      // reflexo do acrílico
-      let glass = [UIColor(white: 1, alpha: 0.18).cgColor, UIColor(white: 1, alpha: 0.0).cgColor] as CFArray
-      if let g = CGGradient(colorsSpace: space, colors: glass, locations: [0, 1]) {
-        ctx.drawLinearGradient(g, start: CGPoint(x: win.minX, y: win.minY), end: CGPoint(x: win.minX, y: win.midY), options: [])
-      }
+      write(title, font: hand, color: UIColor(red: 0.10, green: 0.14, blue: 0.46, alpha: 1), y: 0.133)
+      write(artist, font: hand2, color: UIColor(red: 0.16, green: 0.18, blue: 0.40, alpha: 0.85), y: 0.172)
+      // capinha colada na etiqueta
+      let side = w * 0.078
+      let thumb = CGRect(x: o.x + w * 0.873 - side / 2, y: o.y + w * 0.147 - side / 2, width: side, height: side)
+      ctx.saveGState()
+      UIBezierPath(roundedRect: thumb, cornerRadius: w * 0.004).addClip()
+      drawCover(cover, in: thumb)
       ctx.restoreGState()
-      ctx.setStrokeColor(UIColor(white: 1, alpha: 0.25).cgColor)
-      ctx.setLineWidth(2)
-      winPath.stroke()
-
-      // Trapézio inferior com as janelas da cabeça
-      let topW = W * 0.68, botW = W * 0.58
-      let ty = body.maxY - H * 0.17, by = body.maxY - 2
-      let trap = UIBezierPath()
-      trap.move(to: CGPoint(x: body.midX - topW / 2, y: ty))
-      trap.addLine(to: CGPoint(x: body.midX + topW / 2, y: ty))
-      trap.addLine(to: CGPoint(x: body.midX + botW / 2, y: by))
-      trap.addLine(to: CGPoint(x: body.midX - botW / 2, y: by))
-      trap.close()
-      UIColor(white: 0.16, alpha: 1).setFill()
-      trap.fill()
-      ctx.setStrokeColor(UIColor(white: 1, alpha: 0.12).cgColor)
-      ctx.setLineWidth(1.5)
-      trap.stroke()
-      let holeY = ty + (by - ty) * 0.5
-      for fx in [-0.36, 0.36] as [CGFloat] {
-        let r = H * 0.022
-        UIColor.black.setFill()
-        ctx.fillEllipse(in: CGRect(x: body.midX + fx * topW * 0.9 - r, y: holeY - r, width: 2 * r, height: 2 * r))
-      }
-      for fx in [-0.14, 0.14] as [CGFloat] {
-        let s = H * 0.04
-        UIColor.black.setFill()
-        ctx.fill(CGRect(x: body.midX + fx * topW - s / 2, y: holeY - s / 2, width: s, height: s))
-      }
     }
   }
 }

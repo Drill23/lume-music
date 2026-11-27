@@ -236,9 +236,8 @@ struct OnboardingView: View {
       // Marca única que viaja entre as telas (centro ↔ cabeçalho).
       let big = step == .welcome || step == .done
       PrismMark(size: 150)
-        .drawingGroup()
         .scaleEffect(big ? 1 : 0.2)
-        .position(x: width / 2, y: big ? markCY : max(safeTop, 20) + 34)
+        .position(x: width / 2, y: big ? markCY : 30)   // pequeno: no centro da linha dos botões do cabeçalho
         .animation(.spring(response: 0.7, dampingFraction: 0.82), value: step)
         .allowsHitTesting(false)
 
@@ -496,7 +495,7 @@ private struct WelcomeStep: View {
           Circle()
             .fill(Color.clear)
             .frame(width: 214, height: 214)
-            .glassCircle(tint: Theme.lavender.opacity(0.18))
+            .background(Circle().fill(Color.white.opacity(0.07)))   // sem vidro desfocando a marca por baixo
           Circle()
             .stroke(Theme.prismAngular, lineWidth: 3)
             .frame(width: 214, height: 214)
@@ -1017,7 +1016,7 @@ private struct DoneStep: View {
               .opacity(appear ? 0.0 : 1)
               .animation(.easeOut(duration: 1.1).delay(0.25), value: appear)
           }
-          Circle().fill(Color.clear).frame(width: 200, height: 200).glassCircle(tint: Theme.rose.opacity(0.15))
+          Circle().fill(Color.white.opacity(0.07)).frame(width: 200, height: 200)
             .scaleEffect(appear ? 1 : 0.4)
             .animation(.spring(response: 0.7, dampingFraction: 0.7), value: appear)
         }

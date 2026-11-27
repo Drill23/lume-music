@@ -226,6 +226,26 @@ struct RootView: View {
       }
       .animation(.spring(response: 0.30, dampingFraction: 0.90), value: app.tab)
 
+      // Véu da barra de status: o conteúdo rolado some suavemente sob o relógio/bateria
+      // (antes os textos passavam por baixo e se misturavam com a hora).
+      VStack(spacing: 0) {
+        GeometryReader { g in
+          LinearGradient(
+            stops: [
+              .init(color: Theme.canvas, location: 0),
+              .init(color: Theme.canvas.opacity(0.92), location: 0.55),
+              .init(color: Theme.canvas.opacity(0), location: 1),
+            ],
+            startPoint: .top, endPoint: .bottom)
+            .frame(height: g.safeAreaInsets.top + 14)
+            .offset(y: -g.safeAreaInsets.top)
+        }
+        .frame(height: 0)
+        Spacer()
+      }
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
+
       BottomBar()
 
       if let msg = app.toast {

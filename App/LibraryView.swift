@@ -196,7 +196,7 @@ struct LibraryView: View {
             .font(Theme.font(15.5, .bold))
             .foregroundStyle(Theme.text)
           let rep = store.replaySummary
-          Text(rep.totalPlays > 0 ? "\(rep.totalPlays) reproduções · \(rep.totalMinutes) min ouvindo" : "Descubra suas mais ouvidas e artistas favoritos")
+          Text(rep.totalPlays > 0 ? "\(rep.totalPlays) \(rep.totalPlays == 1 ? "reprodução" : "reproduções") · \(rep.totalMinutes) min ouvindo" : "Descubra suas mais ouvidas e artistas favoritos")
             .font(Theme.font(12.5))
             .foregroundStyle(Theme.secondary)
         }

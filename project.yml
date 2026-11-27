@@ -29,6 +29,9 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: Lume Music
+        CFBundleDevelopmentRegion: pt-BR
+        CFBundleLocalizations: [pt-BR]
+        CFBundleAllowMixedLocalizations: true
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UIRequiresFullScreen: false
