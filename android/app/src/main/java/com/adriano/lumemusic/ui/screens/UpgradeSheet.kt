@@ -703,10 +703,14 @@ fun UpdateDialog() {
         when (phase) {
             UpdatePhase.Downloading -> {
                 val p = UpdateController.progress
+                val got = UpdateController.downloadedBytes
+                val total = UpdateController.totalBytes
+                fun fmtMb(bytes: Long) = String.format(java.util.Locale.forLanguageTag("pt-BR"), "%.1f MB", bytes / 1_048_576.0)
                 Box(Modifier.fillMaxWidth().height(10.dp).clip(CircleShape).background(Theme.fillStrong)) {
-                    Box(Modifier.fillMaxWidth(p.coerceIn(0.02f, 1f)).fillMaxSize().background(Theme.prismHorizontal))
+                    Box(Modifier.fillMaxWidth(if (total > 0) p.coerceIn(0.03f, 1f) else 0.35f).fillMaxSize().background(Theme.prismHorizontal))
                 }
-                Body("Baixando… ${(p * 100).toInt()}%", Theme.secondary, 14f)
+                val label = if (total > 0) "Baixando… ${(p * 100).toInt()}% · ${fmtMb(got)} / ${fmtMb(total)}" else "Baixando… ${fmtMb(got)}"
+                Body(label, Theme.secondary, 14f)
             }
             UpdatePhase.NeedPermission -> {
                 Body("Libere \"Instalar apps desconhecidos\" para a Lume nas configurações que abriram. Ao voltar, a atualização continua sozinha.", Theme.secondary, 14f)
@@ -714,7 +718,13 @@ fun UpdateDialog() {
             }
             else -> {
                 ErrorText(UpdateController.error)
+                if (phase != UpdatePhase.Error) {
+                    Body("O download e a instalação acontecem direto por aqui, sem perder suas playlists.", Theme.tertiary, 12.5f)
+                }
                 PrismButton(if (phase == UpdatePhase.Error) "Tentar de novo" else "Atualizar agora") { UpdateController.start(ctx) }
+                if (phase == UpdatePhase.Error) {
+                    GlassButton("Baixar pelo navegador") { UpdateController.openInBrowser(ctx) }
+                }
             }
         }
         if (!info.mandatory && phase != UpdatePhase.Downloading) GlassButton("Depois") { UpdateController.later() }

@@ -56,6 +56,8 @@ import com.adriano.lumemusic.ui.glass
 import com.adriano.lumemusic.ui.pressable
 import com.adriano.lumemusic.ui.theme.Theme
 import com.adriano.lumemusic.ui.theme.sf
+import com.adriano.lumemusic.update.UpdateCheckOutcome
+import com.adriano.lumemusic.update.UpdateController
 import java.io.File
 
 @Composable
@@ -178,6 +180,19 @@ fun SettingsScreen(bottomInset: Dp) {
             }
             item {
                 Card("Sobre") {
+                    LinkRow(
+                        "system.update",
+                        if (UpdateController.checking) "Verificando atualizações…" else "Verificar atualizações",
+                        "v${BuildConfig.VERSION_NAME}",
+                    ) {
+                        UpdateController.checkManual { outcome ->
+                            when (outcome) {
+                                UpdateCheckOutcome.Found -> {}
+                                UpdateCheckOutcome.UpToDate -> AppModel.showToast("Você já está na versão mais recente (${BuildConfig.VERSION_NAME})")
+                                UpdateCheckOutcome.Offline -> AppModel.showToast("Sem conexão para verificar atualizações")
+                            }
+                        }
+                    }
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Lume Music ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = Theme.font(16f, FontWeight.SemiBold, Theme.text))
                         Text(Theme.credit, style = Theme.font(13.5f, color = Theme.secondary))

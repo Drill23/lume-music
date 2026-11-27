@@ -136,7 +136,7 @@ struct PopupHost: View {
       }
     }
     .animation(.spring(response: 0.42, dampingFraction: 0.78), value: popups.current)
-    .animation(.spring(response: 0.42, dampingFraction: 0.78), value: update.offer?.build)
+    .animation(.spring(response: 0.42, dampingFraction: 0.78), value: update.offer)
     .allowsHitTesting(popups.current != nil || showUpdate)
     .task { await launchTasks() }
     .onChange(of: scenePhase) { _, phase in

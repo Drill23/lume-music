@@ -5,6 +5,7 @@ struct SettingsView: View {
   @ObservedObject private var app = AppModel.shared
   @ObservedObject private var store = LibraryStore.shared
   @ObservedObject private var player = AudioPlayer.shared
+  @ObservedObject private var update = UpdateService.shared
   @AppStorage("lume.appearance") private var appearance = "system"
   @State private var confirmClear = false
 
@@ -198,6 +199,38 @@ struct SettingsView: View {
       .listRowBackground(Theme.canvasRaised)
 
       Section {
+        Button {
+          guard !update.checking else { return }
+          Haptics.light()
+          Task {
+            let outcome = await update.check(manual: true)
+            switch outcome {
+            case .found:
+              Haptics.success()
+            case .upToDate:
+              app.showToast("Você já está na versão mais recente (\(AccessConfig.appVersion))")
+            case .offline:
+              app.showToast("Sem conexão para verificar atualizações")
+            }
+          }
+        } label: {
+          HStack {
+            Label(update.checking ? "Verificando atualizações…" : "Verificar atualizações", systemImage: "arrow.down.circle")
+              .foregroundStyle(Theme.text)
+            Spacer()
+            if update.checking {
+              ProgressView().controlSize(.small)
+            } else {
+              Text("v\(AccessConfig.appVersion)")
+                .font(Theme.font(14))
+                .foregroundStyle(Theme.secondary)
+            }
+          }
+          .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(update.checking)
         LabeledContent("Versão", value: versionString)
         VStack(alignment: .leading, spacing: 6) {
           Text(Theme.credit)
@@ -236,7 +269,7 @@ struct SettingsView: View {
     let v = info?["CFBundleShortVersionString"] as? String
     let b = info?["CFBundleVersion"] as? String
     if let v, let b { return "\(v) (\(b))" }
-    return "5.1.5 (12)"
+    return "5.1.6 (13)"
   }
 
   private func clearCache() {

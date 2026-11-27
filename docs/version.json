@@ -1,0 +1,18 @@
+{
+  "versionName": "5.1.6",
+  "build": 13,
+  "mandatory": false,
+  "notes": "• Atualização automática conectada direto ao site e ao GitHub\n• Botão \"Verificar atualizações\" dentro de Ajustes (Android e iPhone)\n• Download da atualização no Android com progresso em MB e opção de abrir no navegador",
+  "android": {
+    "build": 13,
+    "versionName": "5.1.6",
+    "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-Android.apk",
+    "mandatory": false
+  },
+  "ios": {
+    "build": 13,
+    "versionName": "5.1.6",
+    "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-iPhone.ipa",
+    "mandatory": false
+  }
+}

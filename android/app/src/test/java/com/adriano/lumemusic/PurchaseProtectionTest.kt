@@ -263,8 +263,37 @@ class PurchaseProtectionTest {
         now += UpdateService.INTERVAL_MS; assertTrue(svc.shouldCheck())
         assertFalse(svc.isPostponed(u)); svc.postpone(u); assertTrue(svc.isPostponed(u))
         now += UpdateService.POSTPONE_MS; assertFalse(svc.isPostponed(u))
-        assertNull(UpdateService(http, Mem(), { "" }).fetch(1, "x"))   // sem apiBase: desligado
+        assertNull(UpdateService(http, Mem(), { "" }).fetch(1, "x"))   // sem apiBase e sem fallback: sem oferta
         val mand = u.copy(mandatory = true); svc.postpone(mand); assertFalse(svc.isPostponed(mand))
+    }
+
+    @Test fun updateSiteManifestAndGitHubFallback() = runBlocking {
+        assertTrue(UpdateService.compareVersions("5.1.10", "5.1.6") > 0)
+        assertTrue(UpdateService.compareVersions("v5.2.0", "5.1.9") > 0)
+        assertEquals(0, UpdateService.compareVersions("5.1.6-debug", "5.1.6"))
+
+        // 1. Painel retorna available=false → cai no manifesto público do site (version.json)
+        val httpSite = RouteHttp().apply {
+            routes["/api/app/update"] = HttpResult(200, """{"ok":true,"available":false}""")
+            routes["version.json"] = HttpResult(200, """{"versionName":"5.1.7","build":14,"notes":"• Novidades","android":{"url":"https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-Android.apk"}}""")
+        }
+        val svcSite = UpdateService(httpSite, Mem(), { "https://painel.test" })
+        val fromSite = svcSite.fetch(13, "5.1.6")!!
+        assertEquals(14, fromSite.build)
+        assertEquals("5.1.7", fromSite.versionName)
+        assertNull(svcSite.fetch(14, "5.1.7"))
+
+        // 2. Painel e site sem oferta → cai direto no GitHub Releases por semver
+        val httpGh = RouteHttp().apply {
+            routes["/api/app/update"] = HttpResult(200, """{"ok":true,"available":false}""")
+            routes["releases/latest"] = HttpResult(200, """{"tag_name":"v5.1.8","body":"### Novidades\n• Correção","assets":[{"name":"Lume-Music-Android.apk","browser_download_url":"https://github.com/Drill23/lume-music/releases/download/v5.1.8/Lume-Music-Android.apk"}]}""")
+        }
+        val svcGh = UpdateService(httpGh, Mem(), { "https://painel.test" })
+        val fromGh = svcGh.fetch(13, "5.1.6")!!
+        assertEquals("5.1.8", fromGh.versionName)
+        assertTrue(fromGh.url.endsWith("Lume-Music-Android.apk"))
+        assertNull(svcGh.fetch(13, "5.1.8"))
+        assertFalse(svcGh.isPostponed(fromGh)); svcGh.postpone(fromGh); assertTrue(svcGh.isPostponed(fromGh))
     }
 
     @Test fun qrMatrixGenerated() {
