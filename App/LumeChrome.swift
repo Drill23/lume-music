@@ -16,8 +16,8 @@ enum LumeLayout {
   static let tabBarHeight: CGFloat = 64
   /// Mini player (60) + espaçamento (10).
   static let miniPlayerHeight: CGFloat = 70
-  /// Folga final para o último item subir bem acima da barra.
-  static let endMargin: CGFloat = 24
+  /// Folga final para o último item subir bem acima da barra e do mini player.
+  static let endMargin: CGFloat = 36
   /// Altura da linha do cabeçalho de detalhe.
   static let headerHeight: CGFloat = 56
 
@@ -39,7 +39,7 @@ extension EnvironmentValues {
 // MARK: - Base: espaço para barra de abas + mini player
 
 private struct LumeTabScrollModifier: ViewModifier {
-  @Environment(\.lumeHasMiniPlayer) private var hasMini
+  @State private var hasMini = AudioPlayer.shared.currentTrack != nil
   @ObservedObject private var keyboard = KeyboardState.shared
 
   func body(content: Content) -> some View {
@@ -52,6 +52,7 @@ private struct LumeTabScrollModifier: ViewModifier {
           .accessibilityHidden(true)
       }
       .scrollDismissesKeyboard(.interactively)
+      .onReceive(AudioPlayer.shared.$currentTrack.map { $0 != nil }.removeDuplicates()) { hasMini = $0 }
   }
 }
 
@@ -108,10 +109,16 @@ struct LumeDetailChrome<Trailing: View>: ViewModifier {
 
   func body(content: Content) -> some View {
     content
-      .onScrollGeometryChange(for: Int.self) { g in
+      .onScrollGeometryChange(for: Int?.self) { g in
+        // Ignora ScrollViews horizontais internos (HRow, chips, discografia) para que rolar lateralmente
+        // nunca apague o véu nem o título compacto do cabeçalho.
+        let scrollsVertically = g.contentSize.height > g.containerSize.height + 1
+        let scrollsHorizontallyOnly = !scrollsVertically && g.contentSize.width > g.containerSize.width + 1
+        if scrollsHorizontallyOnly { return nil }
         let y = g.contentOffset.y + g.contentInsets.top
         return y > threshold ? 2 : (y > veilAfter ? 1 : 0)
       } action: { _, now in
+        guard let now else { return }
         withAnimation(.easeOut(duration: 0.22)) { level = now }
       }
       .toolbar(.hidden, for: .navigationBar)
@@ -161,12 +168,12 @@ struct DetailHeader<Trailing: View>: View {
           LinearGradient(
             stops: [
               .init(color: .black, location: 0),
-              .init(color: .black.opacity(0.94), location: 0.7),
+              .init(color: .black.opacity(0.98), location: 0.78),
               .init(color: .black.opacity(0), location: 1),
             ],
             startPoint: .top, endPoint: .bottom)
         )
-        .padding(.bottom, -18)
+        .padding(.bottom, -20)
         .ignoresSafeArea(edges: .top)
         .opacity(veil ? 1 : 0)
         .allowsHitTesting(false)

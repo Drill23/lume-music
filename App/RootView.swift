@@ -277,7 +277,7 @@ struct RootView: View {
   // @Published deles re-renderizava as 4 abas (todas vivas no ZStack). Assina só o que usa.
   private let player = AudioPlayer.shared
   private let downloads = DownloadManager.shared
-  @State private var hasTrack = false
+  @State private var hasTrack = AudioPlayer.shared.currentTrack != nil
   @Environment(\.scenePhase) private var scenePhase
 
   var body: some View {
@@ -321,20 +321,26 @@ struct RootView: View {
       .accessibilityHidden(true)
 
       // Véu da base: o conteúdo rolado some suavemente atrás da barra flutuante (não captura toques).
-      LinearGradient(
-        stops: [
-          .init(color: Theme.canvas.opacity(0), location: 0),
-          .init(color: Theme.canvas.opacity(0.85), location: 0.55),
-          .init(color: Theme.canvas.opacity(0.96), location: 1),
-        ],
-        startPoint: .top, endPoint: .bottom)
-        .frame(height: LumeLayout.bottomInset(hasMiniPlayer: hasTrack) - 6)
-        .frame(maxWidth: .infinity)
-        .frame(maxHeight: .infinity, alignment: .bottom)
-        .ignoresSafeArea(edges: .bottom)
-        .ignoresSafeArea(.keyboard)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+      VStack(spacing: 0) {
+        Spacer()
+        GeometryReader { g in
+          let chromeH = LumeLayout.tabBarHeight + (hasTrack ? LumeLayout.miniPlayerHeight : 0)
+          LinearGradient(
+            stops: [
+              .init(color: Theme.canvas.opacity(0), location: 0),
+              .init(color: Theme.canvas.opacity(0.86), location: 0.42),
+              .init(color: Theme.canvas.opacity(0.97), location: 1),
+            ],
+            startPoint: .top, endPoint: .bottom)
+            .frame(height: chromeH + g.safeAreaInsets.bottom + 14)
+            .frame(maxWidth: .infinity)
+            .offset(y: -(chromeH + 14))
+        }
+        .frame(height: 0)
+      }
+      .ignoresSafeArea(.keyboard)
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
 
       // A barra fica no pé da tela e o teclado passa por cima (antes ela "subia" junto, cobrindo a lista).
       BottomBar()

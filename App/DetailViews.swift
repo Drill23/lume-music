@@ -113,6 +113,7 @@ struct AlbumView: View {
         trackList
         footer
       }
+      .padding(.bottom, 20)
     }
     .lumeTabScroll()
     .background { backdrop }
@@ -292,11 +293,12 @@ struct ArtistView: View {
           failed
         }
       }
+      .padding(.bottom, 20)
     }
     .ignoresSafeArea(edges: .top)
     .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())
-    .lumeDetailChrome(title: detail?.artist.name ?? name, threshold: 300, veilAfter: 110)
+    .lumeDetailChrome(title: detail?.artist.name ?? name, threshold: 260, veilAfter: 80)
     .task(id: name) { await load() }
   }
 
@@ -739,6 +741,7 @@ struct PlaylistView: View {
           .padding(.top, 14)
         }
       }
+      .padding(.bottom, 20)
     }
     .lumeTabScroll()
   }
@@ -782,6 +785,7 @@ struct TrackListView: View {
           .padding(.horizontal, 20)
         }
         .padding(.top, 6)
+        .padding(.bottom, 20)
       }
     }
     .lumeTabScroll()
@@ -813,6 +817,7 @@ struct AlbumGridView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 6)
+        .padding(.bottom, 20)
       }
     }
     .lumeTabScroll()
@@ -841,6 +846,7 @@ struct ArtistGridView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 6)
+        .padding(.bottom, 20)
       }
     }
     .lumeTabScroll()
@@ -880,6 +886,7 @@ struct MoodView: View {
           .padding(.horizontal, 20)
         }
       }
+      .padding(.bottom, 20)
     }
     .ignoresSafeArea(edges: .top)
     .lumeTabScroll()
@@ -954,6 +961,7 @@ struct ReleasesView: View {
         }
       }
       .padding(.top, 2)
+      .padding(.bottom, 20)
     }
     .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())

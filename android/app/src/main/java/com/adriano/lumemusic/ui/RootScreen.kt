@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.adriano.lumemusic.audio.AudioPlayer
 import com.adriano.lumemusic.audio.PlaybackClock
 import com.adriano.lumemusic.data.AppTab
@@ -141,7 +142,10 @@ fun RootScreen() {
                 for (t in AppTab.entries) {
                     if (t !in visited) continue
                     val active = AppModel.tab == t
-                    Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (active) 1f else 0f }.then(if (active) Modifier else Modifier.size(0.dp))) {
+                    Box(
+                        if (active) Modifier.fillMaxSize().zIndex(1f)
+                        else Modifier.size(0.dp).zIndex(0f).graphicsLayer { alpha = 0f },
+                    ) {
                         TabHost(t, bottomInset)
                     }
                 }
@@ -155,7 +159,16 @@ fun RootScreen() {
                 ),
             )
 
-            Box(Modifier.align(Alignment.BottomCenter)) { BottomBar() }
+            // Véu da base: o conteúdo rolado some suavemente atrás da barra flutuante e do mini player (não captura toques).
+            if (!imeOpen) {
+                val bottomChromeH = navigationBarBottomDp() + Chrome.tabBarBottomPad + Chrome.tabBarHeight + (if (hasTrack) Chrome.miniPlayerBlock else 0.dp) + 14.dp
+                Box(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(bottomChromeH).background(
+                        Brush.verticalGradient(0f to Theme.canvas.copy(0f), 0.42f to Theme.canvas.copy(0.86f), 1f to Theme.canvas.copy(0.97f)),
+                    ),
+                )
+                Box(Modifier.align(Alignment.BottomCenter)) { BottomBar() }
+            }
             Toast(Modifier.align(Alignment.TopCenter))
 
             AnimatedVisibility(

@@ -134,23 +134,28 @@ h3 { font-size: 22px; line-height: 1.2; letter-spacing: -.015em; font-weight: 65
 .lead { font-size: clamp(18px, 1.7vw, 22px); line-height: 1.5; color: var(--ink2); max-width: 36em; margin-top: 24px; text-wrap: pretty; }
 .grad { background: var(--prism-text); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; padding-bottom: .08em; display: inline-block; }
 .fine { font-size: 14px; color: var(--ink2); margin-top: 24px; }
+.fine__link { color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.fine__link:hover { opacity: .82; }
 
 /* ---------- navegação ---------- */
 .nav { position: fixed; z-index: 50; top: 16px; left: 0; right: 0; display: flex; justify-content: center; padding-inline: 16px; pointer-events: none; }
 .nav__pill {
   --r: 999px;
-  pointer-events: auto; display: flex; align-items: center; justify-content: space-between; gap: 24px;
-  width: min(960px, 100%); height: 64px; padding: 0 12px 0 20px;
+  pointer-events: auto; display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  width: min(980px, 100%); height: 64px; padding: 0 12px 0 20px;
   transition: width .5s cubic-bezier(.2,.8,.2,1), height .5s cubic-bezier(.2,.8,.2,1), background-color .4s;
 }
-.nav.is-scrolled .nav__pill { width: min(720px, 100%); height: 56px; background-color: var(--glass-hi); }
+.nav.is-scrolled .nav__pill { width: min(820px, 100%); height: 56px; background-color: var(--glass-hi); }
 .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 650; letter-spacing: -.01em; font-size: 17px; white-space: nowrap; }
 .brand img { width: 32px; height: 32px; border-radius: 50%; }
-.nav__links { display: flex; gap: 8px; }
-.nav__links a { display: block; padding: 8px 16px; border-radius: 999px; font-size: 15px; font-weight: 500; color: var(--ink2); transition: color .25s, background-color .25s; }
+.nav__links { display: flex; gap: 6px; }
+.nav__links a { display: block; padding: 8px 14px; border-radius: 999px; font-size: 15px; font-weight: 500; color: var(--ink2); white-space: nowrap; transition: color .25s, background-color .25s; }
 .nav__links a:hover { color: var(--ink); background: var(--glass-hi); }
+.nav__actions { display: flex; align-items: center; gap: 8px; flex: none; }
 
-.btn { position: relative; display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 24px; border-radius: 999px; font-weight: 600; font-size: 15px; overflow: hidden; transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+.btn { position: relative; display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 22px; border-radius: 999px; font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; transition: transform .3s cubic-bezier(.2,.8,.2,1), background-color .25s; }
+.btn--glass { color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent); }
+@media (hover: hover) { .btn--glass:hover { background: color-mix(in srgb, var(--ink) 12%, transparent); } }
 .btn--ink { background: var(--ink); color: var(--bg); box-shadow: 0 1px 2px rgba(0,0,0,.2), 0 6px 16px rgba(0,0,0,.18); }
 .btn--ink::after { mix-blend-mode: normal; }
 @media (hover: hover) { .btn:hover { transform: scale(1.04); } }
@@ -394,6 +399,32 @@ h3 { font-size: 22px; line-height: 1.2; letter-spacing: -.015em; font-weight: 65
 }
 @media (max-width: 640px) { .vit { --r: 36px; } .vit__buy { padding: 0 24px; width: 100%; font-size: 17px; } .pixbox { border-radius: 28px; } .pixbox__btns .vit__btn { width: 100%; } }
 
+/* como instalar */
+.install-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
+.install-card { --r: 40px; padding: clamp(28px, 4vw, 40px); display: flex; flex-direction: column; gap: 24px; transition: transform .45s cubic-bezier(.2,.8,.2,1), box-shadow .45s; }
+.install-card.is-rec { order: -1; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lav) 75%, transparent), inset 0 1.5px 0 var(--edge-top), var(--sh); }
+.install-card__head { display: flex; align-items: center; gap: 16px; }
+.install-card__ico { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 18px; background: var(--prism); color: #15151e; box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 6px 16px rgba(120,80,200,.26); flex: none; }
+.install-card__head h3 { font-size: 26px; letter-spacing: -.025em; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.install-card__sub { font-size: 14px; color: var(--ink2); margin-top: 2px; }
+.install-tag { display: none; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 650; letter-spacing: 0; background: var(--ink); color: var(--bg); }
+.install-card.is-rec .install-tag { display: inline-flex; }
+.install-steps { display: grid; gap: 14px; }
+.install-steps li { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 22px; background: color-mix(in srgb, var(--ink) 4%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 7%, transparent); }
+.install-steps b { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 12px; background: var(--prism); color: #15151e; font-size: 15px; font-weight: 700; flex: none; margin-top: 2px; box-shadow: inset 0 1px 0 rgba(255,255,255,.7); }
+.install-steps span { display: flex; flex-direction: column; gap: 4px; line-height: 1.4; min-width: 0; }
+.install-steps strong { font-size: 16px; font-weight: 650; color: var(--ink); }
+.install-steps small { font-size: 14.5px; color: var(--ink2); text-wrap: pretty; }
+.install-steps code, .install-alert code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .9em; padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+.install-alert { padding: 20px; border-radius: 24px; background: color-mix(in srgb, var(--lav) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lav) 50%, transparent); }
+.install-alert__title { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 12px; letter-spacing: -.01em; }
+.install-alert__list { display: grid; gap: 10px; font-size: 14.5px; line-height: 1.45; color: var(--ink2); }
+.install-alert__list li { padding-left: 16px; position: relative; }
+.install-alert__list li::before { content: ""; position: absolute; left: 0; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.install-alert__list strong { color: var(--ink); }
+.install-note { padding: 18px 20px; border-radius: 22px; background: color-mix(in srgb, var(--ink) 4%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent); font-size: 14.5px; line-height: 1.45; color: var(--ink2); }
+.install-note strong { color: var(--ink); }
+
 /* faq */
 .faq { display: grid; gap: 16px; }
 .faq details { --r: 28px; transition: background-color .35s, box-shadow .35s; }
@@ -441,6 +472,7 @@ h3 { font-size: 22px; line-height: 1.2; letter-spacing: -.015em; font-weight: 65
   .mini__fan { justify-content: center; margin-bottom: -112px; }
   .cinema__tips { grid-template-columns: 1fr; max-width: 480px; }
   .how { grid-template-columns: 1fr; }
+  .install-grid { grid-template-columns: 1fr; max-width: 640px; margin-inline: auto; }
   .gal-head { margin-bottom: 0; }
   .sec--gallery .shot { scroll-snap-align: center; }
 }
@@ -451,7 +483,12 @@ h3 { font-size: 22px; line-height: 1.2; letter-spacing: -.015em; font-weight: 65
   .nav { top: 8px; padding-inline: 8px; }
   .nav__pill { height: 56px; gap: 8px; padding: 0 8px 0 12px; }
   .nav.is-scrolled .nav__pill { height: 52px; width: min(480px, 100%); }
-  .brand { font-size: 16px; }
+  .brand { font-size: 15px; gap: 6px; }
+  .brand img { width: 28px; height: 28px; }
+  .nav__actions { gap: 6px; }
+  .nav__actions .btn { height: 36px; padding: 0 13px; font-size: 13.5px; }
+  .install-card { --r: 32px; padding: 22px 18px; }
+  .install-card__head h3 { font-size: 22px; }
   .features { grid-template-columns: 1fr; }
   .feat { min-height: 0; padding: 24px; }
   .feat__ico { margin-bottom: 24px; }

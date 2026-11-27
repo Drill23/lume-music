@@ -120,7 +120,7 @@ fun ArtistScreen(name: String, deezerId: Long?, bottomInset: Dp) {
                     }
                 }
                 if (d.related.isNotEmpty()) item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         SectionHeader("Artistas semelhantes")
                         HRow { items(d.related, key = { it.id }) { a -> ArtistBubble(a) { AppModel.openArtist(a.name, a.deezerId) } } }
                     }

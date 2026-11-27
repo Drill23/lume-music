@@ -215,9 +215,9 @@ struct SettingsView: View {
     }
     .listStyle(.insetGrouped)
     .scrollContentBackground(.hidden)
+    .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())
     .tint(Theme.accent)
-    .lumeTabScroll()
     .lumeDetailChrome(title: "Ajustes", alwaysShowTitle: true)
     .confirmationDialog("Limpar cache?", isPresented: $confirmClear, titleVisibility: .visible) {
       Button("Limpar cache", role: .destructive) { clearCache() }
@@ -236,7 +236,7 @@ struct SettingsView: View {
     let v = info?["CFBundleShortVersionString"] as? String
     let b = info?["CFBundleVersion"] as? String
     if let v, let b { return "\(v) (\(b))" }
-    return "4.2.0 (6)"
+    return "5.1.3 (10)"
   }
 
   private func clearCache() {

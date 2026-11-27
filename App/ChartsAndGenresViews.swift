@@ -583,6 +583,7 @@ struct RemotePlaylistView: View {
         .padding(.horizontal, 20)
         .padding(.top, 16)
       }
+      .padding(.bottom, 20)
     }
     .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())
@@ -807,9 +808,9 @@ struct DownloadsCenterView: View {
     }
     .listStyle(.insetGrouped)
     .scrollContentBackground(.hidden)
+    .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())
     .tint(Theme.accent)
-    .lumeTabScroll()
     .lumeDetailChrome(title: "Downloads", alwaysShowTitle: true)
     .confirmationDialog("Remover todas as músicas baixadas?", isPresented: $confirmClear, titleVisibility: .visible) {
       Button("Remover tudo", role: .destructive) {

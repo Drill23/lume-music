@@ -623,6 +623,7 @@ struct PlayerOptionsSheet: View {
   @ObservedObject private var app = AppModel.shared
   @Environment(\.dismiss) private var dismiss
   @State private var showShareCard = false
+  @State private var playlistTrack: Track?
 
   var body: some View {
     NavigationStack {
@@ -636,7 +637,7 @@ struct PlayerOptionsSheet: View {
                 Text(tr.artist).font(Theme.font(14)).foregroundStyle(Theme.secondary).lineLimit(1)
               }
             }
-            Button { dismiss(); app.playlistPickerTrack = tr } label: { Label("Adicionar a uma playlist", systemImage: "text.badge.plus") }
+            Button { playlistTrack = tr } label: { Label("Adicionar a uma playlist", systemImage: "text.badge.plus") }
             Button { dismiss(); app.navigateFromPlayer(.artist(LibraryStore.mainArtist(tr.artist), nil)) } label: { Label("Ver artista", systemImage: "music.mic") }
             Button { player.startRadio(from: tr); dismiss() } label: { Label("Iniciar rádio desta música", systemImage: "dot.radiowaves.left.and.right") }
             Button { showShareCard = true } label: {
@@ -744,6 +745,11 @@ struct PlayerOptionsSheet: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+      }
+      .sheet(item: $playlistTrack) { tr in
+        AddToPlaylistSheet(track: tr)
+          .presentationDetents([.medium, .large])
+          .presentationDragIndicator(.visible)
       }
     }
   }

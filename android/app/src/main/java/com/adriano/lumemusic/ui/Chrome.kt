@@ -45,8 +45,8 @@ object Chrome {
     val tabBarBottomPad = 6.dp
     /** Mini player + espaço entre ele e a barra de abas. */
     val miniPlayerBlock = 60.dp + 10.dp
-    /** Folga final para o último item respirar. */
-    val breathing = 16.dp
+    /** Folga final para o último item subir bem acima da barra e do mini player. */
+    val breathing = 32.dp
     /** Altura mínima do cabeçalho padrão das telas de detalhe. */
     val detailHeaderMin = 56.dp
     /** Alvo de toque mínimo. */
