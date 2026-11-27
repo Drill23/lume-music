@@ -21,6 +21,10 @@ final class SoundFX {
   private var started = false
   private var previousCategory: (AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions)?
   private var scaleIndex = 0
+  /// Onboarding aberto: mantém o motor ligado. Fora dele, o motor se desliga sozinho após alguns segundos sem sons
+  /// (assim a sessão de áudio volta ao normal para o player do Lume).
+  var holdOpen = false
+  private var idleTask: Task<Void, Never>?
   private let masterVolume: Float = 0.42
 
   /// Escala pentatônica maior (C5…) para os toques ficarem melódicos.
@@ -59,6 +63,8 @@ final class SoundFX {
 
   /// Desliga o motor e devolve a sessão de áudio como estava (importante para o player do Lume).
   func end() {
+    holdOpen = false
+    idleTask?.cancel()
     guard started else { return }
     voices.forEach { $0.stop() }
     engine.stop()
@@ -108,6 +114,17 @@ final class SoundFX {
     node.stop()
     node.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
     node.play()
+    scheduleIdleShutdown()
+  }
+
+  private func scheduleIdleShutdown() {
+    idleTask?.cancel()
+    guard !holdOpen else { return }
+    idleTask = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(3.5))
+      guard !Task.isCancelled, let self, !self.holdOpen else { return }
+      self.end()
+    }
   }
 
   /// Zera a escala melódica (ao entrar numa tela nova).

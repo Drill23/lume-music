@@ -223,6 +223,7 @@ struct OnboardingView: View {
     .ignoresSafeArea(.container, edges: .bottom)
     .onAppear {
       SoundFX.shared.begin()
+      SoundFX.shared.holdOpen = true
       applyDebugState()
     }
   }
