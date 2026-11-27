@@ -271,6 +271,7 @@ struct CoverFlowMetrics {
   var flipScale: CGFloat
   var flipCenterY: CGFloat
   var interactTop: CGFloat
+  var interactBottom: CGFloat
   var artPixel: CGFloat
 
   var sideGap: CGFloat { cover * 0.80 }
@@ -287,7 +288,7 @@ struct CoverFlowMetrics {
     let flipCenterY = (barBottom + s.height) / 2
     let scale = min(1.6, (s.height - barBottom - 8) / cover)
     return CoverFlowMetrics(width: s.width, height: s.height, cover: cover, coverTop: coverTop, backAspect: 1.55,
-                            flipScale: scale, flipCenterY: flipCenterY, interactTop: barBottom, artPixel: 460)
+                            flipScale: scale, flipCenterY: flipCenterY, interactTop: barBottom, interactBottom: s.height, artPixel: 460)
   }
 
   static func portrait(_ s: CGSize) -> CoverFlowMetrics {
@@ -295,7 +296,8 @@ struct CoverFlowMetrics {
     let cover = min(s.width * 0.64, (s.height - coverTop) * 0.36)
     let scale = min(1.5, (s.width * 0.92) / cover)
     return CoverFlowMetrics(width: s.width, height: s.height, cover: cover, coverTop: coverTop, backAspect: 1.0,
-                            flipScale: scale, flipCenterY: coverTop + cover * scale / 2, interactTop: coverTop - 8, artPixel: 560)
+                            flipScale: scale, flipCenterY: coverTop + cover * scale / 2, interactTop: coverTop - 8,
+                            interactBottom: coverTop + cover * 1.28, artPixel: 560)
   }
 
   static var portraitCoverTop: CGFloat { 4 + barHeight + 8 + barHeight + 18 }
@@ -317,6 +319,8 @@ struct CoverFlowLandscapeLayout: View {
     let m = CoverFlowMetrics.landscape(size)
     let captionH: CGFloat = 56
     ZStack(alignment: .top) {
+      CoverFlowStage(items: items, m: m, position: position, selection: selection, tracks: tracks)
+      if items.isEmpty { CoverFlowEmpty(source: source) }
       HStack(spacing: 12) {
         GlassIconButton(systemName: "xmark", size: 44, iconSize: 17, foreground: .white, action: onClose)
         Spacer(minLength: 0)
@@ -339,7 +343,6 @@ struct CoverFlowLandscapeLayout: View {
           .allowsHitTesting(false)
       }
 
-      CoverFlowStage(items: items, m: m, position: position, selection: selection, tracks: tracks)
     }
     .frame(width: size.width, height: size.height, alignment: .top)
   }
@@ -359,7 +362,7 @@ struct CoverFlowPortraitLayout: View {
 
   var body: some View {
     let m = CoverFlowMetrics.portrait(size)
-    let captionY = m.coverTop + m.cover * 1.12
+    let captionY = m.coverTop + m.cover * 1.30
     let captionH: CGFloat = 60
     let sliderY = captionY + captionH + 4
     let panelY = sliderY + 40
@@ -381,7 +384,7 @@ struct CoverFlowPortraitLayout: View {
       .padding(.top, 4)
 
       if items.isEmpty {
-        EmptyView()
+        CoverFlowEmpty(source: source).padding(.top, m.coverTop)
       } else {
         CoverFlowCaption(items: items, selection: selection)
           .frame(height: captionH)
@@ -512,7 +515,7 @@ struct CoverFlowStage: View {
     ZStack(alignment: .top) {
       // Área de arraste/toque em todo o palco (um toque no fundo desvira a capa).
       Color.clear
-        .frame(width: m.width, height: max(0, m.height - m.interactTop))
+        .frame(width: m.width, height: max(0, m.interactBottom - m.interactTop))
         .contentShape(Rectangle())
         .offset(y: m.interactTop)
         .onTapGesture { unflip() }
@@ -533,7 +536,7 @@ struct CoverFlowStage: View {
             .scaleEffect(isFlipped ? m.flipScale : 1, anchor: UnitPoint(x: 0.5, y: 1.0 / 3.0))
             .offset(y: isFlipped ? m.flipShift : 0)
             .modifier(CoverFlowTransform(delta: Double(idx) - pos, cover: m.cover, gap: m.sideGap, step: m.step))
-            .zIndex(isFlipped ? 100 : 0)
+            .zIndex(isFlipped ? 100 : -abs(Double(idx) - pos))
             .onTapGesture { tap(idx) }
         }
       }
@@ -669,7 +672,6 @@ struct CoverFlowTransform: ViewModifier, Animatable {
       .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0), anchor: UnitPoint(x: 0.5, y: 1.0 / 3.0), perspective: 0.5)
       .scaleEffect(scale, anchor: UnitPoint(x: 0.5, y: 1.0 / 3.0))
       .offset(x: x)
-      .zIndex(-a)
       .opacity(fade)
   }
 }
@@ -715,6 +717,7 @@ struct CoverFlowCard: View, Equatable {
     ZStack(alignment: .top) {
       reflection
         .offset(y: size + 2)
+        .allowsHitTesting(false)
         .opacity(flipped ? 0 : 1)
         .animation(.easeOut(duration: 0.25), value: flipped)
       FlipCard(angle: flipped ? 180 : 0) {
@@ -810,7 +813,7 @@ struct CoverFlowBack: View {
     HStack(spacing: 10) {
       VStack(alignment: .leading, spacing: 6) {
         ArtworkImage(url: item.artworkURL, cornerRadius: 6, maxPixel: 240)
-          .frame(width: size * 0.40, height: size * 0.40)
+          .frame(width: size * 0.32, height: size * 0.32)
           .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
         Text(item.title).font(Theme.rounded(13, .bold)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
         Text(item.subtitle).font(Theme.font(11)).foregroundStyle(.white.opacity(0.62)).lineLimit(1)
@@ -1129,5 +1132,25 @@ struct CoverFlowPhoneIllustration: View {
     }
     .frame(width: 66, height: 128)
     .shadow(color: Theme.lavender.opacity(0.35), radius: 18, y: 6)
+  }
+}
+
+// MARK: - Vazio / carregando
+
+struct CoverFlowEmpty: View {
+  let source: CoverFlowScreen.Source
+
+  var body: some View {
+    if source != .library && AppModel.shared.feed == nil {
+      VStack(spacing: 12) {
+        ProgressView().tint(.white)
+        Text("Carregando capas…").font(Theme.font(14)).foregroundStyle(.white.opacity(0.6))
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else {
+      EmptyStateView(icon: "square.stack.3d.forward.dottedline", title: "Nada por aqui ainda",
+                     message: "Curta músicas ou abra os lançamentos para preencher o Cover Flow.")
+        .frame(maxHeight: .infinity)
+    }
   }
 }
