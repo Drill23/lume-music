@@ -181,75 +181,85 @@ struct SpectrumVisualizer: View {
   // MARK: Ondas Líquidas (vidro iridescente)
 
   private func drawLiquid(_ ctx: inout GraphicsContext, size: CGSize, f: SpectrumFrame, t: Double) {
+    // 5.0: fitas de vidro iridescentes simétricas em torno do centro (estilo "Siri"), que se
+    // misturam em cor sem estourar para branco e nunca encostam nas bordas do palco.
     let w = size.width, h = size.height
     let kick = Double(f.kick), level = Double(f.level), bass = Double(f.bass)
-    let mid = h * 0.56
-    let samples = rich ? 72 : 44
+    let mid = h * 0.5
+    let samples = rich ? 84 : 48
     let vals = resample(f.bands, count: samples, mirror: true)
+    let maxAmp = h * 0.36
 
-    // Clarão da batida sob as ondas
+    // Clarão suave da batida atrás das fitas
     if kick > 0.02 {
-      let r = w * (0.55 + 0.25 * kick)
-      let glowRect = CGRect(x: w / 2 - r, y: mid - r * 0.42, width: 2 * r, height: r * 0.84)
+      let r = w * (0.42 + 0.22 * kick)
+      let glowRect = CGRect(x: w / 2 - r, y: mid - r * 0.55, width: 2 * r, height: r * 1.1)
       ctx.fill(Path(ellipseIn: glowRect), with: .radialGradient(
-        Gradient(colors: [palette.vibrant.opacity(0.42 * kick), palette.vibrant2.opacity(0.18 * kick), .clear]),
+        Gradient(colors: [palette.vibrant.opacity((dark ? 0.26 : 0.18) * kick), palette.vibrant2.opacity(0.08 * kick), .clear]),
         center: CGPoint(x: w / 2, y: mid), startRadius: 0, endRadius: r))
     }
 
-    // Ondulações de cada batida na "superfície" do líquido
+    // Ondulações de cada batida (anéis finos que se abrem a partir do centro)
     for rp in ripples.ripples {
       let age = (t - rp.t0) / 1.1
       guard age >= 0 && age < 1 else { continue }
-      let rr = w * (0.08 + 0.62 * age)
-      let ring = CGRect(x: w / 2 - rr, y: mid - rr * 0.28, width: 2 * rr, height: rr * 0.56)
-      ctx.stroke(Path(ellipseIn: ring), with: .color(.white.opacity(0.38 * rp.strength * (1 - age))), lineWidth: 1.4 + 2 * (1 - age))
+      let rr = w * (0.10 + 0.55 * age)
+      let ring = CGRect(x: w / 2 - rr, y: mid - rr * 0.34, width: 2 * rr, height: rr * 0.68)
+      ctx.stroke(Path(ellipseIn: ring), with: .color((dark ? Color.white : palette.vibrant).opacity(0.30 * rp.strength * (1 - age))),
+                 lineWidth: 1.2 + 1.8 * (1 - age))
     }
 
+    // Cores saturadas (as pastel do tema somadas viravam branco puro no miolo)
+    let ribbonColors: [Color] = [
+      palette.vibrant,
+      Color(hue: 0.92, saturation: 0.72, brightness: 1.0),   // rosa
+      Color(hue: 0.74, saturation: 0.66, brightness: 1.0),   // violeta
+      Color(hue: 0.55, saturation: 0.70, brightness: 1.0),   // céu
+      Color(hue: 0.07, saturation: 0.66, brightness: 1.0),   // pêssego
+    ]
     let layers = rich ? 5 : 3
-    if dark { ctx.blendMode = .plusLighter }
+    ctx.blendMode = dark ? .screen : .normal
     for layer in 0..<layers {
       let li = Double(layer)
-      let depth = 1 - li / Double(layers)               // 1 = fundo, menor = frente
-      let speed = 0.35 + 0.18 * li
-      let k1 = 1.1 + 0.35 * li, k2 = 2.3 + 0.5 * li
-      let phase = li * 1.7
-      let amp = h * (0.10 + 0.07 * level + 0.12 * kick * (0.6 + 0.4 * depth)) * (0.75 + 0.35 * depth)
-      let yOff = h * 0.05 * (li - Double(layers - 1) / 2)
-      var wave = Path()
+      let speed = 0.30 + 0.14 * li
+      let k1 = 1.0 + 0.30 * li, k2 = 2.1 + 0.45 * li
+      let phase = li * 1.9
+      let amp = maxAmp * (0.30 + 0.30 * level + 0.40 * kick) * (1.0 - 0.12 * li)
+      var top = [CGPoint](), bottom = [CGPoint]()
+      top.reserveCapacity(samples); bottom.reserveCapacity(samples)
       for i in 0..<samples {
         let u = Double(i) / Double(samples - 1)
         let x = w * CGFloat(u)
-        let env = pow(sin(u * .pi), 1.3)
-        let carrier = 0.55 * sin(2 * .pi * (u * k1 + t * speed * 0.5) + phase)
-          + 0.30 * sin(2 * .pi * (u * k2 - t * speed * 0.33) + phase * 0.6)
-          + 0.15 * sin(2 * .pi * (u * 4.7 + t * 0.9))
-        let energy = 0.30 + 0.95 * vals[i] + 0.35 * bass
-        let y = mid + yOff - CGFloat(amp * env * energy * (0.65 + 0.55 * carrier))
-        if i == 0 { wave.move(to: CGPoint(x: x, y: y)) } else { wave.addLine(to: CGPoint(x: x, y: y)) }
+        let env = pow(sin(u * .pi), 2.2)             // pontas finas, barriga no meio
+        let carrier = 0.6 * sin(2 * .pi * (u * k1 + t * speed * 0.5) + phase)
+          + 0.4 * sin(2 * .pi * (u * k2 - t * speed * 0.35) + phase * 0.7)
+        let energy = min(1.25, 0.25 + 0.9 * vals[i] + 0.3 * bass)
+        let a = amp * env * energy
+        let center = CGFloat(a * 0.35 * carrier)       // a fita "serpenteia" em torno do centro
+        top.append(CGPoint(x: x, y: mid + center - CGFloat(a)))
+        bottom.append(CGPoint(x: x, y: mid + center + CGFloat(a * 0.55)))
       }
-      var body = wave
-      body.addLine(to: CGPoint(x: w, y: h))
-      body.addLine(to: CGPoint(x: 0, y: h))
-      body.closeSubpath()
+      var ribbon = Path()
+      ribbon.addLines(top)
+      ribbon.addLines(bottom.reversed())
+      ribbon.closeSubpath()
+      var edge = Path()
+      edge.addLines(top)
 
-      let (grad, p0, p1) = flowingGradient(t + li * 3, width: w, alpha: dark ? 0.20 + 0.10 * kick : 0.22 + 0.08 * kick)
+      let col = ribbonColors[layer % ribbonColors.count]
+      let col2 = ribbonColors[(layer + 2) % ribbonColors.count]
       var lc = ctx
-      lc.fill(body, with: .linearGradient(grad, startPoint: p0, endPoint: p1))
-      // véu vertical: o corpo do líquido some para baixo (profundidade de vidro)
-      lc.fill(body, with: .linearGradient(
-        Gradient(colors: [.white.opacity(dark ? 0.05 : 0.10), .clear]),
-        startPoint: CGPoint(x: 0, y: mid - amp), endPoint: CGPoint(x: 0, y: h)))
-      // borda de vidro: halo largo translúcido + fio de luz (sem blur)
-      let (lineGrad, l0, l1) = flowingGradient(t * 1.3 + li, width: w, alpha: 0.9)
-      if rich {
-        lc.stroke(wave, with: .linearGradient(lineGrad, startPoint: l0, endPoint: l1),
-                  style: StrokeStyle(lineWidth: 7 + 6 * kick, lineCap: .round, lineJoin: .round))
-        lc.opacity = 1
-      }
-      var edge = ctx
-      edge.opacity = 0.55 + 0.45 * (1 - depth) + 0.3 * kick
-      edge.stroke(wave, with: .color(.white.opacity(dark ? 0.75 : 0.9)),
-                  style: StrokeStyle(lineWidth: layer == layers - 1 ? 1.8 : 1.1, lineCap: .round, lineJoin: .round))
+      lc.opacity = dark ? 0.26 + 0.14 * kick : 0.30 + 0.14 * kick
+      lc.fill(ribbon, with: .linearGradient(
+        Gradient(colors: [col.opacity(0), col, col2, col.opacity(0)]),
+        startPoint: CGPoint(x: 0, y: mid), endPoint: CGPoint(x: w, y: mid)))
+      // fio de luz na crista (vidro)
+      var ec = ctx
+      ec.opacity = dark ? 0.55 + 0.35 * kick : 0.45 + 0.30 * kick
+      ec.stroke(edge, with: .linearGradient(
+        Gradient(colors: [.clear, (dark ? Color.white : col2).opacity(0.9), .clear]),
+        startPoint: CGPoint(x: 0, y: mid), endPoint: CGPoint(x: w, y: mid)),
+        style: StrokeStyle(lineWidth: layer == 0 ? 1.6 : 1.0, lineCap: .round, lineJoin: .round))
     }
     ctx.blendMode = .normal
   }

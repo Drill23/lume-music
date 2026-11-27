@@ -408,6 +408,9 @@ struct CassetteTape: View {
         .frame(width: w * 0.078, height: w * 0.078)
         .position(x: w * 0.873, y: w * 0.147)
     }
+    // Mesmo quadro dos carretéis: sem ele as posições ficavam relativas ao quadro maior da sombra
+    // e o título/capa escapavam para fora da etiqueta (canto superior esquerdo).
+    .frame(width: w, height: w / TapeGeo.aspect)
     .allowsHitTesting(false)
   }
 }

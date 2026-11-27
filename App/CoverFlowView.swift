@@ -815,7 +815,7 @@ struct CoverFlowBack: View {
         ArtworkImage(url: item.artworkURL, cornerRadius: 6, maxPixel: 240)
           .frame(width: size * 0.32, height: size * 0.32)
           .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
-        Text(item.title).font(Theme.rounded(13, .bold)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+        Text(item.title).font(Theme.rounded(13, .bold)).lineLimit(2).minimumScaleFactor(0.75).fixedSize(horizontal: false, vertical: true)
         Text(item.subtitle).font(Theme.font(11)).foregroundStyle(.white.opacity(0.62)).lineLimit(1)
         Spacer(minLength: 0)
         HStack(spacing: 8) {
@@ -855,9 +855,9 @@ struct CoverFlowBack: View {
       Image(systemName: "play.fill")
         .font(.system(size: 12, weight: .bold))
         .foregroundStyle(Theme.onPrism)
-        .frame(width: 30, height: 30)
+        .frame(width: 36, height: 36)
         .background(Circle().fill(Theme.prismDiagonal))
-        .frame(width: 34, height: 34)
+        .frame(width: 44, height: 44)
         .contentShape(Circle())
     }
     .buttonStyle(.plain)
@@ -868,9 +868,9 @@ struct CoverFlowBack: View {
       Image(systemName: "chevron.backward")
         .font(.system(size: 11, weight: .bold))
         .foregroundStyle(.white)
-        .frame(width: 30, height: 30)
+        .frame(width: 36, height: 36)
         .background(Circle().fill(.white.opacity(0.16)))
-        .frame(width: 34, height: 34)
+        .frame(width: 44, height: 44)
         .contentShape(Circle())
     }
     .buttonStyle(.plain)
@@ -885,37 +885,70 @@ struct CoverFlowBack: View {
           .foregroundStyle(.white.opacity(0.6))
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
-        ScrollView(showsIndicators: false) {
-          LazyVStack(spacing: 0) {
-            ForEach(Array(tracks.enumerated()), id: \.element.id) { i, t in
-              Button {
-                Haptics.light()
-                player.play(t, in: tracks)
-              } label: {
-                HStack(spacing: 8) {
-                  Text("\(i + 1)")
-                    .font(Theme.font(11, .medium)).foregroundStyle(.white.opacity(0.45))
-                    .frame(width: 16, alignment: .trailing).monospacedDigit()
-                  Text(t.title)
-                    .font(Theme.font(12.5, player.currentTrack?.id == t.id ? .semibold : .regular)).lineLimit(1)
-                    .foregroundStyle(player.currentTrack?.id == t.id ? Theme.rose : .white)
-                  Spacer(minLength: 4)
-                  Text(t.formattedDuration)
-                    .font(Theme.font(10.5)).foregroundStyle(.white.opacity(0.45)).monospacedDigit()
-                }
-                .padding(.horizontal, 10)
-                .frame(height: 30)
-                .contentShape(Rectangle())
-              }
-              .buttonStyle(.plain)
+        if tracks.count <= 4 {
+          // Single/EP: lista do tamanho do conteúdo + resumo embaixo (sem painel vazio enorme)
+          VStack(spacing: 0) {
+            ForEach(Array(tracks.enumerated()), id: \.element.id) { i, t in backRow(i, t, tracks) }
+            Spacer(minLength: 8)
+            VStack(spacing: 4) {
+              Image(systemName: tracks.count == 1 ? "music.note" : "square.stack")
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(Theme.prismDiagonal)
+              Text(tracks.count == 1 ? "Single" : "EP · \(tracks.count) faixas")
+                .font(Theme.font(12, .semibold))
+              Text(Self.totalDuration(tracks))
+                .font(Theme.font(11)).foregroundStyle(.white.opacity(0.55)).monospacedDigit()
             }
+            .frame(maxWidth: .infinity)
+            Spacer(minLength: 8)
           }
           .padding(.vertical, 4)
+        } else {
+          ScrollView(showsIndicators: false) {
+            LazyVStack(spacing: 0) {
+              ForEach(Array(tracks.enumerated()), id: \.element.id) { i, t in backRow(i, t, tracks) }
+            }
+            .padding(.vertical, 4)
+          }
         }
       }
     } else {
       ProgressView().tint(.white).frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+  }
+}
+
+
+extension CoverFlowBack {
+  fileprivate func backRow(_ i: Int, _ t: Track, _ tracks: [Track]) -> some View {
+    let playing = player.currentTrack?.id == t.id
+    return Button {
+      Haptics.light()
+      player.play(t, in: tracks)
+    } label: {
+      HStack(spacing: 8) {
+        Group {
+          if playing { Image(systemName: "waveform").font(.system(size: 11, weight: .bold)).foregroundStyle(Theme.rose) }
+          else { Text("\(i + 1)").font(Theme.font(11, .medium)).foregroundStyle(.white.opacity(0.45)).monospacedDigit() }
+        }
+        .frame(width: 18, alignment: .trailing)
+        Text(t.title)
+          .font(Theme.font(13, playing ? .semibold : .regular)).lineLimit(1)
+          .foregroundStyle(playing ? Theme.rose : .white)
+        Spacer(minLength: 4)
+        Text(t.formattedDuration)
+          .font(Theme.font(11)).foregroundStyle(.white.opacity(0.45)).monospacedDigit()
+      }
+      .padding(.horizontal, 10)
+      .frame(height: 40)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+  }
+
+  static func totalDuration(_ tracks: [Track]) -> String {
+    let secs = Int(tracks.reduce(0) { $0 + $1.duration })
+    return secs >= 3600 ? "\(secs / 3600) h \((secs % 3600) / 60) min" : "\(max(1, secs / 60)) min"
   }
 }
 
