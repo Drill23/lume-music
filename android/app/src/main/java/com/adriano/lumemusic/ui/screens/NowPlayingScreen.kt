@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -31,6 +32,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -76,6 +78,7 @@ import com.adriano.lumemusic.ui.TrackArtwork
 import com.adriano.lumemusic.ui.glass
 import com.adriano.lumemusic.ui.pressable
 import com.adriano.lumemusic.ui.stage.StageSwitcher
+import com.adriano.lumemusic.ui.theme.LocalDark
 import com.adriano.lumemusic.ui.theme.Theme
 import com.adriano.lumemusic.ui.theme.sf
 import kotlin.math.abs
@@ -94,6 +97,9 @@ fun NowPlayingScreen() {
     val mode = AppModel.playerTab
     val lyrics = mode == PlayerSurfaceTab.LYRICS
 
+    // O Tocando agora tem sempre fundo escuro ambiente (igual ao iOS); forçar LocalDark=true faz o Liquid Glass
+    // dos botões, StageSwitcher e menus de palco ficarem translúcidos escuros mesmo quando o aparelho está no modo claro.
+    CompositionLocalProvider(LocalDark provides true) {
     Box(
         Modifier.fillMaxSize().background(Color(0xFF09090B))
             .graphicsLayer { translationY = maxOf(0f, dragY); alpha = 1f - (maxOf(0f, dragY) / 1800f) }
@@ -119,12 +125,12 @@ fun NowPlayingScreen() {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(40.dp, 5.dp).clip(CircleShape).background(Color.White.copy(0.28f)))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    GlassIconButton("chevron.down", 40.dp, foreground = Color.White, desc = "Fechar") { AppModel.showPlayer = false }
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    GlassIconButton("chevron.down", 44.dp, foreground = Color.White, desc = "Fechar") { AppModel.showPlayer = false }
+                    Column(Modifier.weight(1f).padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         Text("TOCANDO AGORA", style = Theme.font(10.5f, FontWeight.SemiBold, Color.White.copy(0.62f), letterSpacing = TextUnit(1.2f, TextUnitType.Sp)))
                         Text(AudioPlayer.contextTitle.ifEmpty { "Lume Music" }, style = Theme.font(13f, FontWeight.SemiBold, Color.White), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    GlassIconButton("ellipsis", 40.dp, foreground = Color.White, desc = "Mais opções") { AppModel.showTrackMenu(track, AudioPlayer.queue) }
+                    GlassIconButton("ellipsis", 44.dp, foreground = Color.White, desc = "Mais opções") { AppModel.showTrackMenu(track, AudioPlayer.queue) }
                 }
             }
 
@@ -149,6 +155,7 @@ fun NowPlayingScreen() {
         }
         }
     }
+    }
 }
 
 @Composable
@@ -169,20 +176,20 @@ private fun Metadata(track: Track, lyrics: Boolean) {
             else if (DownloadManager.isDownloading(track.id)) DownloadManager.cancel(track.id)
             else { Haptics.light(); DownloadManager.download(track) }
         }, contentAlignment = Alignment.Center) {
-            Box(Modifier.size(40.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(44.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
                 if (p != null) {
                     Canvas(Modifier.size(20.dp)) {
                         val sw = 2.4.dp.toPx()
                         drawCircle(Color.White.copy(0.15f), size.minDimension / 2 - sw / 2, style = Stroke(sw))
                         drawArc(Color.White, -90f, 360f * p.toFloat(), false, topLeft = Offset(sw / 2, sw / 2), size = Size(size.width - sw, size.height - sw), style = Stroke(sw, cap = StrokeCap.Round))
                     }
-                } else Icon(sf(if (downloaded) "arrow.down.circle.fill" else "arrow.down"), "Baixar", tint = Color.White, modifier = Modifier.size(20.dp))
+                } else Icon(sf(if (downloaded) "arrow.down.circle.fill" else "arrow.down"), "Baixar", tint = Color.White, modifier = Modifier.size(19.dp))
             }
         }
         // curtir
         Box(Modifier.size(Chrome.minTouch).pressable(0.88f) { LibraryStore.toggleFavorite(track) }, contentAlignment = Alignment.Center) {
-            Box(Modifier.size(40.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
-                Icon(sf(if (fav) "heart.fill" else "heart"), if (fav) "Remover das curtidas" else "Curtir", tint = if (fav) Theme.rose else Color.White, modifier = Modifier.size(20.dp))
+            Box(Modifier.size(44.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
+                Icon(sf(if (fav) "heart.fill" else "heart"), if (fav) "Remover das curtidas" else "Curtir", tint = if (fav) Theme.rose else Color.White, modifier = Modifier.size(19.dp))
             }
         }
     }
@@ -196,7 +203,12 @@ private fun Transport(lyrics: Boolean) {
         TransportIcon("backward.fill", "Anterior", 60.dp, 34.dp, Color.White, 0.82f) { AudioPlayer.previousTrack() }
         Box(Modifier.size(playSize).pressable(0.9f) { AudioPlayer.togglePlayPause() }.glass(CircleShape), contentAlignment = Alignment.Center) {
             if (AudioPlayer.isLoading) CircularProgressIndicator(Modifier.size(32.dp), color = Color.White, strokeWidth = 3.dp)
-            else Icon(sf(if (AudioPlayer.isPlaying) "pause.fill" else "play.fill"), if (AudioPlayer.isPlaying) "Pausar" else "Tocar", tint = Color.White, modifier = Modifier.size(40.dp))
+            else Icon(
+                sf(if (AudioPlayer.isPlaying) "pause.fill" else "play.fill"),
+                if (AudioPlayer.isPlaying) "Pausar" else "Tocar",
+                tint = Color.White,
+                modifier = Modifier.size(38.dp).offset(x = if (AudioPlayer.isPlaying) 0.dp else 2.dp),
+            )
         }
         TransportIcon("forward.fill", "Próxima", 60.dp, 34.dp, Color.White, 0.82f) { AudioPlayer.nextTrack() }
         TransportIcon(if (AudioPlayer.repeatMode == RepeatMode.ONE) "repeat.1" else "repeat", "Repetir", 48.dp, 20.dp, if (AudioPlayer.repeatMode != RepeatMode.OFF) Theme.rose else Color.White.copy(0.62f)) { Haptics.selection(); AudioPlayer.repeatMode = AudioPlayer.repeatMode.next }
@@ -217,10 +229,13 @@ private fun BottomRow() {
             Haptics.selection(); AppModel.playerTab = if (lyricsOn) AppModel.playerStyle else PlayerSurfaceTab.LYRICS
         }
         if (lyricsOn && AudioPlayer.lyrics != null) BottomIcon("translate", "Traduzir", if (AudioPlayer.showTranslation) Theme.rose else Color.White.copy(0.62f)) { AudioPlayer.toggleTranslation() }
-        Row(Modifier.height(Chrome.minTouch).widthIn(min = 48.dp).pressable(0.9f) { Haptics.light(); AppModel.tabletSheet = "sleep" }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            Modifier.height(Chrome.minTouch).widthIn(min = 48.dp).pressable(0.9f) { Haptics.light(); AppModel.tabletSheet = "sleep" }.padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+        ) {
             val on = AudioPlayer.sleepTimerOption != SleepTimerOption.OFF
             Icon(sf("moon.zzz"), "Timer de dormir", tint = if (on) Theme.rose else Color.White.copy(0.62f), modifier = Modifier.size(22.dp))
-            if (AudioPlayer.sleepRemainingSeconds > 0) Text(Theme.formatTime(AudioPlayer.sleepRemainingSeconds.toDouble()), style = Theme.font(12.5f, FontWeight.SemiBold, Color.White.copy(0.62f)))
+            if (AudioPlayer.sleepRemainingSeconds > 0) Text(Theme.formatTime(AudioPlayer.sleepRemainingSeconds.toDouble()), style = Theme.font(12f, FontWeight.SemiBold, Theme.rose))
         }
         SpeedButton()
         BottomIcon("slider.vertical.3", "Equalizador", Color.White.copy(0.62f)) { AppModel.navigateFromPlayer(LumeRoute.Equalizer) }
@@ -257,7 +272,7 @@ private fun SeekBar(modifier: Modifier) {
     val h by animateDpAsState(if (dragging) 12.dp else 6.dp, spring(0.8f, 600f), label = "seekH")
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
-            Modifier.fillMaxWidth().height(22.dp).onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
+            Modifier.fillMaxWidth().height(30.dp).onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
                 .pointerInput(dur) { detectTapGestures { o -> if (dur > 0) AudioPlayer.seek(dur * (o.x / width).coerceIn(0f, 1f)) } }
                 .pointerInput(dur) {
                     detectDragGestures(
@@ -305,12 +320,12 @@ private fun VolumeRow() {
         am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, Math.round(c * maxV), 0)
     }
     fun set(x: Float) = applyLevel(x / width)
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.size(28.dp).pressable(0.88f) { Haptics.light(); applyLevel(level - 0.1f) }, contentAlignment = Alignment.Center) {
-            Icon(sf("speaker.fill"), "Diminuir volume", tint = Color.White.copy(0.62f), modifier = Modifier.size(14.dp))
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(36.dp).pressable(0.88f) { Haptics.light(); applyLevel(level - 0.1f) }, contentAlignment = Alignment.Center) {
+            Icon(sf("speaker.fill"), "Diminuir volume", tint = Color.White.copy(0.65f), modifier = Modifier.size(15.dp))
         }
         Box(
-            Modifier.weight(1f).height(28.dp).onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
+            Modifier.weight(1f).height(32.dp).onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
                 .pointerInput(Unit) { detectTapGestures { set(it.x) } }
                 .pointerInput(Unit) { detectDragGestures(onDragStart = { dragging = true; set(it.x) }, onDragEnd = { dragging = false }, onDragCancel = { dragging = false }) { c, _ -> set(c.position.x); c.consume() } },
             contentAlignment = Alignment.CenterStart,
@@ -318,8 +333,8 @@ private fun VolumeRow() {
             Box(Modifier.fillMaxWidth().height(barH).clip(CircleShape).background(Color.White.copy(0.18f)))
             Box(Modifier.fillMaxWidth(level).height(barH).clip(CircleShape).background(Color.White.copy(if (dragging) 0.98f else 0.78f)))
         }
-        Box(Modifier.size(28.dp).pressable(0.88f) { Haptics.light(); applyLevel(level + 0.1f) }, contentAlignment = Alignment.Center) {
-            Icon(sf("speaker.wave.3.fill"), "Aumentar volume", tint = Color.White.copy(0.62f), modifier = Modifier.size(15.dp))
+        Box(Modifier.size(36.dp).pressable(0.88f) { Haptics.light(); applyLevel(level + 0.1f) }, contentAlignment = Alignment.Center) {
+            Icon(sf("speaker.wave.3.fill"), "Aumentar volume", tint = Color.White.copy(0.65f), modifier = Modifier.size(16.dp))
         }
     }
 }

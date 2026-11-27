@@ -65,6 +65,7 @@ import com.adriano.lumemusic.ui.SectionHeader
 import com.adriano.lumemusic.ui.Skeleton
 import com.adriano.lumemusic.ui.TallTrackCard
 import com.adriano.lumemusic.ui.TrackRow
+import com.adriano.lumemusic.ui.glass
 import com.adriano.lumemusic.ui.pressable
 import com.adriano.lumemusic.ui.theme.Theme
 import com.adriano.lumemusic.ui.theme.hex
@@ -183,14 +184,21 @@ fun ExploreScreen(bottomInset: Dp) {
                                 Text(if (artistScope == ArtistScope.BRAZIL) "Os mais tocados na parada brasileira" else "Os mais tocados na parada mundial",
                                     style = Theme.font(13f, color = Theme.secondary))
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                Modifier.glass(RoundedCornerShape(50)).padding(3.dp),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 ArtistScope.entries.forEach { sc ->
                                     val on = artistScope == sc
-                                    Box(Modifier.height(Chrome.minTouch).pressable(0.95f) { com.adriano.lumemusic.platform.Haptics.selection(); artistScope = sc }, contentAlignment = Alignment.Center) {
-                                        Text(sc.title, style = Theme.font(12f, FontWeight.SemiBold, if (on) Theme.onPrism else Theme.secondary),
-                                            modifier = Modifier.height(32.dp).clip(RoundedCornerShape(50))
-                                                .then(if (on) Modifier.background(Theme.prismHorizontal) else Modifier.background(Theme.fill))
-                                                .padding(horizontal = 12.dp, vertical = 7.dp))
+                                    Box(
+                                        Modifier.height(34.dp).clip(RoundedCornerShape(50))
+                                            .then(if (on) Modifier.background(Theme.prismDiagonal) else Modifier)
+                                            .pressable(0.94f) { com.adriano.lumemusic.platform.Haptics.selection(); artistScope = sc }
+                                            .padding(horizontal = 13.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(sc.title, style = Theme.font(12.5f, FontWeight.SemiBold, if (on) Theme.onPrism else Theme.secondary), maxLines = 1)
                                     }
                                 }
                             }
@@ -292,15 +300,14 @@ fun CountryChartScreen(country: ChartCountry, bottomInset: Dp) {
     }
 
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    Column(Modifier.fillMaxSize()) {
-        DetailHeader("${selected.flag} ${if (selected.code == "world") "Top 50 Global" else "Top 50 · ${selected.name}"}", listState, 140.dp)
+    Box(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            // Hero
+            // Hero full-bleed até o topo (sem recorte branco sob o botão voltar)
             item {
-                Box(Modifier.fillMaxWidth().height(190.dp).background(Brush.linearGradient(listOf(hex(selected.hexA), hex(selected.hexB))))) {
-                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(0.2f), Color.Black.copy(0.45f)))))
+                Box(Modifier.fillMaxWidth().height(270.dp).background(Brush.linearGradient(listOf(hex(selected.hexA), hex(selected.hexB))))) {
+                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(0.24f), Color.Black.copy(0.15f), Color.Black.copy(0.48f)))))
                     Text(selected.flag, style = Theme.font(130f), modifier = Modifier.align(Alignment.BottomEnd).padding(end = 6.dp).alpha(0.25f))
-                    Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(selected.region.uppercase(), style = Theme.font(11f, FontWeight.Bold, Color.White.copy(0.85f), letterSpacing = androidx.compose.ui.unit.TextUnit(1.1f, androidx.compose.ui.unit.TextUnitType.Sp)))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(selected.flag, style = Theme.font(36f))
@@ -323,7 +330,7 @@ fun CountryChartScreen(country: ChartCountry, bottomInset: Dp) {
                     item {
                         Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Box(Modifier.weight(1f)) { PlayShuffleRow(b.topSongs, "Top 50 ${b.country.name}", horizontalPadding = 0.dp) }
-                            GlassIconButton("arrow.down.circle", size = 50.dp, desc = "Baixar Top 10") {
+                            GlassIconButton("arrow.down.circle", size = 48.dp, desc = "Baixar Top 10") {
                                 DownloadManager.downloadBatch(b.topSongs.take(10))
                                 AppModel.showToast("Baixando Top 10 de ${b.country.name}")
                             }
@@ -343,8 +350,9 @@ fun CountryChartScreen(country: ChartCountry, bottomInset: Dp) {
                 CountryScope.ARTISTS -> {
                     if (b.topArtists.isEmpty()) item { EmptyState("music.mic", "Sem artistas", "Nenhum artista ranqueado disponível agora.") }
                     else items(b.topArtists.chunked(3)) { trio ->
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            trio.forEach { a -> ArtistBubble(a, size = 96.dp) { AppModel.openArtist(a.name, a.deezerId) } }
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            trio.forEach { a -> Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { ArtistBubble(a, size = 92.dp) { AppModel.openArtist(a.name, a.deezerId) } } }
+                            repeat(3 - trio.size) { Box(Modifier.weight(1f)) {} }
                         }
                     }
                 }
@@ -357,6 +365,7 @@ fun CountryChartScreen(country: ChartCountry, bottomInset: Dp) {
                 }
             }
         }
+        DetailHeader("${selected.flag} ${if (selected.code == "world") "Top 50 Global" else "Top 50 · ${selected.name}"}", listState, 180.dp, overlay = true)
     }
 }
 
@@ -375,13 +384,12 @@ fun GenreHubScreen(genre: MusicGenre, bottomInset: Dp) {
         loading = false
     }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    Column(Modifier.fillMaxSize()) {
-        DetailHeader(genre.title, listState, 140.dp)
+    Box(Modifier.fillMaxSize()) {
         val h = hub
         LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(26.dp)) {
             item {
-                Box(Modifier.fillMaxWidth().height(190.dp).background(Brush.linearGradient(listOf(hex(genre.hexA), hex(genre.hexB))))) {
-                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(0.22f), Color.Black.copy(0.42f)))))
+                Box(Modifier.fillMaxWidth().height(265.dp).background(Brush.linearGradient(listOf(hex(genre.hexA), hex(genre.hexB))))) {
+                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(0.24f), Color.Black.copy(0.16f), Color.Black.copy(0.45f)))))
                     Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(genre.group.raw.uppercase(), style = Theme.font(11f, FontWeight.Bold, Color.White.copy(0.84f), letterSpacing = androidx.compose.ui.unit.TextUnit(1.1f, androidx.compose.ui.unit.TextUnitType.Sp)))
                         Text(genre.title, style = Theme.font(34f, FontWeight.ExtraBold, Color.White), maxLines = 2)
@@ -395,7 +403,7 @@ fun GenreHubScreen(genre: MusicGenre, bottomInset: Dp) {
                 if (h.topSongs.isNotEmpty()) item {
                     Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(Modifier.weight(1f)) { PlayShuffleRow(h.topSongs, genre.title, horizontalPadding = 0.dp) }
-                        GlassIconButton("dot.radiowaves.left.and.right", size = 50.dp, desc = "Rádio do estilo") { h.topSongs.firstOrNull()?.let { AudioPlayer.startRadio(it) } }
+                        GlassIconButton("dot.radiowaves.left.and.right", size = 48.dp, desc = "Rádio do estilo") { h.topSongs.firstOrNull()?.let { AudioPlayer.startRadio(it) } }
                     }
                 }
                 if (h.topArtists.isNotEmpty()) item {
@@ -431,6 +439,7 @@ fun GenreHubScreen(genre: MusicGenre, bottomInset: Dp) {
                 }
             }
         }
+        DetailHeader(genre.title, listState, 180.dp, overlay = true)
     }
 }
 
@@ -439,9 +448,10 @@ fun GenreHubScreen(genre: MusicGenre, bottomInset: Dp) {
 /** Estilos do Brasil, internacionais, climas e décadas (GenresHubView do iOS). */
 @Composable
 fun GenresHubScreen(bottomInset: Dp) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
-        DetailHeader("Gêneros")
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(28.dp)) {
+        DetailHeader("Gêneros", listState, 48.dp)
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(28.dp)) {
             item {
                 Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Gêneros", style = Theme.font(34f, FontWeight.Bold, Theme.text))

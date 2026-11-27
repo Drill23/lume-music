@@ -192,7 +192,7 @@ fun AccessGateScreen() {
                     extra = { AccessGateExtras(locked?.prefillCode) },
                 ) { justActivated = it }
             }
-            Text("Sua biblioteca continua guardada neste aparelho.", style = Theme.font(13f, color = Theme.tertiary))
+            Text("Sua biblioteca continua guardada neste aparelho.", style = Theme.font(13f, FontWeight.Medium, Theme.secondary))
         }
     }
 }

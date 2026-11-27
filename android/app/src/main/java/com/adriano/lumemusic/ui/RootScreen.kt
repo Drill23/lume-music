@@ -11,6 +11,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -210,7 +211,7 @@ private fun TabHost(tab: AppTab, bottomInset: androidx.compose.ui.unit.Dp) {
                     enter = slideInHorizontally(spring(0.92f, 420f)) { (it * 0.28f).toInt() } + fadeIn(tween(200)),
                     exit = fadeOut(tween(120)),
                 ) {
-                    Box(Modifier.fillMaxSize().background(Theme.canvas).keyboardDismissing().statusBarsPadding()) { RouteHost(route, bottomInset) }
+                    Box(Modifier.fillMaxSize().background(Theme.canvas).keyboardDismissing()) { RouteHost(route, bottomInset) }
                 }
             }
         }
@@ -262,9 +263,9 @@ fun BottomBar() {
                         Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(50))
                             .background(if (active) Theme.fillStrong else androidx.compose.ui.graphics.Color.Transparent)
                             .pressable(0.92f) { AppModel.select(t) },
-                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
                     ) {
-                        Icon(sf(t.icon), t.title, tint = iconColor, modifier = Modifier.size(24.dp))
+                        Icon(sf(t.icon), t.title, tint = iconColor, modifier = Modifier.size(22.dp))
                         Text(t.title, style = Theme.font(10.5f, FontWeight.SemiBold, iconColor), maxLines = 1)
                     }
                 }
@@ -274,8 +275,8 @@ fun BottomBar() {
                 Modifier.size(Chrome.tabBarHeight).pressable(0.9f) { AppModel.select(AppTab.SEARCH) }.glass(CircleShape, blur = true, elevation = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                if (searchActive) Box(Modifier.size(54.dp).background(Theme.fillStrong, CircleShape))
-                Icon(sf("magnifyingglass"), "Buscar", tint = if (searchActive) Theme.accent else Theme.text, modifier = Modifier.size(26.dp))
+                if (searchActive) Box(Modifier.size(52.dp).background(Theme.fillStrong, CircleShape))
+                Icon(sf("magnifyingglass"), "Buscar", tint = if (searchActive) Theme.accent else Theme.text, modifier = Modifier.size(24.dp))
             }
         }
     }
@@ -300,37 +301,40 @@ fun MiniPlayer(track: com.adriano.lumemusic.data.Track) {
             .pressable(0.99f) { Haptics.light(); AppModel.openPlayer() },
     ) {
         Row(
-            Modifier.fillMaxSize().padding(start = 8.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+            Modifier.fillMaxSize().padding(start = 9.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            ArtworkImage(AudioPlayer.currentArtwork.ifEmpty { track.artworkURL }, Modifier.size(42.dp), 10.dp)
+            ArtworkImage(AudioPlayer.currentArtwork.ifEmpty { track.artworkURL }, Modifier.size(44.dp).border(0.5.dp, Theme.hairline, RoundedCornerShape(11.dp)), 11.dp)
             Column(
                 Modifier.weight(1f).offset { IntOffset((dragX * 0.4f).roundToInt(), 0) }.graphicsLayer { alpha = 1f - (minOf(abs(dragX), 300f) / 600f) },
+                verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
-                Text(track.title, style = Theme.font(15f, FontWeight.SemiBold, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(track.artist, style = Theme.font(13f, color = Theme.secondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(track.title, style = Theme.font(14.5f, FontWeight.SemiBold, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(track.artist, style = Theme.font(12.5f, color = Theme.secondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            val fav = track.id in LibraryStore.favoriteIds
-            Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { LibraryStore.toggleFavorite(track) }, contentAlignment = Alignment.Center) {
-                Icon(sf(if (fav) "heart.fill" else "heart"), if (fav) "Remover das curtidas" else "Curtir", tint = if (fav) Theme.rose else Theme.secondary,
-                    modifier = Modifier.size(22.dp), )
-            }
-            Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { AudioPlayer.togglePlayPause() }, contentAlignment = Alignment.Center) {
-                if (AudioPlayer.isLoading) CircularProgressIndicator(Modifier.size(20.dp), color = Theme.text, strokeWidth = 2.dp)
-                else Icon(sf(if (AudioPlayer.isPlaying) "pause.fill" else "play.fill"), "Tocar/Pausar", tint = Theme.text, modifier = Modifier.size(26.dp))
-            }
-            Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { AudioPlayer.nextTrack() }, contentAlignment = Alignment.Center) {
-                Icon(sf("forward.fill"), "Próxima", tint = Theme.text, modifier = Modifier.size(24.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val fav = track.id in LibraryStore.favoriteIds
+                Box(Modifier.size(width = 40.dp, height = 52.dp).pressable(0.85f) { LibraryStore.toggleFavorite(track) }, contentAlignment = Alignment.Center) {
+                    Icon(sf(if (fav) "heart.fill" else "heart"), if (fav) "Remover das curtidas" else "Curtir", tint = if (fav) Theme.rose else Theme.secondary,
+                        modifier = Modifier.size(20.dp))
+                }
+                Box(Modifier.size(width = 42.dp, height = 52.dp).pressable(0.85f) { AudioPlayer.togglePlayPause() }, contentAlignment = Alignment.Center) {
+                    if (AudioPlayer.isLoading) CircularProgressIndicator(Modifier.size(19.dp), color = Theme.text, strokeWidth = 2.dp)
+                    else Icon(sf(if (AudioPlayer.isPlaying) "pause.fill" else "play.fill"), "Tocar/Pausar", tint = Theme.text, modifier = Modifier.size(24.dp))
+                }
+                Box(Modifier.size(width = 40.dp, height = 52.dp).pressable(0.85f) { AudioPlayer.nextTrack() }, contentAlignment = Alignment.Center) {
+                    Icon(sf("forward.fill"), "Próxima", tint = Theme.text, modifier = Modifier.size(22.dp))
+                }
             }
         }
-        MiniProgress(Modifier.align(Alignment.BottomCenter).padding(horizontal = 26.dp).padding(bottom = 3.dp))
+        MiniProgress(Modifier.align(Alignment.BottomCenter).padding(horizontal = 24.dp).padding(bottom = 3.dp))
     }
 }
 
 @Composable
 private fun MiniProgress(modifier: Modifier) {
     val frac = if (PlaybackClock.duration > 0) (PlaybackClock.currentTime / PlaybackClock.duration).toFloat().coerceIn(0f, 1f) else 0f
-    Box(modifier.fillMaxWidth().height(2.5.dp).clip(CircleShape).background(Theme.text.copy(0.10f))) {
+    Box(modifier.fillMaxWidth().height(2.dp).clip(CircleShape).background(Theme.text.copy(0.10f))) {
         Box(Modifier.fillMaxWidth(frac).fillMaxSize().background(Theme.prismHorizontal))
     }
 }

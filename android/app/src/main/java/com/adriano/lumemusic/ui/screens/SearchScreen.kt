@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -118,17 +120,17 @@ fun SearchScreen(bottomInset: Dp) {
     LaunchedEffect(AppModel.searchPrefillToken) { if (AppModel.searchPrefillToken > 0 && AppModel.searchPrefill.isNotBlank()) submit(AppModel.searchPrefill) }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        Text("Buscar", style = Theme.font(32f, FontWeight.Bold, Theme.text), modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(52.dp).glass(RoundedCornerShape(26.dp)).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(sf("magnifyingglass"), null, tint = Theme.secondary, modifier = Modifier.size(20.dp))
+        Text("Buscar", style = Theme.font(34f, FontWeight.Bold, Theme.text), modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(50.dp).glass(RoundedCornerShape(50)).padding(start = 16.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(sf("magnifyingglass"), null, tint = Theme.secondary, modifier = Modifier.size(19.dp))
             Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) Text("Músicas, artistas, álbuns e trechos", style = Theme.font(16f, color = Theme.tertiary))
+                if (query.isEmpty()) Text("Músicas, artistas, álbuns e trechos", style = Theme.font(15.5f, color = Theme.tertiary), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BasicTextField(query, { query = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { if (query.isBlank()) closeKeyboard() else submit(query) }),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus))
             }
-            if (query.isNotEmpty()) Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { query = ""; submitted = ""; results = null }, contentAlignment = Alignment.Center) {
-                Icon(sf("xmark.circle.fill"), "Limpar", tint = Theme.tertiary, modifier = Modifier.size(20.dp))
+            if (query.isNotEmpty()) Box(Modifier.size(40.dp).pressable(0.85f) { query = ""; submitted = ""; results = null }, contentAlignment = Alignment.Center) {
+                Icon(sf("xmark.circle.fill"), "Limpar", tint = Theme.tertiary, modifier = Modifier.size(19.dp))
             }
         }
         HRow(spacing = 8.dp, contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp)) { items(scopes) { s -> PrismChip(s, scope == s) { scope = s } } }
@@ -167,7 +169,7 @@ fun SearchScreen(bottomInset: Dp) {
                         Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             cards.chunked(2).forEach { pair ->
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    pair.forEach { (t, c, click) -> GradientCard(t, null, null, c.first, c.second, Modifier.weight(1f).height(84.dp), onClick = click) }
+                                    pair.forEach { (t, c, click) -> GradientCard(t, null, null, c.first, c.second, Modifier.weight(1f).height(88.dp), onClick = click) }
                                     if (pair.size == 1) Column(Modifier.weight(1f)) {}
                                 }
                             }
@@ -186,10 +188,13 @@ fun SearchScreen(bottomInset: Dp) {
                             val t = r.songs.first()
                             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).pressable(0.98f) { AudioPlayer.play(t, r.songs) }.glass(RoundedCornerShape(22.dp)).padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                TrackArtwork(t, Modifier.size(76.dp), 14.dp)
-                                Column {
-                                    Text(t.title, style = Theme.font(18f, FontWeight.Bold, Theme.text), maxLines = 2)
-                                    Text("Música · ${t.artist}", style = Theme.font(13.5f, color = Theme.secondary), maxLines = 1)
+                                TrackArtwork(t, Modifier.size(72.dp), 14.dp)
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(t.title, style = Theme.font(17.5f, FontWeight.Bold, Theme.text), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    Text("Música · ${t.artist}", style = Theme.font(13.5f, color = Theme.secondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                Box(Modifier.size(40.dp).clip(CircleShape).background(Theme.prismDiagonal), contentAlignment = Alignment.Center) {
+                                    Icon(sf("play.fill"), "Tocar", tint = Theme.onPrism, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }

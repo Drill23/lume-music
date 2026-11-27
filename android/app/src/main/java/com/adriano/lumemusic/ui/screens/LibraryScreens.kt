@@ -15,6 +15,9 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -93,9 +96,9 @@ fun LibraryScreen(bottomInset: Dp) {
     val failed = DownloadManager.failedItems
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(22.dp)) {
         item {
-            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Biblioteca", style = Theme.font(32f, FontWeight.Bold, Theme.text), modifier = Modifier.weight(1f))
-                GlassIconButton("plus", desc = "Nova playlist") { showNew = true }
+            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Biblioteca", style = Theme.font(34f, FontWeight.Bold, Theme.text), modifier = Modifier.weight(1f))
+                GlassIconButton("plus", size = 42.dp, desc = "Nova playlist") { showNew = true }
             }
         }
         item { HRow(spacing = 8.dp) { items(filters) { f -> PrismChip(f, filter == f) { filter = f } } } }
@@ -108,26 +111,53 @@ fun LibraryScreen(bottomInset: Dp) {
         }
         if (filter == "Tudo") item {
             val quick = listOf(
-                Triple("Curtidas", "heart.fill", store.favoriteTracks), Triple("Histórico", "clock.fill", store.recentTracks),
-                Triple("Mais ouvidas", "chart.line.uptrend.xyaxis", store.mostPlayedTracks), Triple("Baixadas", "arrow.down.circle.fill", store.downloadedTracks),
+                Triple("Curtidas", "heart.fill", Pair(store.favoriteTracks, Theme.rose)),
+                Triple("Histórico", "clock.fill", Pair(store.recentTracks, Theme.peach)),
+                Triple("Mais ouvidas", "chart.line.uptrend.xyaxis", Pair(store.mostPlayedTracks, Theme.lavender)),
+                Triple("Baixadas", "arrow.down.circle.fill", Pair(store.downloadedTracks, Theme.sky)),
             )
-            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 quick.chunked(2).forEach { pair ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        pair.forEach { (t, icon, list) ->
-                            Row(Modifier.weight(1f).heightIn(min = 64.dp).pressable(0.96f) { AppModel.push(LumeRoute.Tracks(t, list)) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Icon(sf(icon), null, tint = Theme.rose, modifier = Modifier.size(22.dp))
-                                Column { Text(t, style = Theme.font(15f, FontWeight.SemiBold, Theme.text), maxLines = 1); Text("${list.size}", style = Theme.font(12.5f, color = Theme.secondary)) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        pair.forEach { (t, icon, data) ->
+                            val (list, tint) = data
+                            Row(
+                                Modifier.weight(1f).heightIn(min = 66.dp).pressable(0.96f) { AppModel.push(LumeRoute.Tracks(t, list)) }
+                                    .glass(RoundedCornerShape(20.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Box(Modifier.size(36.dp).clip(CircleShape).background(tint.copy(0.18f)), contentAlignment = Alignment.Center) {
+                                    Icon(sf(icon), null, tint = tint, modifier = Modifier.size(18.dp))
+                                }
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                    Text(t, style = Theme.font(14.5f, FontWeight.SemiBold, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("${list.size}", style = Theme.font(12.5f, color = Theme.secondary))
+                                }
                             }
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).pressable(0.97f) { AppModel.push(LumeRoute.Replay) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Icon(sf("sparkles"), null, tint = Theme.lavender, modifier = Modifier.size(22.dp)); Text("Lume Replay · Seu Resumo", style = Theme.font(15f, FontWeight.SemiBold, Theme.text), modifier = Modifier.weight(1f)); Icon(sf("chevron.right"), null, tint = Theme.tertiary)
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 62.dp).pressable(0.97f) { AppModel.push(LumeRoute.Replay) }
+                        .glass(RoundedCornerShape(20.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(Theme.lavender.copy(0.18f)), contentAlignment = Alignment.Center) {
+                        Icon(sf("sparkles"), null, tint = Theme.lavender, modifier = Modifier.size(18.dp))
+                    }
+                    Text("Lume Replay · Seu Resumo", style = Theme.font(15f, FontWeight.SemiBold, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Icon(sf("chevron.right"), null, tint = Theme.tertiary, modifier = Modifier.size(17.dp))
                 }
-                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).pressable(0.97f) { AppModel.push(LumeRoute.ImportHub) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Icon(sf("square.and.arrow.down"), null, tint = Theme.sky, modifier = Modifier.size(22.dp)); Text("Importar", style = Theme.font(15f, FontWeight.SemiBold, Theme.text), modifier = Modifier.weight(1f)); Icon(sf("chevron.right"), null, tint = Theme.tertiary)
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 62.dp).pressable(0.97f) { AppModel.push(LumeRoute.ImportHub) }
+                        .glass(RoundedCornerShape(20.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(Theme.sky.copy(0.18f)), contentAlignment = Alignment.Center) {
+                        Icon(sf("square.and.arrow.down"), null, tint = Theme.sky, modifier = Modifier.size(18.dp))
+                    }
+                    Text("Importar músicas", style = Theme.font(15f, FontWeight.SemiBold, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Icon(sf("chevron.right"), null, tint = Theme.tertiary, modifier = Modifier.size(17.dp))
                 }
             }
         }
@@ -212,29 +242,34 @@ fun PlaylistScreen(id: String, bottomInset: Dp) {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
         DetailHeader(pl?.name ?: "Playlist", listState, 230.dp) {
-            GlassIconButton("trash", desc = "Excluir") { confirm = true }
+            GlassIconButton("trash", size = 42.dp, desc = "Excluir") { confirm = true }
         }
         if (pl == null) { EmptyState("music.note.list", "Playlist não encontrada", ""); return@Column }
         val tracks = LibraryStore.tracks(pl)
         LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ArtworkImage(pl.artworkURL, Modifier.size(190.dp), 24.dp, icon = "music.note.list")
-                    Text(pl.name, style = Theme.font(24f, FontWeight.Bold, Theme.text))
+                Column(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val coverShape = RoundedCornerShape(24.dp)
+                    ArtworkImage(pl.artworkURL, Modifier.size(200.dp).shadow(18.dp, coverShape, ambientColor = Theme.shadow, spotColor = Theme.shadow).border(0.6.dp, Theme.hairline, coverShape), 24.dp, icon = "music.note.list")
+                    Text(pl.name, style = Theme.font(24f, FontWeight.Bold, Theme.text), textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 24.dp))
                     Text("${tracks.size} músicas · ${pl.sourceBadge}", style = Theme.font(13.5f, color = Theme.secondary))
                 }
             }
-            item { PlayShuffleRow(tracks, pl.name) }
             item {
-                Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    GlassButton("Baixar tudo", "arrow.down.circle", modifier = Modifier.weight(1f)) { DownloadManager.downloadPlaylist(pl); AppModel.showToast("Baixando ${tracks.size} músicas") }
+                Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.weight(1f)) { PlayShuffleRow(tracks, pl.name, horizontalPadding = 0.dp) }
+                    GlassIconButton("arrow.down.circle", size = 48.dp, desc = "Baixar tudo") {
+                        DownloadManager.downloadPlaylist(pl); AppModel.showToast("Baixando ${tracks.size} músicas")
+                    }
                 }
             }
             if (tracks.isEmpty()) item { EmptyState("music.note", "Playlist vazia", "Adicione músicas pelo menu ••• de qualquer faixa.") }
             items(tracks, key = { "pl${it.id}" }) { t ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { TrackRow(t, queue = tracks) }
-                    Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { LibraryStore.removeTrack(t.id, pl.id) }, contentAlignment = Alignment.Center) { Icon(sf("minus.circle.fill"), "Remover da playlist", tint = Theme.tertiary, modifier = Modifier.size(22.dp)) }
+                    Box(Modifier.padding(end = 6.dp).size(width = 38.dp, height = Chrome.minTouch).pressable(0.85f) { LibraryStore.removeTrack(t.id, pl.id) }, contentAlignment = Alignment.Center) {
+                        Icon(sf("minus.circle.fill"), "Remover da playlist", tint = Theme.tertiary, modifier = Modifier.size(20.dp))
+                    }
                 }
             }
         }
@@ -260,10 +295,12 @@ fun DownloadsScreen(bottomInset: Dp) {
                     Text("Armazenamento offline", style = Theme.font(13f, color = Theme.secondary))
                     Text(LibraryStore.offlineStorageFormatted, style = Theme.font(28f, FontWeight.Bold, Theme.text))
                     Text("${dl.size} músicas baixadas · ${DownloadManager.pendingCount} na fila", style = Theme.font(13.5f, color = Theme.secondary))
-                    if (DownloadManager.pendingCount > 0) LinearProgressIndicator(progress = { DownloadManager.overallProgress.toFloat() }, modifier = Modifier.fillMaxWidth().clip(CircleShape), color = Theme.rose, trackColor = Theme.fill)
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        GlassButton(if (DownloadManager.paused) "Retomar" else "Pausar", if (DownloadManager.paused) "play.fill" else "pause.fill", modifier = Modifier.weight(1f)) { DownloadManager.togglePauseAll() }
-                        GlassButton("Cancelar tudo", "xmark.circle", modifier = Modifier.weight(1f)) { DownloadManager.cancelAll() }
+                    if (DownloadManager.pendingCount > 0) {
+                        LinearProgressIndicator(progress = { DownloadManager.overallProgress.toFloat() }, modifier = Modifier.fillMaxWidth().clip(CircleShape), color = Theme.rose, trackColor = Theme.fill)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            GlassButton(if (DownloadManager.paused) "Retomar" else "Pausar", if (DownloadManager.paused) "play.fill" else "pause.fill", height = 46.dp, fontSize = 14.5f, modifier = Modifier.weight(1f)) { DownloadManager.togglePauseAll() }
+                            GlassButton("Cancelar tudo", "xmark.circle", height = 46.dp, fontSize = 14.5f, modifier = Modifier.weight(1f)) { DownloadManager.cancelAll() }
+                        }
                     }
                 }
             }
@@ -354,9 +391,10 @@ fun ImportScreen(bottomInset: Dp) {
     var rawListText by remember { mutableStateOf("") }
     var textFocused by remember { mutableStateOf(false) }
 
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
-        DetailHeader("Importar músicas")
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        DetailHeader("Importar músicas", listState, 48.dp)
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             item {
                 Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Importar músicas", style = Theme.font(32f, FontWeight.Bold, Theme.text))

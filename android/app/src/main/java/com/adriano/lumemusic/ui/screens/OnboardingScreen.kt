@@ -440,24 +440,26 @@ private fun WelcomeStep(centerY: Float, onStart: () -> Unit) {
                 Box(Modifier.heightIn(min = 48.dp).pressable(0.95f) { com_UpgradeModel.showCodeEntry = true }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
                     Text("Tenho um código", style = Theme.font(13.5f, FontWeight.Medium, Theme.secondary))
                 }
-                Text("·", style = Theme.font(13.5f, color = Theme.tertiary))
+                Text("·", style = Theme.font(14f, FontWeight.Bold, Theme.secondary.copy(0.72f)))
                 Box(Modifier.heightIn(min = 48.dp).pressable(0.95f) { com_UpgradeModel.showRecover = true }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
                     Text("Já sou vitalício", style = Theme.font(13.5f, FontWeight.Medium, Theme.secondary))
                 }
             }
-            Text(Theme.credit, style = Theme.font(11.5f, color = Theme.tertiary), modifier = Modifier.padding(top = 4.dp, bottom = 22.dp))
+            Text(Theme.credit, style = Theme.font(12f, FontWeight.Medium, Theme.secondary.copy(0.72f)), modifier = Modifier.padding(top = 4.dp, bottom = 22.dp))
         }
     }
 }
 
 @Composable
 private fun WordLine(words: List<String>, offset: Int, prism: Boolean) {
+    val dark = LocalDark.current
+    val textBrush = if (dark) Theme.prismHorizontal else Brush.horizontalGradient(listOf(hex(0xE86A2E), hex(0xE03E78), hex(0x7B52E8), hex(0x2B8CE6)))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         for ((i, wd) in words.withIndex()) {
             val p = appearProgress(350 + (offset + i) * 140, 0.7f, 0.8f)
             Text(
                 wd, modifier = Modifier.graphicsLayer { alpha = p; translationY = (1f - p) * 16f * density },
-                style = if (prism) roundedTitle.copy(fontSize = 38.sp, brush = Theme.prismHorizontal) else roundedTitle.copy(fontSize = 38.sp, color = Theme.text),
+                style = if (prism) roundedTitle.copy(fontSize = 38.sp, brush = textBrush) else roundedTitle.copy(fontSize = 38.sp, color = Theme.text),
             )
         }
     }

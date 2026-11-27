@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.adriano.lumemusic.data.AlbumShowcase
@@ -97,7 +98,7 @@ fun HomeScreen(bottomInset: Dp) {
 @Composable
 private fun Header() {
     Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             LumeWordmark(24f)
             if (LibraryStore.offlineMode) {
                 Row(Modifier.height(24.dp).clip(RoundedCornerShape(50)).background(Theme.fillStrong).padding(horizontal = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -106,9 +107,11 @@ private fun Header() {
                 }
             }
             Spacer(Modifier.weight(1f))
-            GlassIconButton("sparkles", size = 44.dp, desc = "Lume Replay") { AppModel.push(LumeRoute.Replay) }
-            GlassIconButton("bell", size = 44.dp, badge = AppModel.hasUnseenReleases, desc = "Novidades dos seus artistas") { AppModel.push(LumeRoute.Releases) }
-            GlassIconButton("gearshape", size = 44.dp, desc = "Ajustes") { AppModel.push(LumeRoute.Settings) }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                GlassIconButton("sparkles", size = 40.dp, desc = "Lume Replay") { AppModel.push(LumeRoute.Replay) }
+                GlassIconButton("bell", size = 40.dp, badge = AppModel.hasUnseenReleases, desc = "Novidades dos seus artistas") { AppModel.push(LumeRoute.Releases) }
+                GlassIconButton("gearshape", size = 40.dp, desc = "Ajustes") { AppModel.push(LumeRoute.Settings) }
+            }
         }
         Text(greeting(), style = Theme.font(34f, FontWeight.Bold, Theme.text))
     }
@@ -122,8 +125,8 @@ private fun SearchPill() {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(Modifier.weight(1f).fillMaxSize().pressable(0.99f) { AppModel.select(AppTab.SEARCH) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(sf("magnifyingglass"), null, tint = Theme.secondary, modifier = Modifier.size(20.dp))
-            Text("Músicas, artistas, álbuns e trechos", style = Theme.font(15.5f, color = Theme.secondary), maxLines = 1)
+            Icon(sf("magnifyingglass"), null, tint = Theme.secondary, modifier = Modifier.size(19.dp))
+            Text("Músicas, artistas, álbuns e trechos", style = Theme.font(15f, color = Theme.secondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Row(
             Modifier.height(36.dp).pressable(0.94f) { Haptics.light(); AppModel.openLyricsSearch() }.clip(shape).background(Theme.fillStrong).padding(horizontal = 12.dp),
@@ -196,7 +199,7 @@ private fun Shortcuts() {
             if (list.isEmpty()) AppModel.push(LumeRoute.Releases) else AppModel.push(LumeRoute.Albums("Lançamentos", list))
         },
         Triple("Cover Flow", "square.stack.3d.down.right.fill") { Haptics.medium(); AppModel.showCoverFlow = true },
-        Triple("Minhas playlists", "music.note.list") { AppModel.select(AppTab.LIBRARY) },
+        Triple("Playlists", "music.note.list") { AppModel.select(AppTab.LIBRARY) },
         Triple("Lume Flow", "infinity") { Haptics.medium(); AppModel.startFlow() },
     )
     Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -204,11 +207,12 @@ private fun Shortcuts() {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 row.forEach { (title, icon, click) ->
                     Column(
-                        Modifier.weight(1f).heightIn(min = 80.dp).pressable(0.96f) { Haptics.light(); click() }.glass(RoundedCornerShape(22.dp)),
+                        Modifier.weight(1f).heightIn(min = 82.dp).pressable(0.96f) { Haptics.light(); click() }
+                            .glass(RoundedCornerShape(22.dp)).padding(horizontal = 8.dp, vertical = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
                     ) {
                         com.adriano.lumemusic.ui.PrismIcon(icon, 24.dp)
-                        Text(title, style = Theme.font(12.5f, FontWeight.SemiBold, Theme.text), modifier = Modifier.padding(top = 8.dp), maxLines = 1)
+                        Text(title, style = Theme.font(12.5f, FontWeight.SemiBold, Theme.text), modifier = Modifier.padding(top = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
                     }
                 }
             }

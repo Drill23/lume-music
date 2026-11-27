@@ -74,24 +74,25 @@ private fun sp(v: Float, kind: TextUnitType = TextUnitType.Sp) = TextUnit(v, kin
 fun StageSwitcher(selection: PlayerSurfaceTab, onSelect: (PlayerSurfaceTab) -> Unit, modifier: Modifier = Modifier) {
     val tabs = PlayerSurfaceTab.entries
     BoxWithConstraints(modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        val compact = maxWidth < 350.dp
         val cell = (maxWidth - 8.dp - 8.dp) / tabs.size   // padding 4+4 e 4 vãos de 2
         val idx = tabs.indexOf(selection)
         val x by animateDpAsState((cell + 2.dp) * idx, spring(0.84f, 220f), label = "stageInd")
-        Box(Modifier.fillMaxWidth().height(52.dp).glass(RoundedCornerShape(50)).padding(4.dp)) {
+        Box(Modifier.fillMaxWidth().height(50.dp).glass(RoundedCornerShape(50)).padding(4.dp)) {
             Box(
-                Modifier.offset(x = x).size(cell, 44.dp).clip(RoundedCornerShape(50)).background(Theme.prismDiagonal)
+                Modifier.offset(x = x).size(cell, 42.dp).clip(RoundedCornerShape(50)).background(Theme.prismDiagonal)
                     .border(0.8.dp, Color.White.copy(0.5f), RoundedCornerShape(50)),
             )
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
                 for (t in tabs) {
                     val active = selection == t
                     Row(
-                        Modifier.width(cell).height(44.dp).clip(RoundedCornerShape(50)).pressable(0.94f) { if (!active) { Haptics.selection(); onSelect(t) } },
+                        Modifier.width(cell).height(42.dp).clip(RoundedCornerShape(50)).pressable(0.94f) { if (!active) { Haptics.selection(); onSelect(t) } }.padding(horizontal = 2.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
                     ) {
                         val c = if (active) Theme.onPrism else StageSecondary
-                        Icon(sf(t.icon), null, tint = c, modifier = Modifier.size(15.dp))
-                        Text(t.raw, style = Theme.font(11.5f, FontWeight.SemiBold, c), maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 4.dp))
+                        Icon(sf(t.icon), null, tint = c, modifier = Modifier.size(if (compact) 13.dp else 14.5.dp))
+                        Text(t.raw, style = Theme.font(if (compact) 10.5f else 11.5f, FontWeight.SemiBold, c), maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = if (compact) 2.5.dp else 3.5.dp))
                     }
                 }
             }
@@ -122,8 +123,8 @@ fun <T> StageSegmented(items: List<Pair<T, String>>, selection: T, onSelect: (T)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             for ((v, title) in items) {
                 val active = v == selection
-                Box(Modifier.width(cell).height(44.dp).clip(shape).pressable(0.94f) { if (!active) { Haptics.selection(); onSelect(v) } }, contentAlignment = Alignment.Center) {
-                    Text(title, style = Theme.font(13f, FontWeight.SemiBold, if (active) Theme.onPrism else StageText), maxLines = 1)
+                Box(Modifier.width(cell).height(44.dp).clip(shape).pressable(0.94f) { if (!active) { Haptics.selection(); onSelect(v) } }.padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
+                    Text(title, style = Theme.font(13f, FontWeight.SemiBold, if (active) Theme.onPrism else StageText), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -218,7 +219,7 @@ fun BoxScope.StageStyleOrb(
                 exit = scaleOut(spring(0.82f, 320f), 0.3f, origin) + fadeOut(),
             ) {
                 val shape = RoundedCornerShape(30.dp)
-                Column(Modifier.width(304.dp).shadow(16.dp, shape, ambientColor = Color.Black.copy(0.28f), spotColor = Color.Black.copy(0.28f)).glass(shape, blur = true).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.widthIn(max = 304.dp).fillMaxWidth(0.92f).shadow(16.dp, shape, ambientColor = Color.Black.copy(0.28f), spotColor = Color.Black.copy(0.28f)).glass(shape, blur = true).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth().padding(start = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(sf(icon), null, tint = StageText, modifier = Modifier.size(16.dp))
                         Text(title ?: "Estilos", style = Theme.font(14f, FontWeight.Bold, StageText), modifier = Modifier.padding(start = 6.dp).weight(1f))

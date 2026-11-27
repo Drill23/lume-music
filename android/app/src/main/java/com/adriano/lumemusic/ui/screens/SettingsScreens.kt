@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -69,14 +70,28 @@ private fun Card(title: String? = null, content: @Composable () -> Unit) {
 }
 
 @Composable
+private fun CardDivider(inset: Boolean = true) {
+    HorizontalDivider(Modifier.padding(start = if (inset) 52.dp else 16.dp, end = 16.dp), thickness = 0.5.dp, color = Theme.hairline)
+}
+
+@Composable
 private fun ToggleRow(icon: String, title: String, subtitle: String? = null, value: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn56().pressable(0.995f) { onChange(!value) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Icon(sf(icon), null, tint = Theme.rose, modifier = Modifier.size(22.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = Theme.font(16f, color = Theme.text))
+        Icon(sf(icon), null, tint = Theme.accent, modifier = Modifier.size(21.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(title, style = Theme.font(15.5f, FontWeight.Medium, Theme.text))
             if (subtitle != null) Text(subtitle, style = Theme.font(12.5f, color = Theme.secondary))
         }
-        Switch(value, onChange, colors = SwitchDefaults.colors(checkedTrackColor = Theme.rose, checkedThumbColor = androidx.compose.ui.graphics.Color.White))
+        Switch(
+            value, onChange,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = Theme.accent,
+                checkedThumbColor = androidx.compose.ui.graphics.Color.White,
+                uncheckedTrackColor = Theme.fillStrong,
+                uncheckedThumbColor = Theme.canvasRaised,
+                uncheckedBorderColor = Theme.hairline,
+            ),
+        )
     }
 }
 
@@ -84,11 +99,11 @@ private fun Modifier.heightIn56() = this.then(Modifier.heightIn(min = 56.dp))
 
 @Composable
 private fun LinkRow(icon: String, title: String, detail: String? = null, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).pressable(0.995f) { onClick() }.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Icon(sf(icon), null, tint = Theme.rose, modifier = Modifier.size(22.dp))
-        Text(title, style = Theme.font(16f, color = Theme.text), modifier = Modifier.weight(1f))
+    Row(Modifier.fillMaxWidth().heightIn(min = 54.dp).pressable(0.995f) { onClick() }.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Icon(sf(icon), null, tint = Theme.accent, modifier = Modifier.size(21.dp))
+        Text(title, style = Theme.font(15.5f, FontWeight.Medium, Theme.text), modifier = Modifier.weight(1f))
         if (detail != null) Text(detail, style = Theme.font(14f, color = Theme.secondary))
-        Icon(sf("chevron.right"), null, tint = Theme.tertiary, modifier = Modifier.size(18.dp))
+        Icon(sf("chevron.right"), null, tint = Theme.tertiary, modifier = Modifier.size(17.dp))
     }
 }
 
@@ -120,36 +135,46 @@ fun SettingsScreen(bottomInset: Dp) {
                     Section("Estilo do Tocando agora", "Escolha como a capa aparece na tela de reprodução.") {
                         ChipsRow(listOf(PlayerSurfaceTab.ARTWORK, PlayerSurfaceTab.VINYL, PlayerSurfaceTab.CASSETTE, PlayerSurfaceTab.WAVES).map { it.raw to it }, AppModel.playerStyle) { AppModel.playerStyle = it }
                     }
+                    CardDivider(false)
                     Section("Estilo das ondas") {
                         ChipsRow(VisualizerStyle.entries.map { it.title to it }, s.visualizerStyle) { s.visualizerStyle = it }
                     }
+                    CardDivider(false)
                     Section("Aparência") {
                         ChipsRow(listOf("Automático" to "auto", "Claro" to "light", "Escuro" to "dark"), AppModel.appearance) { AppModel.setAppearance(ctx, it) }
                     }
+                    CardDivider(false)
                     ToggleRow("sparkles", "Abertura animada", null, s.introEnabled) { s.introEnabled = it }
                 }
             }
             item {
                 Card("Áudio") {
                     ToggleRow("infinity", "Rádio automática", "Continua tocando músicas parecidas quando a fila acaba", AudioPlayer.autoplayRadio) { AudioPlayer.autoplayRadio = it }
+                    CardDivider()
                     LinkRow("slider.vertical.3", "Equalizador (5 bandas)", s.soundProfile.raw) { AppModel.push(LumeRoute.Equalizer) }
+                    CardDivider()
                     Section("Crossfade entre faixas") {
                         ChipsRow(listOf("Desligado" to 0.0, "3 segundos" to 3.0, "6 segundos" to 6.0, "9 segundos" to 9.0), s.crossfadeSeconds) { s.crossfadeSeconds = it }
                     }
+                    CardDivider(false)
                     LinkRow("moon.zzz.fill", "Timer de dormir", AudioPlayer.sleepTimerOption.takeIf { it != SleepTimerOption.OFF }?.label) { AppModel.tabletSheet = "sleep" }
                 }
             }
             item {
                 Card("Letras e capas") {
                     ToggleRow("photo.on.rectangle.angled", "Capas animadas", "Usa as capas em movimento do Apple Music quando existirem", s.animatedArtEnabled) { s.animatedArtEnabled = it }
+                    CardDivider()
                     ToggleRow("translate", "Traduzir letras automaticamente", "Mostra a tradução em português abaixo de cada linha", s.autoTranslateLyrics) { s.autoTranslateLyrics = it }
                 }
             }
             item {
                 Card("Estúdio Vinil & K7") {
                     Section("Acabamento do toca-discos") { ChipsRow(TurntableFinish.entries.map { it.raw to it }, s.turntableFinish) { s.turntableFinish = it } }
+                    CardDivider(false)
                     Section("Edição do disco") { ChipsRow(VinylEdition.entries.map { it.raw to it }, s.vinylEdition) { s.vinylEdition = it } }
+                    CardDivider(false)
                     ToggleRow("cube", "Perspectiva 3D no Vinil", null, s.turntable3D) { s.turntable3D = it }
+                    CardDivider()
                     Section("Estilo da fita K7") { ChipsRow(CassetteStyle.entries.map { it.raw to it }, s.cassetteStyle) { s.cassetteStyle = it } }
                 }
             }
@@ -166,15 +191,20 @@ fun SettingsScreen(bottomInset: Dp) {
             item {
                 Card("Biblioteca") {
                     LinkRow("sparkles", "Lume Replay · Seu Resumo") { AppModel.push(LumeRoute.Replay) }
+                    CardDivider()
                     LinkRow("square.and.arrow.down", "Importar músicas") { AppModel.push(LumeRoute.ImportHub) }
+                    CardDivider()
                     LinkRow("person.2", "Artistas seguidos", "${s.followedArtists.size}") { AppModel.select(com.adriano.lumemusic.data.AppTab.LIBRARY) }
                 }
             }
             item {
                 Card("Armazenamento & Offline") {
                     ToggleRow("airplane", "Modo offline", "Toca apenas músicas baixadas", s.offlineMode) { s.offlineMode = it }
+                    CardDivider()
                     ToggleRow("arrow.down.circle", "Baixar curtidas automaticamente", null, s.autoDownloadFavorites) { s.autoDownloadFavorites = it }
+                    CardDivider()
                     LinkRow("arrow.down.circle.fill", "Central de Downloads", s.offlineStorageFormatted) { AppModel.push(LumeRoute.Downloads) }
+                    CardDivider()
                     LinkRow("trash", "Limpar cache de imagens e letras") { confirmCache = true }
                 }
             }
@@ -193,6 +223,7 @@ fun SettingsScreen(bottomInset: Dp) {
                             }
                         }
                     }
+                    CardDivider(false)
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Lume Music ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = Theme.font(16f, FontWeight.SemiBold, Theme.text))
                         Text(Theme.credit, style = Theme.font(13.5f, color = Theme.secondary))

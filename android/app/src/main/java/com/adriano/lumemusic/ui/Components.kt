@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -127,70 +128,86 @@ fun Modifier.pressable(scale: Float = 0.965f, enabled: Boolean = true, onClick: 
 
 @Composable
 fun GlassIconButton(
-    name: String, size: Dp = 40.dp, iconSize: Dp = size * 0.46f, tint: Color? = null,
+    name: String, size: Dp = 42.dp, iconSize: Dp = size * 0.45f, tint: Color? = null,
     foreground: Color = Theme.text, badge: Boolean = false, desc: String = "", onClick: () -> Unit,
 ) {
     Box(
-        Modifier.size(maxOf(size, Chrome.minTouch)).pressable(0.9f) { Haptics.light(); onClick() }.semantics { contentDescription = desc },
+        Modifier.size(maxOf(size, 44.dp)).pressable(0.9f) { Haptics.light(); onClick() }.semantics { contentDescription = desc },
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.size(size).glass(CircleShape, tint), contentAlignment = Alignment.Center) {
             Icon(sf(name), null, tint = foreground, modifier = Modifier.size(iconSize))
         }
-        if (badge) Box(Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 4.dp).size(10.dp).background(Theme.rose, CircleShape).border(1.5.dp, Theme.canvas, CircleShape))
+        if (badge) Box(Modifier.align(Alignment.TopEnd).padding(top = 3.dp, end = 3.dp).size(10.dp).background(Theme.rose, CircleShape).border(1.5.dp, Theme.canvas, CircleShape))
     }
 }
 
 @Composable
 fun PrismChip(title: String, active: Boolean, icon: String? = null, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
-    Row(
-        Modifier.height(Chrome.minTouch).padding(vertical = 3.dp).pressable(0.94f) { Haptics.selection(); onClick() }
-            .then(if (active) Modifier.shadow(8.dp, shape, spotColor = Theme.rose.copy(0.4f)).clip(shape).background(Theme.prismDiagonal).border(0.8.dp, Color.White.copy(0.55f), shape)
-            else Modifier.glass(shape))
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    Box(
+        Modifier.height(44.dp).pressable(0.94f) { Haptics.selection(); onClick() },
+        contentAlignment = Alignment.Center,
     ) {
-        if (icon != null) Icon(sf(icon), null, tint = if (active) Theme.onPrism else Theme.text, modifier = Modifier.size(15.dp))
-        Text(title, style = Theme.font(14f, FontWeight.SemiBold, if (active) Theme.onPrism else Theme.text), maxLines = 1)
+        Row(
+            Modifier.height(38.dp)
+                .then(if (active) Modifier.shadow(7.dp, shape, spotColor = Theme.rose.copy(0.38f)).clip(shape).background(Theme.prismDiagonal).border(0.8.dp, Color.White.copy(0.55f), shape)
+                else Modifier.glass(shape))
+                .padding(horizontal = 15.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (icon != null) Icon(sf(icon), null, tint = if (active) Theme.onPrism else Theme.text, modifier = Modifier.size(15.dp))
+            Text(title, style = Theme.font(13.5f, FontWeight.SemiBold, if (active) Theme.onPrism else Theme.text), maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
 @Composable
-fun PrismButton(title: String, icon: String? = null, height: Dp = 50.dp, modifier: Modifier = Modifier.fillMaxWidth(), onClick: () -> Unit) {
+fun PrismButton(
+    title: String, icon: String? = null, height: Dp = 50.dp, modifier: Modifier = Modifier.fillMaxWidth(),
+    fontSize: Float = 15.5f, iconSize: Dp = 18.dp, onClick: () -> Unit,
+) {
     val shape = RoundedCornerShape(50)
     Row(
-        modifier.height(maxOf(height, 48.dp)).pressable { Haptics.medium(); onClick() }
-            .shadow(12.dp, shape, spotColor = Theme.rose.copy(0.45f)).clip(shape).background(Theme.prismDiagonal).border(0.8.dp, Color.White.copy(0.5f), shape),
+        modifier.height(maxOf(height, 46.dp)).pressable { Haptics.medium(); onClick() }
+            .shadow(12.dp, shape, spotColor = Theme.rose.copy(0.42f)).clip(shape).background(Theme.prismDiagonal).border(0.8.dp, Color.White.copy(0.5f), shape)
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
     ) {
-        if (icon != null) { Icon(sf(icon), null, tint = Theme.onPrism, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
-        Text(title, style = Theme.font(16f, FontWeight.SemiBold, Theme.onPrism))
+        if (icon != null) { Icon(sf(icon), null, tint = Theme.onPrism, modifier = Modifier.size(iconSize)); Spacer(Modifier.width(7.dp)) }
+        Text(title, style = Theme.font(fontSize, FontWeight.SemiBold, Theme.onPrism), maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
     }
 }
 
 @Composable
-fun GlassButton(title: String, icon: String? = null, height: Dp = 50.dp, modifier: Modifier = Modifier.fillMaxWidth(), onClick: () -> Unit) {
+fun GlassButton(
+    title: String, icon: String? = null, height: Dp = 50.dp, modifier: Modifier = Modifier.fillMaxWidth(),
+    fontSize: Float = 15.5f, iconSize: Dp = 18.dp, tint: Color? = null, foreground: Color = Theme.text, onClick: () -> Unit,
+) {
     Row(
-        modifier.height(maxOf(height, 48.dp)).pressable { Haptics.light(); onClick() }.glass(RoundedCornerShape(50)),
+        modifier.height(maxOf(height, 46.dp)).pressable { Haptics.light(); onClick() }.glass(RoundedCornerShape(50), tint = tint)
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
     ) {
-        if (icon != null) { Icon(sf(icon), null, tint = Theme.text, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
-        Text(title, style = Theme.font(16f, FontWeight.SemiBold, Theme.text))
+        if (icon != null) { Icon(sf(icon), null, tint = foreground, modifier = Modifier.size(iconSize)); Spacer(Modifier.width(7.dp)) }
+        Text(title, style = Theme.font(fontSize, FontWeight.SemiBold, foreground), maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
     }
 }
 
 @Composable
 fun SectionHeader(title: String, subtitle: String? = null, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.Bottom) {
-        Column(Modifier.weight(1f)) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(title, style = Theme.font(21f, FontWeight.Bold, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (subtitle != null) Text(subtitle, style = Theme.font(13f, color = Theme.secondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (onAction != null) {
-            Row(Modifier.height(Chrome.minTouch).pressable(0.95f) { Haptics.light(); onAction() }, verticalAlignment = Alignment.CenterVertically) {
-                Text(actionLabel ?: "Ver tudo", style = Theme.font(14f, FontWeight.Medium, Theme.secondary))
-                Icon(sf("chevron.right"), null, tint = Theme.secondary, modifier = Modifier.size(16.dp))
+            Row(
+                Modifier.height(40.dp).pressable(0.94f) { Haptics.light(); onAction() }.padding(start = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(actionLabel ?: "Ver tudo", style = Theme.font(14f, FontWeight.SemiBold, Theme.accent), maxLines = 1)
+                Icon(sf("chevron.right"), null, tint = Theme.accent.copy(0.85f), modifier = Modifier.size(15.dp))
             }
         }
     }
@@ -262,8 +279,10 @@ fun TrackRow(track: Track, rank: Int? = null, queue: List<Track>? = null, showAr
     val downloaded = track.id in LibraryStore.downloadedIds
     val progress = DownloadManager.progressById[track.id]
     Row(
-        Modifier.fillMaxWidth().defaultMinHeight().pressable(0.985f) { Haptics.light(); if (onPlay != null) onPlay() else AudioPlayer.play(track, queue) }
-            .padding(horizontal = 20.dp, vertical = 5.dp),
+        Modifier.fillMaxWidth().defaultMinHeight()
+            .then(if (active) Modifier.padding(horizontal = 10.dp).clip(RoundedCornerShape(14.dp)).background(Theme.fill) else Modifier)
+            .pressable(0.985f) { Haptics.light(); if (onPlay != null) onPlay() else AudioPlayer.play(track, queue) }
+            .padding(start = if (active) 10.dp else 20.dp, end = if (active) 0.dp else 8.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (rank != null) {
@@ -271,16 +290,16 @@ fun TrackRow(track: Track, rank: Int? = null, queue: List<Track>? = null, showAr
             Text("$rank", style = Theme.font(14.5f, FontWeight.Bold, c), modifier = Modifier.width(26.dp), textAlign = TextAlign.Center)
         }
         if (showArtwork) {
-            Box(Modifier.size(50.dp)) {
-                TrackArtwork(track, Modifier.fillMaxSize(), 8.dp)
-                if (active) Box(Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(0.38f)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(50.dp).border(0.5.dp, Theme.hairline, RoundedCornerShape(9.dp))) {
+                TrackArtwork(track, Modifier.fillMaxSize(), 9.dp)
+                if (active) Box(Modifier.fillMaxSize().clip(RoundedCornerShape(9.dp)).background(Color.Black.copy(0.38f)), contentAlignment = Alignment.Center) {
                     Icon(sf("waveform"), null, tint = Color.White, modifier = Modifier.size(20.dp))
                 }
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(track.title, style = Theme.font(16f, color = if (active) Theme.accent else Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(track.title, style = Theme.font(15.5f, if (active) FontWeight.SemiBold else FontWeight.Medium, if (active) Theme.accent else Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (track.isExplicit) Icon(sf("e.square.fill"), null, tint = Theme.tertiary, modifier = Modifier.size(12.dp))
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -292,7 +311,7 @@ fun TrackRow(track: Track, rank: Int? = null, queue: List<Track>? = null, showAr
             drawArc(Theme.accentStatic, -90f, (360f * progress.toFloat()), false, style = Stroke(2.2.dp.toPx(), cap = StrokeCap.Round))
         })
         Box(Modifier.size(width = 44.dp, height = Chrome.minTouch).pressable(0.85f) { AppModel.showTrackMenu(track, queue) }.semantics { contentDescription = "Mais opções" }, contentAlignment = Alignment.Center) {
-            Icon(sf("ellipsis"), null, tint = Theme.secondary, modifier = Modifier.size(20.dp))
+            Icon(sf("ellipsis"), null, tint = Theme.secondary, modifier = Modifier.size(19.dp))
         }
     }
 }
@@ -304,8 +323,9 @@ private val Theme.accentStatic: Color get() = Theme.rose
 
 @Composable
 fun AlbumTile(album: AlbumShowcase, width: Dp = 150.dp, subtitle: String? = null, onClick: () -> Unit) {
-    Column(Modifier.width(width).pressable(0.96f) { Haptics.light(); onClick() }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        ArtworkImage(album.artworkURL, Modifier.size(width), 16.dp, icon = "square.stack.fill")
+    val shape = RoundedCornerShape(16.dp)
+    Column(Modifier.width(width).pressable(0.96f) { Haptics.light(); onClick() }, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        ArtworkImage(album.artworkURL, Modifier.size(width).shadow(6.dp, shape, ambientColor = Theme.shadow, spotColor = Theme.shadow).border(0.6.dp, Theme.hairline, shape), 16.dp, icon = "square.stack.fill")
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(album.title, style = Theme.font(14.5f, FontWeight.SemiBold, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(subtitle ?: listOf(album.artist, album.year).filter { it.isNotEmpty() }.joinToString(" · "),
@@ -316,22 +336,25 @@ fun AlbumTile(album: AlbumShowcase, width: Dp = 150.dp, subtitle: String? = null
 
 @Composable
 fun ArtistBubble(artist: ArtistInfo, size: Dp = 96.dp, onClick: () -> Unit) {
-    Column(Modifier.width(size + 8.dp).pressable(0.95f) { Haptics.light(); onClick() }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (artist.pictureURL.isNotEmpty()) ArtworkImage(artist.pictureURL, Modifier.size(size), shape = CircleShape, icon = "person.fill")
-        else ArtistAvatar(artist.name, size)
+    Column(Modifier.width(size + 8.dp).pressable(0.95f) { Haptics.light(); onClick() }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Box(Modifier.size(size).shadow(6.dp, CircleShape, ambientColor = Theme.shadow, spotColor = Theme.shadow).border(0.6.dp, Theme.hairline, CircleShape)) {
+            if (artist.pictureURL.isNotEmpty()) ArtworkImage(artist.pictureURL, Modifier.fillMaxSize(), shape = CircleShape, icon = "person.fill")
+            else ArtistAvatar(artist.name, size)
+        }
         Text(artist.name, style = Theme.font(13f, FontWeight.Medium, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
     }
 }
 
 @Composable
 fun TallTrackCard(track: Track, rank: Int? = null, queue: List<Track>, width: Dp = 150.dp) {
-    Column(Modifier.width(width).pressable(0.96f) { Haptics.light(); AudioPlayer.play(track, queue) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(Modifier.width(width).pressable(0.96f) { Haptics.light(); AudioPlayer.play(track, queue) }, verticalArrangement = Arrangement.spacedBy(7.dp)) {
         Box {
-            TrackArtwork(track, Modifier.size(width), 16.dp)
-            if (rank != null) Text("$rank", style = Theme.rounded(13f, FontWeight.Bold, Color.White),
-                modifier = Modifier.padding(8.dp).background(Color.Black.copy(0.45f), RoundedCornerShape(50)).padding(horizontal = 9.dp, vertical = 3.dp))
+            TrackArtwork(track, Modifier.size(width).shadow(6.dp, shape, ambientColor = Theme.shadow, spotColor = Theme.shadow).border(0.6.dp, Theme.hairline, shape), 16.dp)
+            if (rank != null) Text("$rank", style = Theme.rounded(12.5f, FontWeight.Bold, Color.White),
+                modifier = Modifier.padding(8.dp).background(Color.Black.copy(0.52f), RoundedCornerShape(50)).border(0.6.dp, Color.White.copy(0.28f), RoundedCornerShape(50)).padding(horizontal = 9.dp, vertical = 3.dp))
         }
-        Column {
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(track.title, style = Theme.font(14.5f, FontWeight.SemiBold, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(track.artist, style = Theme.font(12.5f, color = Theme.secondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -343,13 +366,17 @@ fun TallTrackCard(track: Track, rank: Int? = null, queue: List<Track>, width: Dp
 fun GradientCard(title: String, subtitle: String? = null, icon: String? = null, hexA: Long, hexB: Long, modifier: Modifier = Modifier, emoji: String? = null, onClick: () -> Unit) {
     val shape = RoundedCornerShape(20.dp)
     Box(
-        modifier.pressable(0.96f) { Haptics.light(); onClick() }.clip(shape).background(Brush.linearGradient(listOf(hex(hexA), hex(hexB)))).border(0.7.dp, Color.White.copy(0.25f), shape).padding(14.dp),
+        modifier.pressable(0.96f) { Haptics.light(); onClick() }
+            .shadow(6.dp, shape, ambientColor = hex(hexB).copy(0.28f), spotColor = hex(hexB).copy(0.28f))
+            .clip(shape).background(Brush.linearGradient(listOf(hex(hexA), hex(hexB))))
+            .background(Brush.verticalGradient(listOf(Color.White.copy(0.14f), Color.Transparent)))
+            .border(0.7.dp, Color.White.copy(0.28f), shape).padding(14.dp),
     ) {
-        if (icon != null) Icon(sf(icon), null, tint = Color.White.copy(0.28f), modifier = Modifier.size(54.dp).align(Alignment.BottomEnd))
-        Column(Modifier.align(Alignment.TopStart), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (icon != null) Icon(sf(icon), null, tint = Color.White.copy(0.26f), modifier = Modifier.size(54.dp).align(Alignment.BottomEnd))
+        Column(Modifier.align(Alignment.TopStart), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             if (emoji != null) Text(emoji, style = Theme.font(24f))
-            Text(title, style = Theme.font(16f, FontWeight.Bold, Color.White), maxLines = 2)
-            if (subtitle != null) Text(subtitle, style = Theme.font(12f, color = Color.White.copy(0.85f)), maxLines = 2)
+            Text(title, style = Theme.font(16f, FontWeight.Bold, Color.White), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (subtitle != null) Text(subtitle, style = Theme.font(12f, color = Color.White.copy(0.86f)), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -371,19 +398,22 @@ fun HRow(contentPadding: PaddingValues = PaddingValues(horizontal = 20.dp), spac
  */
 @Composable
 fun DetailHeader(
-    title: String, scroll: LazyListState? = null, titleOffset: Dp = 220.dp, trailing: @Composable (() -> Unit)? = null,
+    title: String, scroll: LazyListState? = null, titleOffset: Dp = 220.dp,
+    overlay: Boolean = false,
+    trailing: @Composable (() -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val compact by remember(scroll, density) {
         derivedStateOf { scroll == null || scroll.firstVisibleItemIndex > 0 || scroll.firstVisibleItemScrollOffset > with(density) { titleOffset.toPx() } }
     }
-    val titleAlpha by animateFloatAsState(if (compact) 1f else 0f, tween(160), label = "hdrTitle")
-    Column(Modifier.fillMaxWidth().background(Theme.canvas)) {
+    val titleAlpha by animateFloatAsState(if (compact) 1f else 0f, tween(180), label = "hdrTitle")
+    val bgColor = if (overlay) Theme.canvas.copy(alpha = 0.95f * titleAlpha) else Theme.canvas.copy(alpha = 0.96f)
+    Column(Modifier.fillMaxWidth().background(bgColor).statusBarsPadding()) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = Chrome.detailHeaderMin).padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.fillMaxWidth().heightIn(min = Chrome.detailHeaderMin).padding(horizontal = 14.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            GlassIconButton("chevron.left", size = 44.dp, desc = "Voltar") { AppModel.pop() }
+            GlassIconButton("chevron.left", size = 42.dp, desc = "Voltar") { AppModel.pop() }
             Text(
                 title, style = Theme.font(17f, FontWeight.SemiBold, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).graphicsLayer { alpha = titleAlpha },

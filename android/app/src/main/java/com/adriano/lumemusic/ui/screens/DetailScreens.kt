@@ -17,8 +17,13 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -77,20 +82,25 @@ fun AlbumScreen(album: AlbumShowcase, bottomInset: Dp) {
     val listState = rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
         DetailHeader(album.title, listState, 240.dp) {
-            GlassIconButton(if (saved) "heart.fill" else "heart", foreground = if (saved) Theme.rose else Theme.text, desc = "Salvar álbum") { LibraryStore.toggleSaveAlbum(album, tracks) }
+            GlassIconButton(if (saved) "heart.fill" else "heart", size = 42.dp, foreground = if (saved) Theme.rose else Theme.text, desc = "Salvar álbum") { LibraryStore.toggleSaveAlbum(album, tracks) }
         }
         LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ArtworkImage(album.artworkURL, Modifier.size(220.dp), 26.dp, icon = "square.stack.fill")
-                    Text(album.title, style = Theme.font(24f, FontWeight.Bold, Theme.text), textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 24.dp))
-                    Text(album.artist, style = Theme.font(16f, FontWeight.Medium, Theme.accent), modifier = Modifier.pressable(0.95f) { AppModel.openArtist(album.artist) })
+                Column(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    val coverShape = RoundedCornerShape(26.dp)
+                    ArtworkImage(album.artworkURL, Modifier.size(220.dp).shadow(20.dp, coverShape, ambientColor = Theme.shadow, spotColor = Theme.shadow).border(0.6.dp, Theme.hairline, coverShape), 26.dp, icon = "square.stack.fill")
+                    Text(album.title, style = Theme.font(24f, FontWeight.Bold, Theme.text), textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 24.dp))
+                    Text(album.artist, style = Theme.font(16f, FontWeight.SemiBold, Theme.accent), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.pressable(0.95f) { AppModel.openArtist(album.artist) })
                     Text(listOfNotNull(album.kind, album.year.ifEmpty { null }, album.genre.ifEmpty { null }).joinToString(" · "), style = Theme.font(13f, color = Theme.secondary))
                 }
             }
-            item { PlayShuffleRow(tracks, album.title) }
             item {
-                Row(Modifier.padding(horizontal = 20.dp)) { GlassButton("Baixar álbum", "arrow.down.circle", modifier = Modifier.weight(1f)) { DownloadManager.downloadBatch(tracks); AppModel.showToast("Baixando ${tracks.size} músicas") } }
+                Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.weight(1f)) { PlayShuffleRow(tracks, album.title, horizontalPadding = 0.dp) }
+                    GlassIconButton("arrow.down.circle", size = 48.dp, desc = "Baixar álbum") {
+                        DownloadManager.downloadBatch(tracks); AppModel.showToast("Baixando ${tracks.size} músicas")
+                    }
+                }
             }
             if (tracks.isEmpty()) item { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { repeat(6) { Skeleton(Modifier.fillMaxWidth().height(56.dp)) } } }
             items(tracks.size) { i -> TrackRow(tracks[i], rank = i + 1, queue = tracks) }
@@ -105,22 +115,21 @@ fun ArtistScreen(name: String, deezerId: Long?, bottomInset: Dp) {
     var expandTop by remember(name) { mutableStateOf(false) }
     var discogFilter by remember(name) { mutableStateOf("Todos") }
     val listState = rememberLazyListState()
-    Column(Modifier.fillMaxSize()) {
-        DetailHeader(detail?.artist?.name ?: name, listState, 240.dp)
+    Box(Modifier.fillMaxSize()) {
         val d = detail
         LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-            // Cabeçalho de artista no mesmo estilo full-bleed do iPhone (ArtistView)
+            // Cabeçalho de artista full-bleed até o topo (por trás da barra de status e botão voltar de vidro, idêntico ao iPhone)
             item {
-                Box(Modifier.fillMaxWidth().height(300.dp)) {
+                Box(Modifier.fillMaxWidth().height(360.dp)) {
                     val pic = d?.artist?.pictureURL ?: ""
                     if (pic.isNotEmpty()) ArtworkImage(pic, Modifier.fillMaxSize(), cornerRadius = 0.dp, icon = "person.fill")
                     else Box(Modifier.fillMaxSize().background(Theme.prismDiagonal), contentAlignment = Alignment.Center) {
-                        Icon(sf("person.fill"), null, tint = Color.White.copy(0.8f), modifier = Modifier.size(80.dp))
+                        Icon(sf("person.fill"), null, tint = Color.White.copy(0.8f), modifier = Modifier.size(84.dp))
                     }
-                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to Color.Transparent, 0.82f to Theme.canvas.copy(0.78f), 1f to Theme.canvas)))
-                    Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Black.copy(0.24f), 0.28f to Color.Transparent, 0.62f to Color.Transparent, 0.86f to Theme.canvas.copy(0.82f), 1f to Theme.canvas)))
+                    Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(d?.artist?.name ?: name, style = Theme.font(32f, FontWeight.ExtraBold, Theme.text), maxLines = 2)
+                            Text(d?.artist?.name ?: name, style = Theme.font(32f, FontWeight.ExtraBold, Theme.text), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                             Icon(sf("checkmark.seal.fill"), null, tint = Theme.accent, modifier = Modifier.size(20.dp))
                         }
                         d?.artist?.fans?.takeIf { it > 0 }?.let {
@@ -131,19 +140,26 @@ fun ArtistScreen(name: String, deezerId: Long?, bottomInset: Dp) {
             }
             if (d == null) item { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { repeat(6) { Skeleton(Modifier.fillMaxWidth().height(56.dp)) } } }
             else {
-                // Ações: Tocar (prisma) · Rádio · Seguir (idêntico ao iPhone)
+                // Ações: Tocar (prisma) · Rádio · Seguir (compacto sem quebrar linha em telas de 360dp)
                 item {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        PrismButton("Tocar", "play.fill", height = 48.dp, modifier = Modifier.weight(1f)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PrismButton("Tocar", "play.fill", height = 46.dp, fontSize = 14f, iconSize = 16.dp, modifier = Modifier.weight(1f)) {
                             d.topTracks.firstOrNull()?.let { first ->
                                 AudioPlayer.shuffleEnabled = false
                                 AudioPlayer.play(first, d.topTracks, d.artist.name)
                             }
                         }
-                        GlassButton("Rádio", "dot.radiowaves.left.and.right", height = 48.dp, modifier = Modifier.weight(1f)) {
+                        GlassButton("Rádio", "dot.radiowaves.left.and.right", height = 46.dp, fontSize = 14f, iconSize = 16.dp, modifier = Modifier.weight(1f)) {
                             d.topTracks.firstOrNull()?.let { AudioPlayer.startRadio(it) } ?: AppModel.showToast("Sem músicas para iniciar a rádio")
                         }
-                        GlassButton(if (following) "Seguindo" else "Seguir", if (following) "checkmark" else "plus", height = 48.dp, modifier = Modifier.weight(1f)) {
+                        GlassButton(
+                            if (following) "Seguindo" else "Seguir",
+                            if (following) "checkmark" else "plus",
+                            height = 46.dp, fontSize = 14f, iconSize = 15.dp,
+                            tint = if (following) Theme.rose else null,
+                            foreground = if (following) Theme.accent else Theme.text,
+                            modifier = Modifier.weight(1f),
+                        ) {
                             LibraryStore.toggleFollow(d.artist.name)
                         }
                     }
@@ -187,6 +203,7 @@ fun ArtistScreen(name: String, deezerId: Long?, bottomInset: Dp) {
                 }
             }
         }
+        DetailHeader(detail?.artist?.name ?: name, listState, 260.dp, overlay = true)
     }
 }
 
@@ -259,8 +276,8 @@ private fun ReleaseSection(title: String, albums: List<AlbumShowcase>) {
             Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).pressable(0.98f) { AppModel.push(LumeRoute.Album(a)) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 ArtworkImage(a.artworkURL, Modifier.size(56.dp), 12.dp, icon = "square.stack.fill")
                 Column(Modifier.weight(1f)) {
-                    Text(a.title, style = Theme.font(16f, FontWeight.Medium, Theme.text), maxLines = 1)
-                    Text(a.artist, style = Theme.font(13f, color = Theme.secondary), maxLines = 1)
+                    Text(a.title, style = Theme.font(15.5f, FontWeight.Medium, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(a.artist, style = Theme.font(13f, color = Theme.secondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text(Theme.shortDate(a.releaseDate), style = Theme.font(12.5f, color = Theme.tertiary))
             }
@@ -287,8 +304,12 @@ fun AlbumGridScreen(title: String, albums: List<AlbumShowcase>, bottomInset: Dp)
     Column(Modifier.fillMaxSize()) {
         DetailHeader(title)
         LazyVerticalGrid(GridCells.Fixed(2), Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = bottomInset, top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            items(albums, key = { it.id }) { a -> AlbumTile(a, width = 160.dp) { AppModel.push(LumeRoute.Album(a)) } }
+            horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            items(albums, key = { it.id }) { a ->
+                BoxWithConstraints {
+                    AlbumTile(a, width = maxWidth) { AppModel.push(LumeRoute.Album(a)) }
+                }
+            }
         }
     }
 }
@@ -299,8 +320,12 @@ fun ArtistGridScreen(title: String, artists: List<ArtistInfo>, bottomInset: Dp) 
     Column(Modifier.fillMaxSize()) {
         DetailHeader(title)
         LazyVerticalGrid(GridCells.Fixed(3), Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = bottomInset, top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            items(artists, key = { it.id }) { a -> ArtistBubble(a, size = 92.dp) { AppModel.openArtist(a.name, a.deezerId) } }
+            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            items(artists, key = { it.id }) { a ->
+                BoxWithConstraints(contentAlignment = Alignment.Center) {
+                    ArtistBubble(a, size = (maxWidth - 8.dp).coerceIn(76.dp, 106.dp)) { AppModel.openArtist(a.name, a.deezerId) }
+                }
+            }
         }
     }
 }

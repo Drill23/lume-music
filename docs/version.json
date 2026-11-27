@@ -1,11 +1,11 @@
 {
-  "versionName": "5.1.6",
-  "build": 13,
+  "versionName": "5.1.7",
+  "build": 14,
   "mandatory": false,
-  "notes": "• Atualização automática conectada direto ao site e ao GitHub\n• Botão \"Verificar atualizações\" dentro de Ajustes (Android e iPhone)\n• Download da atualização no Android com progresso em MB e opção de abrir no navegador",
+  "notes": "• Refinamento visual completo no Android (Liquid Glass no player mesmo no modo claro)\n• Menus e submenus redesenhados em cartões agrupados com compartilhar e estilos\n• Botões, chips, mini player, barra inferior, grade de álbuns e Ajustes lapidados",
   "android": {
-    "build": 13,
-    "versionName": "5.1.6",
+    "build": 14,
+    "versionName": "5.1.7",
     "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-Android.apk",
     "mandatory": false
   },
