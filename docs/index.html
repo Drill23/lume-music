@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lume Music — Sua música, em outra luz.</title>
+<meta name="description" content="Lume Music: um player de música que entende você. Vinil, fita K7 e ondas que dançam com a batida, tudo em vidro. Baixe para iPhone e Android.">
+<meta name="theme-color" content="#F4F3F8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0B12" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://drill23.github.io/lume-music/">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="Lume Music">
+<meta property="og:title" content="Lume Music — Sua música, em outra luz.">
+<meta property="og:description" content="Vinil, fita K7, Cover Flow e ondas que dançam com a batida. Tudo em vidro, no seu iPhone e no seu Android.">
+<meta property="og:url" content="https://drill23.github.io/lume-music/">
+<meta property="og:image" content="https://drill23.github.io/lume-music/assets/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Lume Music — Sua música, em outra luz.">
+<meta name="twitter:description" content="Vinil, fita K7, Cover Flow e ondas que dançam com a batida. Tudo em vidro.">
+<meta name="twitter:image" content="https://drill23.github.io/lume-music/assets/og.jpg">
+
+<link rel="preload" as="image" href="assets/video/01-vinil-girando.jpg">
+<link rel="stylesheet" href="styles.css">
+<script>document.documentElement.classList.add('js')</script>
+</head>
+<body>
+
+<!-- Ícones (pictogramas próprios) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-dl-android" viewBox="0 0 24 24"><rect x="6.5" y="2" width="11" height="20" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="5.1" r=".9" fill="currentColor"/><path d="M12 9.2v6.3M9.2 12.9l2.8 2.8 2.8-2.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-dl-iphone" viewBox="0 0 24 24"><rect x="6.5" y="2" width="11" height="20" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="10" y="4.1" width="4" height="1.4" rx=".7" fill="currentColor"/><path d="M12 9.2v6.3M9.2 12.9l2.8 2.8 2.8-2.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-lyrics" viewBox="0 0 24 24"><path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z M7 9h10 M7 12h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-eq" viewBox="0 0 24 24"><path d="M4 4v16M8 4v16M12 4v16M16 4v16M20 4v16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><g fill="currentColor"><circle cx="4" cy="14" r="2.2"/><circle cx="8" cy="8" r="2.2"/><circle cx="12" cy="15.5" r="2.2"/><circle cx="16" cy="9" r="2.2"/><circle cx="20" cy="13" r="2.2"/></g></symbol>
+    <symbol id="i-offline" viewBox="0 0 24 24"><path d="M12 3v12M7 10.5l5 5 5-5M4 20h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-replay" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.4h4.4M10.2 9v6l5-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="13" r=".8" fill="currentColor"/><path d="M10 6h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-feather" viewBox="0 0 24 24"><path d="M20 4c-8 0-14 4-14 11 0 1.2.2 2.2.6 3C8 19.5 9.5 20 11 20c7 0 9-8 9-16zM5 21c2-5 5-8 9-10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 4.5a7.5 7.5 0 0 1 6 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".6"/></symbol>
+    <symbol id="i-tape" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="8.5" cy="11.5" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="15.5" cy="11.5" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 16h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-rotate" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 3.2c1.6-.9 3.3-1.2 5-1M18 20.8c-1.6.9-3.3 1.2-5 1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+<a class="skip" href="#conteudo">Ir para o conteúdo</a>
+
+<header class="nav" id="topo">
+  <nav class="nav__pill glass" aria-label="Principal">
+    <a class="brand" href="#topo"><img src="assets/mark.png" width="32" height="32" alt=""><span>Lume Music</span></a>
+    <ul class="nav__links">
+      <li><a href="#recursos">Recursos</a></li>
+      <li><a href="#palcos">Palcos</a></li>
+      <li><a href="#coverflow">Cover Flow</a></li>
+      <li><a href="#baixar">Baixar</a></li>
+    </ul>
+    <a class="btn btn--ink" href="#baixar" data-spec>Baixar</a>
+  </nav>
+</header>
+
+<main id="conteudo">
+
+<!-- 2. HERO -->
+<section class="hero">
+  <div class="wrap hero__grid">
+    <div class="hero__copy">
+      <p class="eyebrow" data-reveal>Lume Music 5.0</p>
+      <h1 data-reveal style="--d:80ms">Sua música, <span class="grad">em outra luz.</span></h1>
+      <p class="lead" data-reveal style="--d:160ms">Um player de música que entende você. Vinil, fita K7, ondas que dançam com a batida — tudo em vidro, no seu iPhone e no seu Android.</p>
+      <div class="dlrow" data-reveal style="--d:240ms">
+        <div class="dlwrap" data-os="android">
+          <span class="rec-badge">Recomendado para o seu aparelho</span>
+          <a class="dl glass" data-spec href="https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-Android.apk" rel="noopener">
+            <span class="dl__ico"><svg width="28" height="28" aria-hidden="true"><use href="#i-dl-android"/></svg></span>
+            <span class="dl__t"><small>Baixar para</small><strong>Android</strong><em>Versão 5.0.0 · .apk</em></span>
+          </a>
+        </div>
+        <div class="dlwrap" data-os="ios">
+          <span class="rec-badge">Recomendado para o seu aparelho</span>
+          <a class="dl glass" data-spec href="https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-iPhone.ipa" rel="noopener">
+            <span class="dl__ico"><svg width="28" height="28" aria-hidden="true"><use href="#i-dl-iphone"/></svg></span>
+            <span class="dl__t"><small>Baixar para</small><strong>iPhone</strong><em>Versão 5.0.0 · .ipa</em></span>
+          </a>
+        </div>
+      </div>
+      <p class="fine" data-reveal style="--d:320ms">Acesso com código · Instalação rápida, passo a passo logo abaixo.</p>
+    </div>
+
+    <div class="hero__stage" data-tilt>
+      <div class="tilt">
+        <div class="phone" style="--w:var(--hero-w)">
+          <div class="phone__in"><div class="phone__screen">
+            <video class="lv" data-src="assets/video/01-vinil-girando.mp4" poster="assets/video/01-vinil-girando.jpg" width="506" height="1100" muted loop playsinline autoplay preload="none" disablepictureinpicture disableremoteplayback tabindex="-1" role="img" aria-label="Player da Lume Music com o toca-discos em modo vinil girando"></video>
+            <i class="isl"></i>
+          </div></div>
+        </div>
+      </div>
+      <div class="chip glass" data-chip="1" style="--x:-4%;--y:17%;--fd:0s">
+        <span class="chip__ico"><svg width="22" height="22" aria-hidden="true"><use href="#i-disc"/></svg></span>
+        <span class="chip__t"><strong>33⅓ RPM</strong><small>Prato estroboscópico</small></span>
+      </div>
+      <div class="chip glass" data-chip="2" style="--y:46%;--fd:-2s">
+        <span class="chip__ico chip__ico--eq" aria-hidden="true"><b></b><b></b><b></b><b></b></span>
+        <span class="chip__t"><strong>Ondas ao vivo</strong><small>Reagem à batida</small></span>
+      </div>
+      <div class="chip glass" data-chip="3" style="--x:2%;--y:76%;--fd:-4s">
+        <span class="chip__ico"><svg width="22" height="22" aria-hidden="true"><use href="#i-tape"/></svg></span>
+        <span class="chip__t"><strong>Lado A</strong><small>Fita K7</small></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. Onboarding -->
+<section class="sec" id="comeco">
+  <div class="wrap split">
+    <div class="split__text">
+      <p class="eyebrow" data-reveal>Primeira abertura</p>
+      <h2 data-reveal style="--d:80ms">Um player que entende você.</h2>
+      <p class="lead" data-reveal style="--d:160ms">Na primeira abertura você escolhe seus estilos com toque e som, escolhe seus artistas, e a Lume monta tudo com a sua cara em menos de um minuto.</p>
+      <ol class="steps" data-stagger>
+        <li class="glass" data-reveal><b>1</b><span><strong>Seus estilos</strong><small>Toque nos gêneros e ouça cada um na hora.</small></span></li>
+        <li class="glass" data-reveal><b>2</b><span><strong>Seus artistas</strong><small>Marque os que você ama, sem digitar nada.</small></span></li>
+        <li class="glass" data-reveal><b>3</b><span><strong>Pronto</strong><small>A Lume monta o início com a sua cara.</small></span></li>
+      </ol>
+    </div>
+    <div class="cluster" data-reveal>
+      <div class="phone phone--side phone--l" data-parallax=".05" style="--w:calc(var(--cw)*.8)"><div class="phone__in"><div class="phone__screen"><img src="assets/img/03-apresentacao-genres.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Tela de escolha de gêneros musicais na abertura do Lume Music"><i class="isl"></i></div></div></div>
+      <div class="phone phone--mid" data-parallax="-.04" style="--w:var(--cw)"><div class="phone__in"><div class="phone__screen">
+        <video class="lv" data-src="assets/video/03-abertura-boas-vindas.mp4" poster="assets/video/03-abertura-boas-vindas.jpg" width="506" height="1100" muted loop playsinline autoplay preload="none" disablepictureinpicture disableremoteplayback tabindex="-1" role="img" aria-label="Animação de boas-vindas do Lume Music"></video><i class="isl"></i>
+      </div></div></div>
+      <div class="phone phone--side phone--r" data-parallax=".07" style="--w:calc(var(--cw)*.8)"><div class="phone__in"><div class="phone__screen"><img src="assets/img/04-apresentacao-artists.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Tela de escolha de artistas favoritos na abertura do Lume Music"><i class="isl"></i></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4. Palcos -->
+<section class="sec" id="palcos">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow" data-reveal>Tocando agora</p>
+      <h2 data-reveal style="--d:80ms">Escolha o seu palco.</h2>
+      <p class="lead" data-reveal style="--d:160ms">O mesmo som, três jeitos de viver cada faixa. Troque quando quiser, com um toque.</p>
+    </div>
+
+    <div class="stages">
+      <article class="stage glass" data-reveal>
+        <div class="stage__phone">
+          <div class="phone" data-parallax=".03" style="--w:var(--stage-w)"><div class="phone__in"><div class="phone__screen">
+            <video class="lv" data-src="assets/video/01-vinil-girando.mp4" poster="assets/video/01-vinil-girando.jpg" width="506" height="1100" muted loop playsinline autoplay preload="none" disablepictureinpicture disableremoteplayback tabindex="-1" role="img" aria-label="Toca-discos da Lume Music girando"></video><i class="isl"></i>
+          </div></div></div>
+        </div>
+        <h3>Vinil</h3>
+        <p>Toca-discos com prato estroboscópico, braço que desce no play e avança com a música, 33⅓ ou 45 RPM e pitch.</p>
+      </article>
+      <article class="stage glass" data-reveal style="--d:100ms">
+        <div class="stage__phone">
+          <div class="phone" data-parallax="-.03" style="--w:var(--stage-w)"><div class="phone__in"><div class="phone__screen">
+            <video class="lv" data-src="assets/video/02-fita-k7-tocando.mp4" poster="assets/video/02-fita-k7-tocando.jpg" width="506" height="1100" muted loop playsinline autoplay preload="none" disablepictureinpicture disableremoteplayback tabindex="-1" role="img" aria-label="Fita K7 tocando na Lume Music"></video><i class="isl"></i>
+          </div></div></div>
+        </div>
+        <h3>Fita K7</h3>
+        <p>Etiqueta escrita à mão com a capa do disco, carretéis que acompanham a música, Lado A e Lado B.</p>
+      </article>
+      <article class="stage glass" data-reveal style="--d:200ms">
+        <div class="stage__phone">
+          <div class="phone" data-parallax=".03" style="--w:var(--stage-w)"><div class="phone__in"><div class="phone__screen">
+            <video class="lv" data-src="assets/video/05-ondas-reagindo-a-musica.mp4" poster="assets/video/05-ondas-reagindo-a-musica.jpg" width="506" height="1100" muted loop playsinline autoplay preload="none" disablepictureinpicture disableremoteplayback tabindex="-1" role="img" aria-label="Ondas de vidro reagindo à música"></video><i class="isl"></i>
+          </div></div></div>
+        </div>
+        <h3>Ondas</h3>
+        <p>Fitas de vidro que reagem de verdade às batidas.</p>
+      </article>
+    </div>
+
+    <div class="mini glass" data-reveal>
+      <div class="mini__text">
+        <h3>Do seu jeito, dia e noite.</h3>
+        <p>4 edições de disco, 4 estilos de fita, tema claro e escuro.</p>
+      </div>
+      <div class="mini__fan">
+        <div class="phone" data-parallax=".04" style="--w:var(--mini-w)"><div class="phone__in"><div class="phone__screen"><img src="assets/img/24-player-vinil-escuro.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Player em modo vinil com tema escuro"><i class="isl"></i></div></div></div>
+        <div class="phone" data-parallax="-.03" style="--w:var(--mini-w)"><div class="phone__in"><div class="phone__screen"><img src="assets/img/25-player-fita-cristal.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Player em modo fita K7 com estilo cristal"><i class="isl"></i></div></div></div>
+        <div class="phone" data-parallax=".04" style="--w:var(--mini-w)"><div class="phone__in"><div class="phone__screen"><img src="assets/img/20-player-capa.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Player em modo capa do álbum"><i class="isl"></i></div></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. Cover Flow -->
+<section class="cinema" id="coverflow">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow" data-reveal>Cover Flow</p>
+      <h2 data-reveal style="--d:80ms">Cover Flow, como você lembra.</h2>
+      <p class="lead" data-reveal style="--d:160ms">Vire o celular e as capas ganham vida em 3D, com reflexo no chão. Toque numa capa e ela gira mostrando as faixas.</p>
+    </div>
+    <div class="cinema__stage" data-reveal>
+      <div class="phone phone--land" data-parallax=".03" style="--w:var(--land-w)"><div class="phone__in"><div class="phone__screen">
+        <video class="lv" data-src="assets/video/06-coverflow-horizontal.mp4" poster="assets/video/06-coverflow-horizontal.jpg" width="1280" height="588" muted loop playsinline autoplay preload="none" disablepictureinpicture disableremoteplayback tabindex="-1" role="img" aria-label="Cover Flow do Lume Music com o celular deitado"></video><i class="isl"></i>
+      </div></div></div>
+    </div>
+    <div class="cinema__tips">
+      <div class="tip glass" data-reveal>
+        <div class="phone" style="--w:96px"><div class="phone__in"><div class="phone__screen"><img src="assets/img/30-coverflow-vire-o-celular.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Aviso do Lume Music pedindo para virar o celular"><i class="isl"></i></div></div></div>
+        <div><strong>Vire o celular</strong><small>O Cover Flow aparece quando o aparelho fica deitado.</small></div>
+      </div>
+      <div class="tip glass" data-reveal style="--d:100ms">
+        <div class="phone phone--land phone--mini" style="--w:176px"><div class="phone__in"><div class="phone__screen"><img src="assets/img/32-coverflow-capa-virada.webp" width="1400" height="644" loading="lazy" decoding="async" alt="Capa de álbum virada mostrando a lista de faixas no Cover Flow"></div></div></div>
+        <div><strong>Toque numa capa</strong><small>Ela gira e mostra as faixas do álbum.</small></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6. Tudo à mão -->
+<section class="sec sec--gallery" id="telas">
+  <div class="wrap gal-head">
+    <div class="sec-head sec-head--left">
+      <p class="eyebrow" data-reveal>Por dentro</p>
+      <h2 data-reveal style="--d:80ms">Tudo à mão.</h2>
+      <p class="lead" data-reveal style="--d:160ms">Do início às paradas, da biblioteca à busca. Deslize para ver.</p>
+    </div>
+    <div class="arrows" aria-hidden="false">
+      <button class="arrow glass" type="button" data-dir="-1" aria-label="Telas anteriores"><svg width="22" height="22" aria-hidden="true"><use href="#i-chev"/></svg></button>
+      <button class="arrow glass" type="button" data-dir="1" aria-label="Próximas telas"><svg width="22" height="22" aria-hidden="true" style="transform:scaleX(-1)"><use href="#i-chev"/></svg></button>
+    </div>
+  </div>
+  <div class="gallery" tabindex="0" role="region" aria-label="Galeria de telas do app">
+    <figure class="shot"><div class="phone" style="--w:var(--shot-w)"><div class="phone__in"><div class="phone__screen"><img src="assets/img/11-inicio-atalhos.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Atalhos do Início do Lume Music"><i class="isl"></i></div></div></div><figcaption>Início limpo e atalhos</figcaption></figure>
+    <figure class="shot"><div class="phone" style="--w:var(--shot-w)"><div class="phone__in"><div class="phone__screen"><img src="assets/img/12-inicio-top10.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Top 10 das músicas mais ouvidas no Lume Music"><i class="isl"></i></div></div></div><figcaption>Top 10 de 20 países + Global</figcaption></figure>
+    <figure class="shot"><div class="phone" style="--w:var(--shot-w)"><div class="phone__in"><div class="phone__screen"><img src="assets/img/13-explorar.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Aba Explorar do Lume Music com as paradas oficiais"><i class="isl"></i></div></div></div><figcaption>Paradas oficiais</figcaption></figure>
+    <figure class="shot"><div class="phone" style="--w:var(--shot-w)"><div class="phone__in"><div class="phone__screen"><img src="assets/img/14-biblioteca.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Biblioteca do Lume Music com músicas baixadas"><i class="isl"></i></div></div></div><figcaption>Biblioteca e downloads offline</figcaption></figure>
+    <figure class="shot"><div class="phone" style="--w:var(--shot-w)"><div class="phone__in"><div class="phone__screen"><img src="assets/img/15-buscar.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Tela de busca do Lume Music"><i class="isl"></i></div></div></div><figcaption>Busca até por trecho da letra</figcaption></figure>
+  </div>
+</section>
+
+<!-- 7. Estante -->
+<section class="sec" id="estante">
+  <div class="wrap split split--rev">
+    <div class="split__text">
+      <p class="eyebrow" data-reveal>Carregando</p>
+      <h2 data-reveal style="--d:80ms">Sua estante em segundos.</h2>
+      <p class="lead" data-reveal style="--d:160ms">A Lume reúne as suas músicas e arruma a estante para você. Enquanto isso, uma animação de vidro mostra cada passo. Em segundos, tudo está pronto para tocar.</p>
+    </div>
+    <div class="solo" data-reveal>
+      <div class="phone" data-parallax=".04" style="--w:var(--solo-w)"><div class="phone__in"><div class="phone__screen">
+        <video class="lv" data-src="assets/video/04-carregando-suas-musicas.mp4" poster="assets/video/04-carregando-suas-musicas.jpg" width="506" height="1100" muted loop playsinline autoplay preload="none" disablepictureinpicture disableremoteplayback tabindex="-1" role="img" aria-label="Animação de carregamento das músicas no Lume Music"></video><i class="isl"></i>
+      </div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 e 9. Importar e acesso -->
+<section class="sec" id="entrar">
+  <div class="wrap duo">
+    <article class="peek glass" id="importar" data-reveal>
+      <div class="peek__text">
+        <p class="eyebrow">Importar</p>
+        <h2>Traga sua música.</h2>
+        <p class="lead">Importe suas playlists do Apple Music, Spotify, YouTube Music, Deezer, Amazon Music, Tidal ou de um arquivo.</p>
+      </div>
+      <div class="peek__phone"><div class="phone" style="--w:var(--peek-w)"><div class="phone__in"><div class="phone__screen"><img src="assets/img/05-apresentacao-importLib.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Tela para importar playlists de outros serviços ou de um arquivo"><i class="isl"></i></div></div></div></div>
+    </article>
+    <article class="peek glass" id="acesso" data-reveal style="--d:120ms">
+      <div class="peek__text">
+        <p class="eyebrow">Acesso exclusivo</p>
+        <h2>Entre com o seu código.</h2>
+        <p class="lead">Entre com o seu código de acesso de 6 caracteres. O app mostra na hora a validade — meses ou vitalício.</p>
+      </div>
+      <div class="peek__phone"><div class="phone" style="--w:var(--peek-w)"><div class="phone__in"><div class="phone__screen"><img src="assets/img/02-apresentacao-access.webp" width="720" height="1565" loading="lazy" decoding="async" alt="Tela de acesso do Lume Music pedindo o código de 6 caracteres"><i class="isl"></i></div></div></div></div>
+    </article>
+  </div>
+</section>
+
+<!-- 10. Recursos -->
+<section class="sec" id="recursos">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow" data-reveal>Recursos</p>
+      <h2 data-reveal style="--d:80ms">Pequenos detalhes. Grande diferença.</h2>
+    </div>
+    <div class="features" data-stagger>
+      <article class="feat glass" data-reveal><span class="feat__ico"><svg width="26" height="26" aria-hidden="true"><use href="#i-lyrics"/></svg></span><h3>Letras sincronizadas</h3><p>Acompanhe cada verso na hora certa, linha por linha.</p></article>
+      <article class="feat glass" data-reveal><span class="feat__ico"><svg width="26" height="26" aria-hidden="true"><use href="#i-eq"/></svg></span><h3>Equalizador de 5 bandas</h3><p>Ajuste graves, médios e agudos do seu jeito.</p></article>
+      <article class="feat glass" data-reveal><span class="feat__ico"><svg width="26" height="26" aria-hidden="true"><use href="#i-offline"/></svg></span><h3>Downloads offline</h3><p>Baixe suas músicas e ouça sem internet, onde estiver.</p></article>
+      <article class="feat glass" data-reveal><span class="feat__ico"><svg width="26" height="26" aria-hidden="true"><use href="#i-replay"/></svg></span><h3>Lume Replay</h3><p>Reviva o que você mais ouviu, num resumo cheio de cor.</p></article>
+      <article class="feat glass" data-reveal><span class="feat__ico"><svg width="26" height="26" aria-hidden="true"><use href="#i-lock"/></svg></span><h3>Tela de bloqueio com vinil ou fita</h3><p>A tela de bloqueio ganha o disco ou a fita que você escolheu.</p></article>
+      <article class="feat glass" data-reveal><span class="feat__ico"><svg width="26" height="26" aria-hidden="true"><use href="#i-feather"/></svg></span><h3>Leve e sem aquecer</h3><p>Animações pensadas para render o dia todo sem esquentar o celular.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- 11. Baixar -->
+<section class="sec" id="baixar">
+  <div class="wrap">
+    <div class="get glass" data-reveal>
+      <img class="get__icon" src="assets/icon-512.png" width="120" height="120" loading="lazy" decoding="async" alt="Ícone do app Lume Music">
+      <h2>Lume Music <span class="ver">5.0.0</span></h2>
+      <p class="lead">Escolha o seu aparelho e leve a Lume com você.</p>
+      <div class="dlrow dlrow--lg">
+        <div class="dlwrap" data-os="android">
+          <span class="rec-badge">Recomendado para o seu aparelho</span>
+          <a class="dl dl--lg glass" data-spec href="https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-Android.apk" rel="noopener">
+            <span class="dl__ico"><svg width="32" height="32" aria-hidden="true"><use href="#i-dl-android"/></svg></span>
+            <span class="dl__t"><small>Baixar para</small><strong>Android</strong><em>Versão 5.0.0 · .apk</em></span>
+          </a>
+        </div>
+        <div class="dlwrap" data-os="ios">
+          <span class="rec-badge">Recomendado para o seu aparelho</span>
+          <a class="dl dl--lg glass" data-spec href="https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-iPhone.ipa" rel="noopener">
+            <span class="dl__ico"><svg width="32" height="32" aria-hidden="true"><use href="#i-dl-iphone"/></svg></span>
+            <span class="dl__t"><small>Baixar para</small><strong>iPhone</strong><em>Versão 5.0.0 · .ipa</em></span>
+          </a>
+        </div>
+      </div>
+      <div class="how">
+        <div class="how__item" data-os="android">
+          <h3>Android</h3>
+          <p>Toque em baixar, abra o arquivo e permita “instalar apps desconhecidos” se o celular pedir.</p>
+        </div>
+        <div class="how__item" data-os="ios">
+          <h3>iPhone</h3>
+          <p>Arquivo .ipa para instalar pelo LiveContainer ou SideStore (o app não está na App Store).</p>
+        </div>
+      </div>
+      <span class="pill">Acesso com código</span>
+    </div>
+  </div>
+</section>
+
+<!-- 12. FAQ -->
+<section class="sec" id="perguntas">
+  <div class="wrap wrap--narrow">
+    <div class="sec-head">
+      <p class="eyebrow" data-reveal>Dúvidas</p>
+      <h2 data-reveal style="--d:80ms">Perguntas frequentes.</h2>
+    </div>
+    <div class="faq" data-stagger>
+      <details class="glass" data-reveal>
+        <summary><span>Como instalo no Android?</span><i aria-hidden="true"></i></summary>
+        <div class="faq__a"><p>Toque em baixar para Android e abra o arquivo .apk. Se o celular pedir, permita “instalar apps desconhecidos” para o seu navegador. Depois é só abrir a Lume Music.</p></div>
+      </details>
+      <details class="glass" data-reveal>
+        <summary><span>Como instalo no iPhone?</span><i aria-hidden="true"></i></summary>
+        <div class="faq__a"><p>O app não está na App Store. Baixe o arquivo .ipa e instale pelo LiveContainer ou pelo SideStore, importando o arquivo no instalador que você já usa.</p></div>
+      </details>
+      <details class="glass" data-reveal>
+        <summary><span>Preciso de código?</span><i aria-hidden="true"></i></summary>
+        <div class="faq__a"><p>Sim. Na primeira abertura, a Lume pede um código de acesso de 6 caracteres e mostra na hora a validade — em meses ou vitalício.</p></div>
+      </details>
+      <details class="glass" data-reveal>
+        <summary><span>Funciona sem internet?</span><i aria-hidden="true"></i></summary>
+        <div class="faq__a"><p>Sim, com as músicas baixadas. Baixe o que quiser ouvir e toque sem conexão.</p></div>
+      </details>
+      <details class="glass" data-reveal>
+        <summary><span>É seguro?</span><i aria-hidden="true"></i></summary>
+        <div class="faq__a"><p>Os arquivos são assinados e publicados no GitHub oficial do projeto. Baixe sempre pelos botões desta página.</p></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot__in">
+    <a class="brand" href="#topo"><img src="assets/mark.png" width="28" height="28" alt=""><span>Lume Music</span></a>
+    <p>Desenvolvido por A.A · <a href="https://drill23.github.io/demerzel-studio/" rel="noopener">Demerzel Studio</a></p>
+    <p class="foot__c">© 2026 Lume Music</p>
+  </div>
+</footer>
+
+<script src="app.js" defer></script>
+</body>
+</html>
