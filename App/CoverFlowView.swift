@@ -177,6 +177,27 @@ struct CoverFlowScreen: View {
   }
 
   private func runDebugHooks() {
+    if CoverFlowDebug.demo {
+      // Demonstração para vídeo: capas passando sozinhas e a última virando em 3D.
+      Task { @MainActor in
+        try? await Task.sleep(for: .seconds(4))
+        let steps: [Double] = [1, 2, 3, 5, 7, 8, 9, 7, 6]
+        for v in steps where v < Double(items.count) {
+          withAnimation(.spring(response: 0.55, dampingFraction: 0.86)) {
+            position.value = v
+            selection.index = Int(v)
+          }
+          try? await Task.sleep(for: .seconds(1.1))
+        }
+        let idx = min(items.count - 1, Int(position.value.rounded()))
+        guard idx >= 0 else { return }
+        let it = items[idx]
+        await trackStore.load(it)
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) { selection.flippedId = it.id }
+        try? await Task.sleep(for: .seconds(2.6))
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) { selection.flippedId = nil }
+      }
+    }
     if CoverFlowDebug.portrait {
       Task { @MainActor in
         try? await Task.sleep(for: .seconds(1))

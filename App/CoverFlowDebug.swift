@@ -15,6 +15,7 @@ enum CoverFlowDebug {
   static var landscape: Bool { has("-LMDebugCoverFlowLandscape") }
   static var flip: Bool { has("-LMDebugCoverFlowFlip") }
   static var portrait: Bool { has("-LMDebugCoverFlowPortrait") }
+  static var demo: Bool { has("-LMDebugCoverFlowDemo") }
 
   static func launchIfRequested() {
     guard open else { return }
