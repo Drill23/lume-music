@@ -110,6 +110,7 @@ fun SettingsScreen(bottomInset: Dp) {
     Column(Modifier.fillMaxSize()) {
         DetailTopBar("Ajustes")
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 24.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+            item { AccessStatusCard() }
             item {
                 Card("Tocando agora") {
                     Section("Estilo do Tocando agora", "Escolha como a capa aparece na tela de reprodução.") {

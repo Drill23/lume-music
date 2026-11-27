@@ -84,7 +84,8 @@ fun HomeScreen(bottomInset: Dp) {
                 }
             }
             item { FlowCard() }
-            item { QuickShelf() }
+            item { Shortcuts() }
+            item { Top10Section() }
 
             if (store.recentTracks.isNotEmpty()) item {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -107,13 +108,6 @@ fun HomeScreen(bottomInset: Dp) {
             if (feed == null) item { Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { repeat(3) { Skeleton(Modifier.fillMaxWidth().height(64.dp)) } } }
 
             feed?.let { f ->
-                if (f.topBrazil.isNotEmpty()) item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionHeader("Em alta no Brasil", "Top 50 Brasil", onAction = { AppModel.push(LumeRoute.Tracks("Top 50 Brasil", f.topBrazil)) })
-                        val list = f.topBrazil.take(20)
-                        HRow { rankedCards(list, f.topBrazil) }
-                    }
-                }
                 val releases = (AppModel.artistReleases.ifEmpty { f.newReleases }).take(20)
                 if (releases.isNotEmpty()) item {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -199,35 +193,40 @@ private fun FlowCard() {
 }
 
 @Composable
-private fun QuickShelf() {
+private fun Shortcuts() {
     val store = LibraryStore
-    val cards = listOf(
-        Triple("Curtidas", "heart.fill", store.favoriteTracks),
-        Triple("Baixadas", "arrow.down.circle.fill", store.downloadedTracks),
-        Triple("Histórico", "clock.fill", store.recentTracks),
+    val items: List<Triple<String, String, () -> Unit>> = listOf(
+        Triple("Curtidas", "heart.fill") { AppModel.push(LumeRoute.Tracks("Curtidas", store.favoriteTracks)) },
+        Triple("Baixadas", "arrow.down.circle.fill") { AppModel.push(LumeRoute.Tracks("Baixadas", store.downloadedTracks)) },
+        Triple("Histórico", "clock.fill") { AppModel.push(LumeRoute.Tracks("Histórico", store.recentTracks)) },
+        Triple("Lume Replay", "sparkles") { AppModel.push(LumeRoute.Replay) },
+        Triple("Cover Flow", "square.stack.fill") { AppModel.showCoverFlow = true },
+        Triple("Letra", "quote.bubble") { AppModel.openLyricsSearch() },
     )
-    HRow(spacing = 12.dp) {
-        items(cards, key = { it.first }) { (title, icon, tracks) ->
-            Row(
-                Modifier.size(width = 168.dp, height = 56.dp).pressable(0.96f) { AppModel.push(LumeRoute.Tracks(title, tracks)) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Icon(sf(icon), null, tint = Theme.rose, modifier = Modifier.size(20.dp))
-                Column {
-                    Text(title, style = Theme.font(15f, FontWeight.SemiBold, Theme.text))
-                    Text("${tracks.size} músicas", style = Theme.font(12f, color = Theme.secondary))
+    Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        items.chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { (title, icon, click) ->
+                    Column(Modifier.weight(1f).height(78.dp).pressable(0.95f) { click() }.glass(RoundedCornerShape(20.dp)), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Icon(sf(icon), null, tint = Theme.rose, modifier = Modifier.size(24.dp))
+                        Text(title, style = Theme.font(12.5f, FontWeight.SemiBold, Theme.text), modifier = Modifier.padding(top = 5.dp), maxLines = 1)
+                    }
                 }
-            }
-        }
-        item {
-            Row(
-                Modifier.size(width = 168.dp, height = 56.dp).pressable(0.96f) { AppModel.push(LumeRoute.Replay) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Icon(sf("sparkles"), null, tint = Theme.lavender, modifier = Modifier.size(20.dp))
-                Text("Lume Replay", style = Theme.font(15f, FontWeight.SemiBold, Theme.text))
             }
         }
     }
 }
 
+/** Top 10 com chips de país (Apple RSS por país via CatalogExplorerService). */
+@Composable
+private fun Top10Section() {
+    var country by remember { mutableStateOf(ChartCountry.all.first()) }
+    val chart by androidx.compose.runtime.produceState<com.adriano.lumemusic.engine.CountryChartBundle?>(null, country) { value = null; value = CatalogExplorerService.countryChart(country) }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeader("Top 10", "${country.flag} ${country.name}", "Top 50", onAction = { AppModel.push(LumeRoute.Country(country)) })
+        HRow(spacing = 8.dp) { items(ChartCountry.all, key = { it.code }) { c -> com.adriano.lumemusic.ui.PrismChip("${c.flag} ${c.name}", c.code == country.code) { country = c } } }
+        val c = chart
+        if (c == null) Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { repeat(4) { Skeleton(Modifier.fillMaxWidth().height(56.dp)) } }
+        else c.topSongs.take(10).forEachIndexed { i, t -> TrackRow(t, rank = i + 1, queue = c.topSongs) }
+    }
+}

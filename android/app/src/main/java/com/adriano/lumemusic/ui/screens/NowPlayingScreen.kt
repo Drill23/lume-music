@@ -105,13 +105,13 @@ fun NowPlayingScreen() {
             }
 
             // Seletor de palco
-            Row(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(40.dp).glass(RoundedCornerShape(50)).padding(3.dp)) {
+            Row(Modifier.padding(horizontal = 12.dp).fillMaxWidth().height(46.dp).glass(RoundedCornerShape(50)).padding(3.dp)) {
                 for (t in tabs) {
                     val sel = AppModel.playerTab == t
                     Row(Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(50)).background(if (sel) Color.White.copy(0.20f) else Color.Transparent).pressable(0.95f) { Haptics.selection(); AppModel.playerTab = t },
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                         Icon(sf(t.icon), null, tint = Color.White.copy(if (sel) 1f else 0.65f), modifier = Modifier.size(15.dp))
-                        if (sel) Text(t.raw, style = Theme.font(12.5f, FontWeight.SemiBold, Color.White), modifier = Modifier.padding(start = 4.dp), maxLines = 1)
+                        Text(t.raw, style = Theme.font(11.5f, FontWeight.SemiBold, Color.White.copy(if (sel) 1f else 0.7f)), modifier = Modifier.padding(start = 3.dp), maxLines = 1)
                     }
                 }
             }
@@ -156,6 +156,7 @@ fun NowPlayingScreen() {
                 }
                 if (AppModel.playerTab == PlayerSurfaceTab.LYRICS && AudioPlayer.lyrics != null)
                     PlayerIcon("translate", "Traduzir", tint = if (AudioPlayer.showTranslation) Theme.rose else Color.White.copy(0.85f)) { AudioPlayer.toggleTranslation() }
+                PlayerIcon("paintpalette", "Estilos") { AppModel.tabletSheet = "styles" }
                 PlayerIcon("moon.zzz", "Timer de dormir", tint = if (AudioPlayer.sleepTimerOption != SleepTimerOption.OFF) Theme.rose else Color.White.copy(0.85f)) { AppModel.tabletSheet = "sleep" }
                 SpeedButton()
                 PlayerIcon("slider.vertical.3", "Equalizador") { AppModel.navigateFromPlayer(LumeRoute.Equalizer) }

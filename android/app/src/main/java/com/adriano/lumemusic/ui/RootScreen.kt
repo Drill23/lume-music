@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
@@ -94,6 +95,8 @@ fun RootScreen() {
     visited.add(AppModel.tab)
     val hasTrack = AudioPlayer.currentTrack != null
     val bottomInset = if (hasTrack) 150.dp else 92.dp
+    val appCtx = androidx.compose.ui.platform.LocalContext.current
+    var onboarding by remember { androidx.compose.runtime.mutableStateOf(LibraryStore.introEnabled && !com.adriano.lumemusic.ui.screens.Onboarding.isDone(appCtx)) }
 
     LaunchedEffect(Unit) {
         AppModel.loadFeed()
@@ -102,8 +105,9 @@ fun RootScreen() {
     LaunchedEffect(DownloadManager.lastMessage) { DownloadManager.lastMessage?.let { AppModel.showToast(it) } }
     LaunchedEffect(AudioPlayer.errorToast) { AudioPlayer.errorToast?.let { AppModel.showToast(it) } }
 
-    BackHandler(enabled = AppModel.showPlayer || AppModel.showQueue || AppModel.currentStack.isNotEmpty() || AppModel.tab != AppTab.HOME) {
+    BackHandler(enabled = AppModel.showCoverFlow || AppModel.showPlayer || AppModel.showQueue || AppModel.currentStack.isNotEmpty() || AppModel.tab != AppTab.HOME) {
         when {
+            AppModel.showCoverFlow -> AppModel.showCoverFlow = false
             AppModel.showQueue -> AppModel.showQueue = false
             AppModel.showPlayer -> AppModel.showPlayer = false
             AppModel.pop() -> {}
@@ -133,6 +137,14 @@ fun RootScreen() {
             ) { NowPlayingScreen() }
 
             SheetsHost()
+
+            // véu da barra de status (some o conteúdo que rola por baixo)
+            Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).height(10.dp).background(Brush.verticalGradient(listOf(Theme.canvas.copy(0.85f), androidx.compose.ui.graphics.Color.Transparent))))
+
+            AnimatedVisibility(AppModel.showCoverFlow, enter = fadeIn(tween(250)), exit = fadeOut(tween(200))) { com.adriano.lumemusic.ui.screens.CoverFlowScreen() }
+
+            if (onboarding) com.adriano.lumemusic.ui.screens.OnboardingScreen { onboarding = false }
+            else com.adriano.lumemusic.ui.screens.AccessGateScreen()
         }
     }
 }

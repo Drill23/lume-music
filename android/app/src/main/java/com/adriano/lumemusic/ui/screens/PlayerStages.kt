@@ -71,7 +71,7 @@ interface PlayerStage {
 }
 
 object PlayerStages {
-    val all: List<PlayerStage> = listOf(ArtworkStage, VinylStagePlaceholder, CassetteStagePlaceholder, WavesStagePlaceholder, LyricsStage)
+    val all: List<PlayerStage> = listOf(ArtworkStage, VinylStage, CassetteStage, WavesStage, LyricsStage)
     fun forTab(t: PlayerSurfaceTab): PlayerStage = all.first { it.tab == t }
 }
 
@@ -91,89 +91,6 @@ object ArtworkStage : PlayerStage {
                     .aspectRatio(1f),
                 26.dp,
             )
-        }
-    }
-}
-
-// ---------------------------------------------------------------- Vinil (placeholder)
-
-object VinylStagePlaceholder : PlayerStage {
-    override val tab = PlayerSurfaceTab.VINYL
-
-    @Composable
-    override fun Content(track: Track, artwork: String, modifier: Modifier) {
-        val spin by rememberSpin(AudioPlayer.isPlaying, 5200)
-        Box(modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-            BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
-                Canvas(Modifier.fillMaxSize().rotate(spin)) {
-                    val r = size.minDimension / 2
-                    drawCircle(Brush.radialGradient(listOf(Color(0xFF2B2B30), Color(0xFF0B0B0D), Color(0xFF050506)), radius = r))
-                    for (i in 0 until 18) drawCircle(Color.White.copy(alpha = 0.045f), radius = r * (0.40f + i * 0.032f), style = Stroke(1f))
-                    drawArc(Color.White.copy(alpha = 0.10f), 200f, 40f, false, Offset(r * 0.12f, r * 0.12f), Size(r * 1.76f, r * 1.76f), style = Stroke(r * 0.06f, cap = StrokeCap.Round))
-                }
-                ArtworkImage(artwork.ifEmpty { track.artworkURL }, Modifier.fillMaxWidth(0.38f).aspectRatio(1f).rotate(spin), shape = CircleShape)
-                Box(Modifier.size(10.dp).background(Color(0xFF0B0B0D), CircleShape))
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------- K7 (placeholder)
-
-object CassetteStagePlaceholder : PlayerStage {
-    override val tab = PlayerSurfaceTab.CASSETTE
-
-    @Composable
-    override fun Content(track: Track, artwork: String, modifier: Modifier) {
-        val spin by rememberSpin(AudioPlayer.isPlaying, 2600)
-        Box(modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-            Box(Modifier.fillMaxWidth().aspectRatio(1.6f).clip(RoundedCornerShape(20.dp)).background(Brush.verticalGradient(listOf(Color(0xFF3A3A40), Color(0xFF1C1C20)))).padding(14.dp)) {
-                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(10.dp)).background(Color(0xFFEDE6D8)).padding(8.dp)) {
-                        Column {
-                            Text(track.title, style = Theme.font(15f, FontWeight.Bold, Color(0xFF2A2420)), maxLines = 1)
-                            Text(track.artist, style = Theme.font(12f, color = Color(0xFF5A4E45)), maxLines = 1)
-                        }
-                    }
-                    Box(Modifier.fillMaxWidth().weight(1.3f).clip(RoundedCornerShape(30.dp)).background(Color(0xFF0E0E10)), contentAlignment = Alignment.Center) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(56.dp)) {
-                            repeat(2) {
-                                Canvas(Modifier.size(54.dp).rotate(spin)) {
-                                    val r = size.minDimension / 2
-                                    drawCircle(Color(0xFFE9E9EC), radius = r)
-                                    drawCircle(Color(0xFF111114), radius = r * 0.5f)
-                                    for (k in 0 until 6) { val a = Math.toRadians(k * 60.0); drawLine(Color(0xFFE9E9EC), Offset(r, r), Offset(r + (r * 0.5f * Math.cos(a)).toFloat(), r + (r * 0.5f * Math.sin(a)).toFloat()), 4f) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------- Ondas (espectro real)
-
-object WavesStagePlaceholder : PlayerStage {
-    override val tab = PlayerSurfaceTab.WAVES
-
-    @Composable
-    override fun Content(track: Track, artwork: String, modifier: Modifier) {
-        DisposableEffect(Unit) { AudioSpectrum.acquire(); onDispose { AudioSpectrum.release() } }
-        val bands = AudioSpectrum.bands
-        val p = AudioPlayer.palette
-        Box(modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-            Canvas(Modifier.fillMaxWidth().height(240.dp)) {
-                val n = bands.size
-                val gap = 5.dp.toPx()
-                val bw = (size.width - gap * (n - 1)) / n
-                for (i in 0 until n) {
-                    val h = max(6.dp.toPx(), bands[i] * size.height)
-                    drawRoundRect(Brush.verticalGradient(listOf(p.vibrant, p.vibrant2), startY = size.height - h, endY = size.height),
-                        Offset(i * (bw + gap), size.height - h), Size(bw, h), androidx.compose.ui.geometry.CornerRadius(bw / 2))
-                }
-            }
         }
     }
 }

@@ -49,6 +49,7 @@ fun SheetsHost() {
     AppModel.playlistPickerTrack?.let { t -> AddToPlaylistSheet(t) { AppModel.playlistPickerTrack = null } }
     if (AppModel.showQueue) QueueSheet { AppModel.showQueue = false }
     if (AppModel.tabletSheet == "sleep") SleepTimerSheet { AppModel.tabletSheet = null }
+    if (AppModel.tabletSheet == "styles") StylesSheet { AppModel.tabletSheet = null }
 }
 
 @Composable
@@ -196,3 +197,24 @@ fun SleepTimerSheet(onDismiss: () -> Unit) {
     }
 }
 
+
+/** Painel de Estilos do Tocando agora: palco, ondas, toca-discos, disco, K7. */
+@Composable
+fun StylesSheet(onDismiss: () -> Unit) {
+    val s = LibraryStore
+    @Composable fun <T> StyleRow(title: String, items: List<Pair<String, T>>, selected: T, onSelect: (T) -> Unit) {
+        Text(title, style = Theme.font(14f, FontWeight.SemiBold, Theme.secondary), modifier = Modifier.padding(start = 24.dp, top = 10.dp, bottom = 2.dp))
+        androidx.compose.foundation.lazy.LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            itemsIndexed(items) { _, (label, v) -> PrismChip(label, v == selected) { onSelect(v) } }
+        }
+    }
+    LumeSheet(onDismiss) {
+        Text("Estilos", style = Theme.font(21f, FontWeight.Bold, Theme.text), modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        StyleRow("Palco", listOf(com.adriano.lumemusic.data.PlayerSurfaceTab.ARTWORK, com.adriano.lumemusic.data.PlayerSurfaceTab.VINYL, com.adriano.lumemusic.data.PlayerSurfaceTab.CASSETTE, com.adriano.lumemusic.data.PlayerSurfaceTab.WAVES).map { it.raw to it }, AppModel.playerStyle) { AppModel.playerStyle = it; AppModel.playerTab = it }
+        StyleRow("Estilo das ondas", com.adriano.lumemusic.data.VisualizerStyle.entries.map { it.title to it }, s.visualizerStyle) { s.visualizerStyle = it }
+        StyleRow("Acabamento do toca-discos", com.adriano.lumemusic.data.TurntableFinish.entries.map { it.raw to it }, s.turntableFinish) { s.turntableFinish = it }
+        StyleRow("Edição do disco", com.adriano.lumemusic.data.VinylEdition.entries.map { it.raw to it }, s.vinylEdition) { s.vinylEdition = it }
+        StyleRow("Estilo da fita K7", com.adriano.lumemusic.data.CassetteStyle.entries.map { it.raw to it }, s.cassetteStyle) { s.cassetteStyle = it }
+        Spacer(Modifier.height(16.dp))
+    }
+}
