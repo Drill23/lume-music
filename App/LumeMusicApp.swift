@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct LumeMusicApp: App {
+  /// Controla a orientação do app (só retrato; o Cover Flow libera paisagem). Ver OrientationKit.swift.
+  @UIApplicationDelegateAdaptor(OrientationAppDelegate.self) private var orientationDelegate
   @State private var showIntro = LibraryStore.shared.introEnabled
   @AppStorage("lume.appearance") private var appearance = "system"
 
