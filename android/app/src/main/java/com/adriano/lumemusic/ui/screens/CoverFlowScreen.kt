@@ -56,6 +56,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -104,9 +105,12 @@ import com.adriano.lumemusic.ui.theme.sf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.tanh
 
 // ============================================================ modelo
 
@@ -137,9 +141,9 @@ private class Metrics(
     val width: Float, val height: Float, val cover: Float, val coverTop: Float, val backAspect: Float,
     val flipScale: Float, val flipCenterY: Float, val interactTop: Float, val interactBottom: Float,
 ) {
-    val sideGap get() = cover * 0.80f
-    val step get() = cover * 0.30f
-    val dragSpacing get() = cover * 0.34f
+    val sideGap get() = cover * 0.88f
+    val step get() = cover * 0.38f
+    val dragSpacing get() = cover * 0.52f
     val flipShift get() = flipCenterY - (coverTop + cover / 2)
 
     companion object {
@@ -359,7 +363,7 @@ private fun PortraitLayout(
                     if (idx != sel) { setSel(idx); Haptics.selection() }
                 },
                 valueRange = 0f..max(1f, (items.size - 1).toFloat()),
-                onValueChangeFinished = { scope.launch { pos.animateTo(pos.value.roundToInt().toFloat(), springFor(0.4f, 0.85f)) } },
+                onValueChangeFinished = { scope.launch { pos.animateTo(pos.value.roundToInt().toFloat(), springFor(0.38f, 1f)) } },
                 colors = SliderDefaults.colors(thumbColor = Color.White.copy(0.95f), activeTrackColor = Color.White.copy(0.85f), inactiveTrackColor = Color.White.copy(0.22f)),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp).padding(top = sliderY.dp).height(36.dp),
             )
@@ -419,20 +423,34 @@ private fun CoverFlowStage(
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val current = if (items.isEmpty()) 0 else sel.coerceIn(0, items.size - 1)
     val dragEnabled = flippedId == null
-
-    fun setPosition(v: Float, haptic: Boolean) {
-        val idx = if (items.isEmpty()) 0 else v.roundToInt().coerceIn(0, items.size - 1)
-        if (idx != sel) { setSel(idx); if (haptic) Haptics.selection() }
+    val liveCenter by remember(items.size) {
+        derivedStateOf { if (items.isEmpty()) 0 else pos.value.roundToInt().coerceIn(0, items.size - 1) }
     }
+    val visibleRange by remember(items.size) {
+        derivedStateOf {
+            if (items.isEmpty()) IntRange.EMPTY
+            else max(0, floor(pos.value).toInt() - 5)..min(items.size - 1, ceil(pos.value).toInt() + 5)
+        }
+    }
+    var lastHapticMs by remember { mutableStateOf(0L) }
+
     fun unflip() { if (flippedId != null) setFlipped(null) }
 
-    LaunchedEffect(current, items.size) {
+    // Mantém seleção e legenda sincronizadas com o centro real ao vivo (nunca pula antes da animação).
+    LaunchedEffect(liveCenter) {
+        if (items.isNotEmpty() && liveCenter != sel) {
+            setSel(liveCenter)
+            val now = android.os.SystemClock.uptimeMillis()
+            if (now - lastHapticMs > 65L) { lastHapticMs = now; Haptics.selection() }
+        }
+    }
+
+    LaunchedEffect(liveCenter, items.size) {
         // Pré-carrega as faixas da capa central para o giro ser instantâneo.
         if (items.isEmpty()) return@LaunchedEffect
         delay(200)
-        tracks.load(items[current])
+        tracks.load(items[liveCenter])
     }
 
     Box(
@@ -449,27 +467,30 @@ private fun CoverFlowStage(
                     drag(down.id) { ch ->
                         vt.addPosition(ch.uptimeMillis, ch.position)
                         totalDx = ch.position.x - down.position.x
-                        if (!started && abs(totalDx) > slop) { started = true; startPos = pos.value; unflip() }
+                        if (!started && abs(totalDx) > slop) {
+                            started = true
+                            scope.launch { pos.stop() }
+                            startPos = pos.value
+                            unflip()
+                        }
                         if (started) {
                             ch.consume()
                             val raw = startPos - totalDx / density.density / m.dragSpacing
                             val maxV = max(0, items.size - 1).toFloat()
-                            val rb = if (raw < 0) raw * 0.3f else if (raw > maxV) maxV + (raw - maxV) * 0.3f else raw
+                            val rb = if (raw < 0) raw * 0.28f else if (raw > maxV) maxV + (raw - maxV) * 0.28f else raw
                             scope.launch { pos.snapTo(rb) }
-                            setPosition(rb, true)
                         }
                     }
                     if (started) {
                         val vx = vt.calculateVelocity().x
-                        val predicted = totalDx + vx * 0.4f
-                        val projected = startPos - predicted / density.density / m.dragSpacing
+                        val velItems = (-vx / density.density / m.dragSpacing).coerceIn(-12f, 12f)
                         val from = pos.value
-                        val target = projected.roundToInt().coerceIn(0, max(0, items.size - 1)).toFloat()
-                        val clamped = min(from + 9f, max(from - 9f, target))
-                        val distance = abs(clamped - from)
-                        val response = 0.42f + min(0.4f, distance * 0.05f)
-                        setPosition(clamped, false)
-                        scope.launch { pos.animateTo(clamped, springFor(response, 0.86f)) }
+                        val projected = from + velItems * 0.26f
+                        val clampedJump = min(from + 6f, max(from - 6f, projected))
+                        val target = clampedJump.roundToInt().coerceIn(0, max(0, items.size - 1)).toFloat()
+                        val distance = abs(target - from)
+                        val response = 0.36f + min(0.28f, distance * 0.045f)
+                        scope.launch { pos.animateTo(target, springFor(response, 1f), initialVelocity = velItems) }
                     }
                 }
             } else Modifier,
@@ -482,23 +503,26 @@ private fun CoverFlowStage(
         CoverFlowFloor(m.width, m.cover, Modifier.padding(top = (m.coverTop + m.cover).dp).graphicsLayer { alpha = floorA })
 
         if (items.isNotEmpty()) {
-            for (idx in max(0, current - 4)..min(items.size - 1, current + 4)) {
+            for (idx in visibleRange) {
                 val item = items[idx]
                 val isFlipped = flippedId == item.id
-                CoverFlowCardSlot(item, idx, current, m, pos, isFlipped, tracks, onClose = { unflip() }, onPlayAll = {
-                    val list = tracks.cache[items.getOrNull(sel)?.id ?: ""]
-                    if (!list.isNullOrEmpty()) { Haptics.medium(); AudioPlayer.play(list.first(), list) }
-                }) {
-                    // toque
-                    if (idx != sel) {
-                        if (flippedId != null) setFlipped(null)
-                        Haptics.light()
-                        scope.launch { pos.animateTo(idx.toFloat(), springFor(0.5f, 0.86f)) }
-                        setPosition(idx.toFloat(), false)
-                    } else if (!isFlipped) {
-                        val t = item.track
-                        if (t != null) { Haptics.medium(); AudioPlayer.play(t, items.mapNotNull { it.track }) }
-                        else { Haptics.medium(); setFlipped(item.id) }
+                androidx.compose.runtime.key(item.id) {
+                    CoverFlowCardSlot(item, idx, m, pos, isFlipped, tracks, onClose = { unflip() }, onPlayAll = {
+                        val list = tracks.cache[items.getOrNull(sel)?.id ?: ""]
+                        if (!list.isNullOrEmpty()) { Haptics.medium(); AudioPlayer.play(list.first(), list) }
+                    }) {
+                        // toque
+                        if (idx != liveCenter) {
+                            if (flippedId != null) setFlipped(null)
+                            Haptics.light()
+                            val distance = abs(idx - pos.value)
+                            val response = 0.40f + min(0.24f, distance * 0.045f)
+                            scope.launch { pos.animateTo(idx.toFloat(), springFor(response, 1f)) }
+                        } else if (!isFlipped) {
+                            val t = item.track
+                            if (t != null) { Haptics.medium(); AudioPlayer.play(t, items.mapNotNull { it.track }) }
+                            else { Haptics.medium(); setFlipped(item.id) }
+                        }
                     }
                 }
             }
@@ -506,19 +530,23 @@ private fun CoverFlowStage(
     }
 }
 
-/** Posiciona uma capa no palco: transformação do Cover Flow (CoverFlowTransform) lida a cada quadro sem recompor. */
+private val cfTanhNorm = tanh(1.6).toFloat()
+
+/** Posiciona uma capa no palco: curva C∞ sem quinas e zIndex ao vivo a partir de `pos.value`. */
 @Composable
 private fun CoverFlowCardSlot(
-    item: CoverFlowItem, idx: Int, current: Int, m: Metrics, pos: Animatable<Float, *>, flipped: Boolean, tracks: CoverFlowTrackStore,
+    item: CoverFlowItem, idx: Int, m: Metrics, pos: Animatable<Float, *>, flipped: Boolean, tracks: CoverFlowTrackStore,
     onClose: () -> Unit, onPlayAll: () -> Unit, onTap: () -> Unit,
 ) {
     val density = LocalDensity.current.density
     val cardW = m.cover * m.backAspect
     val flipScale by animateFloatAsState(if (flipped) m.flipScale else 1f, springFor(0.7f, 0.82f), label = "fs")
     val flipShift by animateFloatAsState(if (flipped) m.flipShift else 0f, springFor(0.7f, 0.82f), label = "fy")
-    val z = if (flipped) 100f else -abs(idx - current).toFloat()
+    val liveZ by remember(idx, flipped) {
+        derivedStateOf { if (flipped) 100f else -abs(idx - pos.value) }
+    }
     Box(
-        Modifier.fillMaxWidth().padding(top = m.coverTop.dp).zIndex(z),
+        Modifier.fillMaxWidth().padding(top = m.coverTop.dp).zIndex(liveZ),
         contentAlignment = Alignment.TopCenter,
     ) {
         Box(
@@ -526,15 +554,15 @@ private fun CoverFlowCardSlot(
                 val delta = idx - pos.value
                 val a = abs(delta)
                 val s = if (delta >= 0) 1f else -1f
-                val near = min(a, 1f)
-                val x = s * (m.sideGap * near + m.step * max(0f, a - 1f))
-                val angle = -s * 70f * near
-                val scale = 1f - 0.10f * near
-                val fade = if (a > 3.2f) max(0f, 1f - (a - 3.2f) / 1.2f) else 1f
-                val shade = 1f - 0.55f * near
+                val curve = tanh(1.6 * a.toDouble()).toFloat() / cfTanhNorm
+                val tilt = tanh(1.7 * a.toDouble()).toFloat()
+                val beyond = max(0f, a - 1f)
+                val x = s * (m.step * a + (m.sideGap - m.step) * curve)
+                val angle = -s * 56f * tilt
+                val scale = (1f - 0.16f * tilt - 0.025f * beyond).coerceAtLeast(0.68f)
+                val fade = if (a > 3.6f) max(0f, 1f - (a - 3.6f) / 1.1f) else 1f
                 transformOrigin = TransformOrigin(0.5f, 1f / 3f)
-                // RenderNode mede a distância da câmera em "polegadas" (valor × densityDpi px = valor × 160 dp). iOS: perspectiva ~6,3× a capa.
-                cameraDistance = (6.3f * m.cover / 160f).coerceAtLeast(2f * cardW / 160f)
+                cameraDistance = (8.5f * m.cover / 160f).coerceAtLeast(2.2f * cardW / 160f)
                 rotationY = angle
                 scaleX = scale; scaleY = scale
                 translationX = x * density
@@ -542,7 +570,9 @@ private fun CoverFlowCardSlot(
                 compositingStrategy = CompositingStrategy.Offscreen
             }.drawWithContent {
                 drawContent()
-                val shade = 1f - 0.55f * min(abs(idx - pos.value), 1f)
+                val a = abs(idx - pos.value)
+                val tilt = tanh(1.7 * a.toDouble()).toFloat()
+                val shade = (1f - 0.42f * tilt - 0.06f * max(0f, a - 1f)).coerceAtLeast(0.32f)
                 if (shade < 0.999f) drawRect(Color.Black.copy(1f - shade), blendMode = BlendMode.SrcAtop)
             }.clickable(MutableInteractionSource(), null) { onTap() },
         ) {

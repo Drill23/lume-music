@@ -1,11 +1,12 @@
+import QuartzCore
 import SwiftUI
 
-// MARK: - Cover Flow (Lume Music 5.0)
+// MARK: - Cover Flow (Lume Music 5.1)
 //
 // Fluxo: ao abrir em retrato mostra "Vire o celular". O acelerômetro (OrientationKit) detecta o aparelho na
-// horizontal e a interface é FORÇADA para paisagem; lá o Cover Flow clássico do iPod (capas a ~70°, reflexo no
-// chão, vidro). Tocar na capa central vira em 3D e mostra as faixas. "Continuar na vertical" abre uma versão
-// retrato preenchida (carrossel + lista de faixas). Ao sair, a interface volta a retrato.
+// horizontal e a interface é FORÇADA para paisagem; lá o Cover Flow clássico do iPod (capas em curva suave,
+// reflexo no chão, vidro). Tocar na capa central vira em 3D e mostra as faixas. "Continuar na vertical" abre
+// uma versão retrato preenchida (carrossel + lista de faixas). Ao sair, a interface volta a retrato.
 
 struct CoverFlowItem: Identifiable, Hashable {
   let id: String
@@ -19,9 +20,88 @@ struct CoverFlowItem: Identifiable, Hashable {
 
 // MARK: - Estado compartilhado (fora do SwiftUI para sobreviver à troca retrato <-> paisagem)
 
-/// Posição contínua do carrossel (muda a cada frame do arraste; só o palco observa).
+/// Posição contínua do carrossel, animada quadro a quadro via CADisplayLink (até 120 Hz) com mola
+/// criticamente amortecida: zIndex, janela visível e geometria 3D avançam 100% sincronizados, sem capas
+/// se atropelarem nem teletransportarem em gestos rápidos.
+@MainActor
 final class CoverFlowPosition: ObservableObject {
   @Published var value: Double = 0
+  private(set) var velocity: Double = 0
+
+  private var link: CADisplayLink?
+  private var target: Double = 0
+  private var x0: Double = 0
+  private var v0: Double = 0
+  private var omega: Double = 14
+  private var startTime: CFTimeInterval = 0
+  private var onTick: ((Double) -> Void)?
+
+  private final class LinkProxy: NSObject {
+    weak var owner: CoverFlowPosition?
+    init(_ owner: CoverFlowPosition) { self.owner = owner }
+    @objc func tick(_ link: CADisplayLink) {
+      MainActor.assumeIsolated { owner?.step(link) }
+    }
+  }
+
+  func stop() {
+    link?.invalidate()
+    link = nil
+    onTick = nil
+  }
+
+  func snap(to v: Double) {
+    stop()
+    value = v
+    velocity = 0
+  }
+
+  /// Desliza suavemente até `target` usando a solução analítica exata de uma mola criticamente amortecida
+  /// (sem rebote exagerado, sem salto instantâneo de zIndex e interrompível em qualquer quadro).
+  func animate(to newTarget: Double, initialVelocity: Double = 0, response: Double = 0.44, onTick: ((Double) -> Void)? = nil) {
+    stop()
+    target = newTarget
+    x0 = value - newTarget
+    // Limita a velocidade inicial para que mesmo gestos muito rápidos sejam legíveis e limpos.
+    v0 = min(13.0, max(-13.0, initialVelocity))
+    if abs(x0) < 0.0005 && abs(v0) < 0.01 {
+      value = newTarget
+      velocity = 0
+      onTick?(newTarget)
+      return
+    }
+    omega = (2 * .pi) / max(0.24, response)
+    startTime = CACurrentMediaTime()
+    self.onTick = onTick
+    let dl = CADisplayLink(target: LinkProxy(self), selector: #selector(LinkProxy.tick(_:)))
+    dl.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+    dl.add(to: .main, forMode: .common)
+    link = dl
+  }
+
+  private func step(_ link: CADisplayLink) {
+    let t = max(0, CACurrentMediaTime() - startTime)
+    let decay = exp(-omega * t)
+    let c = v0 + omega * x0
+    let x = (x0 + c * t) * decay
+    let v = (v0 - omega * c * t) * decay
+    if (abs(x) < 0.0006 && abs(v) < 0.01) || t > 2.2 {
+      let finalTarget = target
+      let cb = onTick
+      stop()
+      value = finalTarget
+      velocity = 0
+      cb?(finalTarget)
+      return
+    }
+    value = target + x
+    velocity = v
+    onTick?(value)
+  }
+
+  deinit {
+    link?.invalidate()
+  }
 }
 
 /// Seleção discreta (índice arredondado e capa virada). Muda raramente; legendas e painéis observam.
@@ -103,6 +183,7 @@ struct CoverFlowScreen: View {
       runDebugHooks()
     }
     .onDisappear {
+      position.stop()
       motion.stop()
       if forcedLandscape || OrientationLock.shared.mask != OrientationLock.defaultMask {
         OrientationLock.shared.lockPortrait()
@@ -112,7 +193,7 @@ struct CoverFlowScreen: View {
     .onChange(of: source) { _, _ in
       selection.flippedId = nil
       selection.index = 0
-      position.value = 0
+      position.snap(to: 0)
       rebuild()
     }
     .onReceive(AppModel.shared.$feed.dropFirst()) { _ in rebuild() }
@@ -230,7 +311,7 @@ struct CoverFlowScreen: View {
     let maxIndex = max(0, list.count - 1)
     if selection.index > maxIndex {
       selection.index = maxIndex
-      position.value = Double(maxIndex)
+      position.snap(to: Double(maxIndex))
     }
   }
 
@@ -295,9 +376,9 @@ struct CoverFlowMetrics {
   var interactBottom: CGFloat
   var artPixel: CGFloat
 
-  var sideGap: CGFloat { cover * 0.80 }
-  var step: CGFloat { cover * 0.30 }
-  var dragSpacing: CGFloat { cover * 0.34 }
+  var sideGap: CGFloat { cover * 0.88 }
+  var step: CGFloat { cover * 0.38 }
+  var dragSpacing: CGFloat { cover * 0.52 }
   var flipShift: CGFloat { flipCenterY - (coverTop + cover / 2) }
 
   static let barHeight: CGFloat = 44
@@ -505,13 +586,19 @@ struct CoverFlowScrubber: View {
     Slider(
       value: Binding(get: { position.value }, set: { v in
         selection.flippedId = nil
-        position.value = v
+        position.snap(to: v)
         let idx = min(max(0, Int(v.rounded())), max(0, count - 1))
         if idx != selection.index { selection.index = idx; Haptics.selection() }
       }),
       in: 0...Double(max(1, count - 1)),
       onEditingChanged: { editing in
-        if !editing { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { position.value = position.value.rounded() } }
+        if !editing {
+          let target = min(Double(max(0, count - 1)), max(0, position.value.rounded()))
+          position.animate(to: target, response: 0.38) { v in
+            let idx = min(max(0, Int(v.rounded())), max(0, count - 1))
+            if idx != selection.index { selection.index = idx }
+          }
+        }
       }
     )
     .tint(.white.opacity(0.85))
@@ -529,6 +616,10 @@ struct CoverFlowStage: View {
   @ObservedObject var tracks: CoverFlowTrackStore
 
   @State private var dragStart: Double?
+  @State private var lastDragPos: Double?
+  @State private var lastDragTime: CFTimeInterval = 0
+  @State private var dragVelocity: Double = 0
+  @State private var lastHapticTime: CFTimeInterval = 0
 
   var body: some View {
     let pos = position.value
@@ -548,16 +639,17 @@ struct CoverFlowStage: View {
         .allowsHitTesting(false)
 
       ZStack(alignment: .top) {
-        ForEach(visibleIndices(current), id: \.self) { idx in
+        ForEach(visibleIndices(pos), id: \.self) { idx in
           let item = items[idx]
           let isFlipped = selection.flippedId == item.id
+          let delta = Double(idx) - pos
           CoverFlowCard(item: item, size: m.cover, aspect: m.backAspect, artPixel: m.artPixel, flipped: isFlipped,
                         store: tracks, onClose: unflip, onPlayAll: playAll)
             .equatable()
             .scaleEffect(isFlipped ? m.flipScale : 1, anchor: UnitPoint(x: 0.5, y: 1.0 / 3.0))
             .offset(y: isFlipped ? m.flipShift : 0)
-            .modifier(CoverFlowTransform(delta: Double(idx) - pos, cover: m.cover, gap: m.sideGap, step: m.step))
-            .zIndex(isFlipped ? 100 : -abs(Double(idx) - pos))
+            .modifier(CoverFlowTransform(delta: delta, cover: m.cover, gap: m.sideGap, step: m.step))
+            .zIndex(isFlipped ? 100 : -abs(delta))
             .onTapGesture { tap(idx) }
         }
       }
@@ -569,6 +661,7 @@ struct CoverFlowStage: View {
     }
     .frame(width: m.width, height: m.height, alignment: .top)
     .gesture(drag, including: selection.flippedId == nil ? .all : .subviews)
+    .onDisappear { position.stop() }
     .task(id: current) {
       // Pré-carrega as faixas da capa central (e vizinhas) para o giro ser instantâneo.
       guard items.indices.contains(current) else { return }
@@ -583,50 +676,84 @@ struct CoverFlowStage: View {
     return min(items.count - 1, max(0, Int(pos.rounded())))
   }
 
-  /// Só as ~9 capas perto do centro são montadas.
-  private func visibleIndices(_ c: Int) -> [Int] {
+  /// Janela deslizante ampla em torno da posição ao vivo para capas entrarem/saírem sempre com opacidade 0.
+  private func visibleIndices(_ pos: Double) -> [Int] {
     guard !items.isEmpty else { return [] }
-    return Array(max(0, c - 4)...min(items.count - 1, c + 4))
+    let lo = max(0, Int(floor(pos)) - 5)
+    let hi = min(items.count - 1, Int(ceil(pos)) + 5)
+    guard lo <= hi else { return [] }
+    return Array(lo...hi)
   }
 
-  // MARK: Arraste com momentum
+  // MARK: Arraste com física contínua
 
   private var drag: some Gesture {
     DragGesture(minimumDistance: 6)
       .onChanged { v in
-        if dragStart == nil { dragStart = position.value; unflip() }
+        let now = CACurrentMediaTime()
+        if dragStart == nil {
+          // Interrompe qualquer deslize anterior no quadro visual exato (sem salto).
+          position.stop()
+          dragStart = position.value
+          lastDragPos = position.value
+          lastDragTime = now
+          dragVelocity = 0
+          unflip()
+        }
         let raw = (dragStart ?? 0) - Double(v.translation.width / m.dragSpacing)
-        setPosition(rubberBand(raw), haptic: true)
+        let rb = rubberBand(raw)
+        if let prev = lastDragPos {
+          let dt = now - lastDragTime
+          if dt > 0.002 && dt < 0.15 {
+            let inst = (rb - prev) / dt
+            dragVelocity = dragVelocity * 0.55 + inst * 0.45
+          }
+        }
+        lastDragPos = rb
+        lastDragTime = now
+        position.snap(to: rb)
+        syncSelection(rb, haptic: true)
       }
       .onEnded { v in
+        let now = CACurrentMediaTime()
         let start = dragStart ?? position.value
-        let projected = start - Double(v.predictedEndTranslation.width / m.dragSpacing)
         let from = position.value
-        let target = min(Double(items.count - 1), max(0, projected.rounded()))
-        // Limita o voo para a rolagem continuar "tátil".
-        let clamped = min(from + 9, max(from - 9, target))
+        let predDelta = -Double((v.predictedEndTranslation.width - v.translation.width) / m.dragSpacing)
+        let stale = (now - lastDragTime) > 0.09
+        let liveVel = stale ? 0 : dragVelocity
+        let rawTarget = from + (stale ? 0 : predDelta * 0.62)
+        let maxIdx = Double(max(0, items.count - 1))
+        let clampedJump = min(from + 6, max(from - 6, rawTarget))
+        let target = min(maxIdx, max(0, clampedJump.rounded()))
         dragStart = nil
-        let distance = abs(clamped - from)
-        let response = 0.42 + min(0.4, distance * 0.05)
-        withAnimation(.spring(response: response, dampingFraction: 0.86)) {
-          setPosition(clamped, haptic: false)
+        lastDragPos = nil
+        dragVelocity = 0
+        let distance = abs(target - from)
+        let response = 0.36 + min(0.28, distance * 0.045)
+        position.animate(to: target, initialVelocity: liveVel, response: response) { livePos in
+          syncSelection(livePos, haptic: true)
         }
       }
   }
 
   private func rubberBand(_ x: Double) -> Double {
     let maxV = Double(max(0, items.count - 1))
-    if x < 0 { return x * 0.3 }
-    if x > maxV { return maxV + (x - maxV) * 0.3 }
+    if x < 0 { return x * 0.28 }
+    if x > maxV { return maxV + (x - maxV) * 0.28 }
     return x
   }
 
-  private func setPosition(_ v: Double, haptic: Bool) {
-    position.value = v
+  private func syncSelection(_ v: Double, haptic: Bool) {
     let idx = currentIndex(v)
     if idx != selection.index {
       selection.index = idx
-      if haptic { Haptics.selection() }
+      if haptic {
+        let now = CACurrentMediaTime()
+        if now - lastHapticTime > 0.065 {
+          lastHapticTime = now
+          Haptics.selection()
+        }
+      }
     }
   }
 
@@ -640,10 +767,14 @@ struct CoverFlowStage: View {
   private func tap(_ idx: Int) {
     guard items.indices.contains(idx) else { return }
     if idx != selection.index {
-      // Toque numa lateral leva até ela.
+      // Toque numa lateral leva suavemente até ela com zIndex sincronizado em todo o percurso.
       if selection.flippedId != nil { selection.flippedId = nil }
       Haptics.light()
-      withAnimation(.spring(response: 0.5, dampingFraction: 0.86)) { setPosition(Double(idx), haptic: false) }
+      let distance = abs(Double(idx) - position.value)
+      let response = 0.40 + min(0.24, distance * 0.045)
+      position.animate(to: Double(idx), initialVelocity: position.velocity, response: response) { livePos in
+        syncSelection(livePos, haptic: false)
+      }
       return
     }
     let item = items[idx]
@@ -667,30 +798,30 @@ struct CoverFlowStage: View {
   }
 }
 
-/// Geometria do Cover Flow, animável em `delta` (distância ao centro) para os quadros intermediários ficarem certos.
-struct CoverFlowTransform: ViewModifier, Animatable {
-  var delta: Double
+/// Geometria contínua (C∞) do Cover Flow: transição sem quina em `|delta| = 1`, espaçamento estritamente
+/// crescente e perspectiva equilibrada para que nenhuma capa atravesse ou atropele a vizinha.
+struct CoverFlowTransform: ViewModifier {
+  let delta: Double
   let cover: CGFloat
   let gap: CGFloat
   let step: CGFloat
 
-  var animatableData: Double {
-    get { delta }
-    set { delta = newValue }
-  }
+  private static let tanhNorm = tanh(1.6)
 
   func body(content: Content) -> some View {
     let a = abs(delta)
     let s: Double = delta >= 0 ? 1 : -1
-    let near = min(a, 1)
-    let x = s * (Double(gap) * near + Double(step) * max(0, a - 1))
-    let angle = -s * 70 * near
-    let scale = 1 - 0.10 * near
-    let fade = a > 3.2 ? max(0, 1 - (a - 3.2) / 1.2) : 1
-    let shade = 1 - 0.55 * near
+    let curve = tanh(1.6 * a) / Self.tanhNorm
+    let tilt = tanh(1.7 * a)
+    let beyond = max(0, a - 1)
+    let x = s * (Double(step) * a + Double(gap - step) * curve)
+    let angle = -s * 56.0 * tilt
+    let scale = max(0.68, 1.0 - 0.16 * tilt - 0.025 * beyond)
+    let fade = a > 3.6 ? max(0, 1 - (a - 3.6) / 1.1) : 1
+    let shade = max(0.32, 1.0 - 0.42 * tilt - 0.06 * beyond)
     return content
       .colorMultiply(Color(white: shade))
-      .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0), anchor: UnitPoint(x: 0.5, y: 1.0 / 3.0), perspective: 0.5)
+      .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0), anchor: UnitPoint(x: 0.5, y: 1.0 / 3.0), perspective: 0.32)
       .scaleEffect(scale, anchor: UnitPoint(x: 0.5, y: 1.0 / 3.0))
       .offset(x: x)
       .opacity(fade)
