@@ -188,6 +188,10 @@ struct OnboardingView: View {
   @State private var loading = false
   @State private var revealRadius: CGFloat?
   @State private var accessInfo: AccessInfo?
+  @State private var trialTask: Task<TrialResult, Never>?
+  @State private var welcomeSheet: WelcomeSheet?
+
+  private enum WelcomeSheet: String, Identifiable { case code, claim; var id: String { rawValue } }
 
   private var step: OnboardingStep { steps[min(index, steps.count - 1)] }
   private var chosenGenres: [MusicGenre] { selectedGenres.compactMap { id in MusicGenre.all.first { $0.id == id } } }
@@ -225,6 +229,16 @@ struct OnboardingView: View {
       SoundFX.shared.begin()
       SoundFX.shared.holdOpen = true
       applyDebugState()
+      // Teste grátis automático: começa já nas boas-vindas, sem travar a animação.
+      if trialTask == nil, access.info == nil, access.trialUsedMessage == nil {
+        trialTask = Task { await access.startTrial() }
+      }
+    }
+    .sheet(item: $welcomeSheet) { s in
+      switch s {
+      case .code: ChangeCodeSheet()
+      case .claim: ClaimLifetimeSheet(prefillCode: access.prefillCode)
+      }
     }
   }
 
@@ -262,7 +276,8 @@ struct OnboardingView: View {
   private func stepView(width: CGFloat, markCY: CGFloat) -> some View {
     switch step {
     case .welcome:
-      WelcomeStep(centerY: markCY, loading: checkingConfig) { Task { await startFromWelcome() } }
+      WelcomeStep(centerY: markCY, loading: checkingConfig, showLinks: access.gateEnabled,
+                  onHaveCode: { welcomeSheet = .code }, onClaim: { welcomeSheet = .claim }) { Task { await startFromWelcome() } }
     case .access:
       AccessStep(info: $accessInfo) { go(1) }
     case .genres:
@@ -371,10 +386,17 @@ struct OnboardingView: View {
 
   private func startFromWelcome() async {
     checkingConfig = true
-    // Descobre se o portão de código está ligado (config remota, timeout de 6 s).
+    // Descobre se o portão de código está ligado (config remota, timeout de 6 s) e espera o teste grátis iniciado nas boas-vindas.
     await access.ensureConfig()
+    var trial: TrialResult?
+    if let t = trialTask { trial = await t.value }
     checkingConfig = false
-    if access.needsCode, !steps.contains(.access) {
+    var skipCodeStep = false
+    switch trial {
+    case .started, .used, .limited, .unreachable: skipCodeStep = true   // sucesso: sem código; usado: portão no fim; rede: tolerância
+    case .disabled, .none: break                                         // teste desligado: passo de código antigo
+    }
+    if !skipCodeStep, access.needsCode, !steps.contains(.access) {
       steps.insert(.access, at: 1)
     }
     SoundFX.shared.play(.tap)
@@ -467,6 +489,9 @@ struct RippleBurst: View {
 private struct WelcomeStep: View {
   let centerY: CGFloat
   let loading: Bool
+  var showLinks = false
+  var onHaveCode: () -> Void = {}
+  var onClaim: () -> Void = {}
   let onStart: () -> Void
 
   @State private var appear = false
@@ -529,11 +554,25 @@ private struct WelcomeStep: View {
           .scaleEffect(appear ? 1 : 0.9)
           .opacity(appear ? 1 : 0)
           .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(1.1), value: appear)
+        HStack(spacing: 6) {
+          if showLinks {
+            Button("Tenho um código", action: onHaveCode)
+            Text("·").foregroundStyle(Theme.tertiary)
+            Button("Já sou vitalício", action: onClaim)
+          }
+        }
+        .font(Theme.font(13.5, .medium))
+        .foregroundStyle(Theme.secondary)
+        .buttonStyle(.plain)
+        .frame(minHeight: 44)
+        .padding(.top, 6)
+        .opacity(appear ? 1 : 0)
+        .animation(.easeOut(duration: 0.6).delay(1.4), value: appear)
         Text(Theme.credit)
           .font(Theme.font(11.5))
           .foregroundStyle(Theme.tertiary)
-          .padding(.top, 18)
-          .padding(.bottom, 26)
+          .padding(.top, 4)
+          .padding(.bottom, 22)
       }
     }
     .onAppear {
@@ -561,6 +600,7 @@ private struct WelcomeStep: View {
 private struct AccessStep: View {
   @Binding var info: AccessInfo?
   let onDone: () -> Void
+  @State private var claiming = false
 
   var body: some View {
     VStack {
@@ -569,15 +609,20 @@ private struct AccessStep: View {
         AccessSuccessView(info: info, buttonTitle: "Continuar", onContinue: onDone)
           .transition(.scale(scale: 0.94).combined(with: .opacity))
       } else {
-        AccessCodeView { i in
+        AccessCodeView(prefill: AccessService.shared.prefillCode) { i in
           withAnimation(.spring(response: 0.55, dampingFraction: 0.85)) { info = i }
         }
         .transition(.opacity)
+        GlassButton(title: "Já sou vitalício", systemImage: "person.badge.key.fill", height: 46) { claiming = true }
+          .padding(.top, 14)
       }
       Spacer(minLength: 20)
     }
     .padding(.horizontal, 24)
     .padding(.top, 60)
+    .sheet(isPresented: $claiming) {
+      ClaimLifetimeSheet(prefillCode: AccessService.shared.prefillCode) { onDone() }
+    }
   }
 }
 

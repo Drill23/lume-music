@@ -21,8 +21,8 @@ android {
         applicationId = "com.adriano.lumemusic"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "5.0.0"
+        versionCode = 7
+        versionName = "5.1.0"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -110,6 +110,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     implementation("dev.chrisbanes.haze:haze:1.6.10")
+    implementation("com.google.zxing:core:3.4.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")

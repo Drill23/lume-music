@@ -7,6 +7,7 @@ struct LumeMusicApp: App {
   @State private var showOnboarding = !Onboarding.isDone || Onboarding.debugForced
   @State private var showIntro = LibraryStore.shared.introEnabled && Onboarding.isDone && !Onboarding.debugForced
   @StateObject private var access = AccessService.shared
+  @StateObject private var popups = Popups.shared
   @Environment(\.scenePhase) private var scenePhase
   @AppStorage("lume.appearance") private var appearance = "system"
 
@@ -25,6 +26,7 @@ struct LumeMusicApp: App {
         if showOnboarding {
           OnboardingView {
             withAnimation(.easeOut(duration: 0.2)) { showOnboarding = false }
+            access.onboardingFinished()
           }
           .zIndex(110)
           .transition(.opacity)
@@ -35,16 +37,29 @@ struct LumeMusicApp: App {
           .zIndex(100)
           .transition(.opacity)
         }
+
+        // Pop-ups de vidro: boas-vindas, pagamento confirmado, PIN, transferência e nova versão.
+        PopupHost(blocked: showOnboarding || showIntro || access.needsCode)
+          .zIndex(200)
       }
+      .sheet(isPresented: $popups.showUpgrade) { UpgradeView() }
       .background(Theme.canvas.ignoresSafeArea())
       .preferredColorScheme(scheme)
       .animation(.easeInOut(duration: 0.3), value: access.needsCode)
       .task {
         LumeTextures.shared.prewarmInBackground()
         access.startMonitoring()
+        UpdateService.shared.start()
+        if Onboarding.isDone && !Onboarding.debugForced { await access.ensureConfig(); await access.ensureTrialIfNeeded() }
+        if ProcessInfo.processInfo.arguments.contains("-LMSelfTest") { await AccessSelfTest.run() }
       }
       .onChange(of: scenePhase) { _, phase in
-        if phase == .active { Task { await access.checkIfDue() } }
+        if phase == .active {
+          Task {
+            await access.checkIfDue()
+            if Onboarding.isDone { await access.ensureTrialIfNeeded() }
+          }
+        }
       }
       .onReceive(NotificationCenter.default.publisher(for: Onboarding.reopenNotification)) { _ in
         showIntro = false

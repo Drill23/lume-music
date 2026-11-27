@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 e anterior: só o código vitalício + nº do pedido e a biblioteca (JSON pequeno). O token (access.sec, Keystore) NÃO entra. -->
+<full-backup-content>
+    <include domain="sharedpref" path="lume_lifetime.xml" />
+    <include domain="file" path="LumeMusic/library_v1.json" />
+</full-backup-content>

@@ -7,6 +7,12 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.Pin
 import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.ArrowDownward
@@ -191,6 +197,12 @@ fun sf(name: String): ImageVector = when (name) {
     "e.square.fill" -> Icons.Rounded.Square
     "text.line.first.and.arrowtriangle.forward" -> Icons.AutoMirrored.Rounded.PlaylistAdd
     "text.line.last.and.arrowtriangle.forward" -> Icons.AutoMirrored.Rounded.PlaylistAdd
+    "doc.on.doc" -> Icons.Rounded.ContentCopy
+    "lock.fill" -> Icons.Rounded.Lock
+    "key.fill" -> Icons.Rounded.Key
+    "arrow.left.arrow.right" -> Icons.Rounded.SwapHoriz
+    "system.update" -> Icons.Rounded.SystemUpdate
+    "pin" -> Icons.Rounded.Pin
     "cloud" -> Icons.Rounded.Cloud
     "cloud.download" -> Icons.Rounded.CloudDownload
     "arrow.down.circle.done" -> Icons.Rounded.DownloadDone

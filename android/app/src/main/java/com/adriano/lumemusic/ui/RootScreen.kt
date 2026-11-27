@@ -161,7 +161,10 @@ fun RootScreen() {
             AnimatedVisibility(AppModel.showCoverFlow, enter = fadeIn(tween(250)), exit = fadeOut(tween(200))) { com.adriano.lumemusic.ui.screens.CoverFlowScreen() }
 
             if (onboarding) com.adriano.lumemusic.ui.screens.OnboardingScreen { onboarding = false }
-            else com.adriano.lumemusic.ui.screens.AccessGateScreen()
+            else Box(Modifier.hazeSource(haze)) { com.adriano.lumemusic.ui.screens.AccessGateScreen() }
+
+            // Pop-ups de boas-vindas, upgrade, pagamento, PIN, transferência e atualização (sempre por cima de tudo).
+            com.adriano.lumemusic.ui.screens.UpgradeHost(onboarding)
         }
     }
 }

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+: idem backup_rules.xml. O token criptografado pelo Keystore não é copiado (a chave não migra). -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="lume_lifetime.xml" />
+        <include domain="file" path="LumeMusic/library_v1.json" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="lume_lifetime.xml" />
+        <include domain="file" path="LumeMusic/library_v1.json" />
+    </device-transfer>
+</data-extraction-rules>

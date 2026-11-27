@@ -250,7 +250,8 @@ fun OnboardingScreen(onFinished: () -> Unit) {
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val accessState by Access.service.state.collectAsState()
-    val needsAccess = Access.service.gateEnabled() && accessState !is AccessState.Active
+    // v2.3: o teste grátis automático substitui o passo do código; ele volta só se o painel desligou o teste.
+    LaunchedEffect(Unit) { com.adriano.lumemusic.ui.UpgradeModel.runTrial() }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val lstate by lifecycle.currentStateAsState()
     val running = lstate.isAtLeast(Lifecycle.State.RESUMED)
@@ -359,13 +360,16 @@ fun OnboardingScreen(onFinished: () -> Unit) {
                         when (s) {
                             Step.WELCOME -> WelcomeStep(markCY, {
                                 SoundFX.play(SoundFX.Effect.TAP)
-                                if (needsAccess && !steps.contains(Step.ACCESS)) steps = steps.toMutableList().also { it.add(1, Step.ACCESS) }
-                                go(1)
+                                scope.launch {
+                                    com.adriano.lumemusic.ui.UpgradeModel.awaitTrial()
+                                    if (com.adriano.lumemusic.ui.UpgradeModel.trialNeedsCodeStep() && !steps.contains(Step.ACCESS)) steps = steps.toMutableList().also { it.add(1, Step.ACCESS) }
+                                    go(1)
+                                }
                             })
                             Step.ACCESS -> Column(Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(top = 60.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                                val info = accessInfo
-                                if (info != null) com.adriano.lumemusic.ui.screens.AccessSuccessView(info, "Continuar") { go(1) }
-                                else com.adriano.lumemusic.ui.screens.AccessCodeEntry("Digite seu código de acesso", "Quem te enviou o código também te mostra o prazo.", "Ativar") { accessInfo = it }
+                                val info = accessInfo ?: (accessState as? AccessState.Active)?.info
+                                if (info != null) com.adriano.lumemusic.ui.screens.AccessSuccessView(info, "Continuar") { com.adriano.lumemusic.ui.UpgradeModel.onActivated(info); go(1) }
+                                else com.adriano.lumemusic.ui.screens.AccessCodeEntry("Digite seu código de acesso", "Quem te enviou o código também te mostra o prazo.", "Ativar", extra = { com.adriano.lumemusic.ui.screens.AccessGateExtras(null) }) { accessInfo = it }
                             }
                             Step.GENRES -> GenresStep(selectedGenres) { go(1) }
                             Step.ARTISTS -> ArtistsStep(chosenGenres, selectedArtists) { go(1) }
@@ -398,6 +402,7 @@ private fun RippleBurst(trigger: Int, modifier: Modifier) {
 
 @Composable
 private fun WelcomeStep(centerY: Float, onStart: () -> Unit) {
+    val com_UpgradeModel = com.adriano.lumemusic.ui.UpgradeModel
     val appear = appearProgress(0, 0.6f, 0.8f)
     val reduce = reduceMotion()
     val inf = rememberInfiniteTransition(label = "welcome")
@@ -423,7 +428,17 @@ private fun WelcomeStep(centerY: Float, onStart: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 36.dp).padding(top = 14.dp).graphicsLayer { alpha = sub })
             val btn = appearProgress(1100, 0.6f, 0.8f)
             PrismCta("Começar", "arrow.right", 54, modifier = Modifier.padding(horizontal = 28.dp).padding(top = 28.dp).graphicsLayer { val s = 0.9f + 0.1f * btn; scaleX = s; scaleY = s; alpha = btn }) { onStart() }
-            Text(Theme.credit, style = Theme.font(11.5f, color = Theme.tertiary), modifier = Modifier.padding(top = 18.dp, bottom = 26.dp))
+            // Links discretos para quem recebeu um código ou já comprou.
+            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.height(48.dp).pressable(0.95f) { com_UpgradeModel.showCodeEntry = true }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+                    Text("Tenho um código", style = Theme.font(13.5f, FontWeight.Medium, Theme.secondary))
+                }
+                Text("·", style = Theme.font(13.5f, color = Theme.tertiary))
+                Box(Modifier.height(48.dp).pressable(0.95f) { com_UpgradeModel.showRecover = true }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+                    Text("Já sou vitalício", style = Theme.font(13.5f, FontWeight.Medium, Theme.secondary))
+                }
+            }
+            Text(Theme.credit, style = Theme.font(11.5f, color = Theme.tertiary), modifier = Modifier.padding(top = 4.dp, bottom = 22.dp))
         }
     }
 }
