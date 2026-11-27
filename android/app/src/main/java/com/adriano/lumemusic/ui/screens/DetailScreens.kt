@@ -16,18 +16,30 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.adriano.lumemusic.audio.AudioPlayer
+import com.adriano.lumemusic.ui.PrismButton
+import com.adriano.lumemusic.ui.PrismChip
+import com.adriano.lumemusic.ui.theme.sf
 import com.adriano.lumemusic.data.AlbumShowcase
 import com.adriano.lumemusic.data.ArtistDetail
 import com.adriano.lumemusic.data.ArtistInfo
@@ -90,39 +102,87 @@ fun AlbumScreen(album: AlbumShowcase, bottomInset: Dp) {
 fun ArtistScreen(name: String, deezerId: Long?, bottomInset: Dp) {
     val detail by produceState<ArtistDetail?>(null, name, deezerId) { value = DiscoveryService.artistDetail(name, deezerId) }
     val following = LibraryStore.isFollowing(name)
+    var expandTop by remember(name) { mutableStateOf(false) }
+    var discogFilter by remember(name) { mutableStateOf("Todos") }
     val listState = rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
-        DetailHeader(name, listState, 215.dp)
+        DetailHeader(detail?.artist?.name ?: name, listState, 240.dp)
         val d = detail
-        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+            // Cabeçalho de artista no mesmo estilo full-bleed do iPhone (ArtistView)
             item {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.fillMaxWidth().height(300.dp)) {
                     val pic = d?.artist?.pictureURL ?: ""
-                    if (pic.isNotEmpty()) ArtworkImage(pic, Modifier.size(170.dp), shape = CircleShape, icon = "person.fill") else com.adriano.lumemusic.ui.ArtistAvatar(name, 170.dp)
-                    Text(d?.artist?.name ?: name, style = Theme.font(26f, FontWeight.Bold, Theme.text), textAlign = TextAlign.Center)
-                    d?.artist?.fans?.let { Text("${"%,d".format(it).replace(',', '.')} fãs", style = Theme.font(13.5f, color = Theme.secondary)) }
-                    Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        GlassButton(if (following) "Seguindo" else "Seguir", if (following) "checkmark" else "plus", modifier = Modifier.weight(1f)) { LibraryStore.toggleFollow(name) }
-                        GlassButton("Rádio", "dot.radiowaves.left.and.right", modifier = Modifier.weight(1f)) { d?.topTracks?.firstOrNull()?.let { com.adriano.lumemusic.audio.AudioPlayer.startRadio(it) } }
+                    if (pic.isNotEmpty()) ArtworkImage(pic, Modifier.fillMaxSize(), cornerRadius = 0.dp, icon = "person.fill")
+                    else Box(Modifier.fillMaxSize().background(Theme.prismDiagonal), contentAlignment = Alignment.Center) {
+                        Icon(sf("person.fill"), null, tint = Color.White.copy(0.8f), modifier = Modifier.size(80.dp))
+                    }
+                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to Color.Transparent, 0.82f to Theme.canvas.copy(0.78f), 1f to Theme.canvas)))
+                    Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(d?.artist?.name ?: name, style = Theme.font(32f, FontWeight.ExtraBold, Theme.text), maxLines = 2)
+                            Icon(sf("checkmark.seal.fill"), null, tint = Theme.accent, modifier = Modifier.size(20.dp))
+                        }
+                        d?.artist?.fans?.takeIf { it > 0 }?.let {
+                            Text("${"%,d".format(it).replace(',', '.')} fãs", style = Theme.font(14f, FontWeight.Medium, Theme.secondary))
+                        }
                     }
                 }
             }
             if (d == null) item { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { repeat(6) { Skeleton(Modifier.fillMaxWidth().height(56.dp)) } } }
             else {
-                if (d.topTracks.isNotEmpty()) {
-                    item { PlayShuffleRow(d.topTracks, d.artist.name) }
-                    item { Column { SectionHeader("Populares"); d.topTracks.take(10).forEachIndexed { i, t -> TrackRow(t, rank = i + 1, queue = d.topTracks) } } }
+                // Ações: Tocar (prisma) · Rádio · Seguir (idêntico ao iPhone)
+                item {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PrismButton("Tocar", "play.fill", height = 48.dp, modifier = Modifier.weight(1f)) {
+                            d.topTracks.firstOrNull()?.let { first ->
+                                AudioPlayer.shuffleEnabled = false
+                                AudioPlayer.play(first, d.topTracks, d.artist.name)
+                            }
+                        }
+                        GlassButton("Rádio", "dot.radiowaves.left.and.right", height = 48.dp, modifier = Modifier.weight(1f)) {
+                            d.topTracks.firstOrNull()?.let { AudioPlayer.startRadio(it) } ?: AppModel.showToast("Sem músicas para iniciar a rádio")
+                        }
+                        GlassButton(if (following) "Seguindo" else "Seguir", if (following) "checkmark" else "plus", height = 48.dp, modifier = Modifier.weight(1f)) {
+                            LibraryStore.toggleFollow(d.artist.name)
+                        }
+                    }
                 }
-                if (d.albums.isNotEmpty()) item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionHeader("Discografia", onAction = { AppModel.push(LumeRoute.Albums("Discografia · ${d.artist.name}", d.albums)) })
-                        HRow { items(d.albums.take(20), key = { it.id }) { a -> AlbumTile(a, subtitle = listOfNotNull(a.kind, a.year.ifEmpty { null }).joinToString(" · ")) { AppModel.push(LumeRoute.Album(a)) } } }
+                if (d.topTracks.isNotEmpty()) {
+                    val limit = if (expandTop) 20 else 5
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            SectionHeader(
+                                "Mais tocadas",
+                                actionLabel = if (d.topTracks.size > 5) (if (expandTop) "Ver menos" else "Ver tudo") else null,
+                                onAction = if (d.topTracks.size > 5) { { expandTop = !expandTop } } else null,
+                            )
+                            d.topTracks.take(limit).forEachIndexed { i, t -> TrackRow(t, rank = i + 1, queue = d.topTracks) }
+                        }
+                    }
+                }
+                if (d.albums.isNotEmpty()) {
+                    val filtered = d.albums.filter { alb ->
+                        when (discogFilter) {
+                            "Álbuns" -> (alb.kind ?: "Álbum") == "Álbum"
+                            "Singles e EPs" -> alb.kind == "Single" || alb.kind == "EP"
+                            else -> true
+                        }
+                    }.ifEmpty { d.albums }
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            SectionHeader("Discografia", actionLabel = "Ver tudo", onAction = { AppModel.push(LumeRoute.Albums("Discografia · ${d.artist.name}", filtered)) })
+                            HRow(spacing = 8.dp) {
+                                items(listOf("Todos", "Álbuns", "Singles e EPs")) { f -> PrismChip(f, discogFilter == f) { discogFilter = f } }
+                            }
+                            HRow { items(filtered.take(20), key = { it.id }) { a -> AlbumTile(a, subtitle = listOfNotNull(a.kind, a.year.ifEmpty { null }).joinToString(" · ")) { AppModel.push(LumeRoute.Album(a)) } } }
+                        }
                     }
                 }
                 if (d.related.isNotEmpty()) item {
                     Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionHeader("Artistas semelhantes")
-                        HRow { items(d.related, key = { it.id }) { a -> ArtistBubble(a) { AppModel.openArtist(a.name, a.deezerId) } } }
+                        SectionHeader("Artistas parecidos")
+                        HRow(spacing = 16.dp) { items(d.related, key = { it.id }) { a -> ArtistBubble(a) { AppModel.openArtist(a.name, a.deezerId) } } }
                     }
                 }
             }

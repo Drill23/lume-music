@@ -10,6 +10,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -66,8 +67,10 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
@@ -302,10 +305,9 @@ private fun LandscapeLayout(
     }
     val navBottom = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp().value }
     Box(Modifier.fillMaxSize()) {
-        CoverFlowStage(items, m, pos, sel, setSel, flippedId, setFlipped, tracks)
         if (items.isEmpty()) CoverFlowEmpty(source)
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp).graphicsLayer { alpha = flipA },
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp).graphicsLayer { alpha = flipA }.zIndex(2f),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             GlassIconButton("xmark", 44.dp, 17.dp, foreground = Color.White, desc = "Fechar") { if (flippedId == null) onClose() }
@@ -315,9 +317,13 @@ private fun LandscapeLayout(
             GlassIconButton("play.fill", 44.dp, 17.dp, foreground = Color.White, desc = "Tocar") { if (flippedId == null) onPlay() }
         }
         if (items.isNotEmpty()) {
-            Box(Modifier.fillMaxWidth().padding(top = (h - captionH - 4 - navBottom).dp).height(captionH.dp).graphicsLayer { alpha = flipA }, contentAlignment = Alignment.TopCenter) {
+            Box(Modifier.fillMaxWidth().padding(top = (h - captionH - 4 - navBottom).dp).height(captionH.dp).graphicsLayer { alpha = flipA }.zIndex(2f), contentAlignment = Alignment.TopCenter) {
                 CoverFlowCaption(items, sel, Modifier.fillMaxSize())
             }
+        }
+        // Quando uma capa está virada, o palco sobe acima das barras para nenhum botão invisível roubar toque da lista de faixas.
+        Box(Modifier.fillMaxSize().zIndex(if (flippedId != null) 10f else 1f)) {
+            CoverFlowStage(items, m, pos, sel, setSel, flippedId, setFlipped, tracks)
         }
     }
 }
@@ -497,7 +503,12 @@ private fun CoverFlowStage(
         ),
     ) {
         // Área de toque em todo o palco: um toque no fundo desvira a capa.
-        Box(Modifier.fillMaxWidth().padding(top = m.interactTop.dp).height(max(0f, m.interactBottom - m.interactTop).dp).clickable(MutableInteractionSource(), null) { unflip() })
+        val scrimA by animateFloatAsState(if (flippedId != null) 0.58f else 0f, tween(220), label = "scrim")
+        Box(
+            Modifier.fillMaxSize()
+                .then(if (flippedId != null) Modifier.background(Color.Black.copy(scrimA)).zIndex(50f) else Modifier)
+                .clickable(MutableInteractionSource(), null) { unflip() },
+        )
 
         val floorA by animateFloatAsState(if (flippedId == null) 1f else 0f, tween(250), label = "floor")
         CoverFlowFloor(m.width, m.cover, Modifier.padding(top = (m.coverTop + m.cover).dp).graphicsLayer { alpha = floorA })
@@ -532,57 +543,72 @@ private fun CoverFlowStage(
 
 private val cfTanhNorm = tanh(1.6).toFloat()
 
-/** Posiciona uma capa no palco: curva C∞ sem quinas e zIndex ao vivo a partir de `pos.value`. */
+/** Posiciona uma capa no palco: curva C∞ sem quinas, zIndex ao vivo e expansão em resolução nativa (sem esticar texto). */
 @Composable
 private fun CoverFlowCardSlot(
     item: CoverFlowItem, idx: Int, m: Metrics, pos: Animatable<Float, *>, flipped: Boolean, tracks: CoverFlowTrackStore,
     onClose: () -> Unit, onPlayAll: () -> Unit, onTap: () -> Unit,
 ) {
     val density = LocalDensity.current.density
-    val cardW = m.cover * m.backAspect
-    val flipScale by animateFloatAsState(if (flipped) m.flipScale else 1f, springFor(0.7f, 0.82f), label = "fs")
-    val flipShift by animateFloatAsState(if (flipped) m.flipShift else 0f, springFor(0.7f, 0.82f), label = "fy")
+    val wide = m.backAspect > 1.2f
+    // Dimensões nativas da capa virada (sem scaleX=1.6 esticando texto/botões).
+    val targetW = if (flipped) {
+        if (wide) min(m.width - 40f, max(m.cover * 2.35f, 460f)) else min(m.width - 32f, 350f)
+    } else m.cover
+    val targetH = if (flipped) {
+        if (wide) min(m.height - 28f, 300f) else min(m.height - m.coverTop - 36f, 370f)
+    } else m.cover
+    val targetTop = if (flipped) {
+        if (wide) max(14f, (m.height - targetH) / 2f) else max(m.coverTop - 10f, (m.height - targetH) / 2f)
+    } else m.coverTop
+
+    val cardW by animateDpAsState(targetW.dp, spring(0.84f, 220f), label = "cw")
+    val cardH by animateDpAsState(targetH.dp, spring(0.84f, 220f), label = "ch")
+    val topPad by animateDpAsState(targetTop.dp, spring(0.84f, 220f), label = "ct")
     val liveZ by remember(idx, flipped) {
         derivedStateOf { if (flipped) 100f else -abs(idx - pos.value) }
     }
     Box(
-        Modifier.fillMaxWidth().padding(top = m.coverTop.dp).zIndex(liveZ),
+        Modifier.fillMaxWidth().padding(top = topPad).zIndex(liveZ),
         contentAlignment = Alignment.TopCenter,
     ) {
         Box(
-            Modifier.size(cardW.dp, (m.cover * 1.5f).dp).graphicsLayer {
-                val delta = idx - pos.value
-                val a = abs(delta)
-                val s = if (delta >= 0) 1f else -1f
-                val curve = tanh(1.6 * a.toDouble()).toFloat() / cfTanhNorm
-                val tilt = tanh(1.7 * a.toDouble()).toFloat()
-                val beyond = max(0f, a - 1f)
-                val x = s * (m.step * a + (m.sideGap - m.step) * curve)
-                val angle = -s * 56f * tilt
-                val scale = (1f - 0.16f * tilt - 0.025f * beyond).coerceAtLeast(0.68f)
-                val fade = if (a > 3.6f) max(0f, 1f - (a - 3.6f) / 1.1f) else 1f
-                transformOrigin = TransformOrigin(0.5f, 1f / 3f)
-                cameraDistance = (8.5f * m.cover / 160f).coerceAtLeast(2.2f * cardW / 160f)
-                rotationY = angle
-                scaleX = scale; scaleY = scale
-                translationX = x * density
-                alpha = fade
+            Modifier.size(cardW, if (flipped) cardH else cardH * 1.5f).graphicsLayer {
+                if (flipped) {
+                    rotationY = 0f
+                    scaleX = 1f; scaleY = 1f
+                    translationX = 0f
+                    alpha = 1f
+                } else {
+                    val delta = idx - pos.value
+                    val a = abs(delta)
+                    val s = if (delta >= 0) 1f else -1f
+                    val curve = tanh(1.6 * a.toDouble()).toFloat() / cfTanhNorm
+                    val tilt = tanh(1.7 * a.toDouble()).toFloat()
+                    val beyond = max(0f, a - 1f)
+                    val x = s * (m.step * a + (m.sideGap - m.step) * curve)
+                    val angle = -s * 56f * tilt
+                    val scale = (1f - 0.16f * tilt - 0.025f * beyond).coerceAtLeast(0.68f)
+                    val fade = if (a > 3.6f) max(0f, 1f - (a - 3.6f) / 1.1f) else 1f
+                    transformOrigin = TransformOrigin(0.5f, 1f / 3f)
+                    cameraDistance = 12f * density
+                    rotationY = angle
+                    scaleX = scale; scaleY = scale
+                    translationX = x * density
+                    alpha = fade
+                }
                 compositingStrategy = CompositingStrategy.Offscreen
             }.drawWithContent {
                 drawContent()
-                val a = abs(idx - pos.value)
-                val tilt = tanh(1.7 * a.toDouble()).toFloat()
-                val shade = (1f - 0.42f * tilt - 0.06f * max(0f, a - 1f)).coerceAtLeast(0.32f)
-                if (shade < 0.999f) drawRect(Color.Black.copy(1f - shade), blendMode = BlendMode.SrcAtop)
-            }.clickable(MutableInteractionSource(), null) { onTap() },
+                if (!flipped) {
+                    val a = abs(idx - pos.value)
+                    val tilt = tanh(1.7 * a.toDouble()).toFloat()
+                    val shade = (1f - 0.42f * tilt - 0.06f * max(0f, a - 1f)).coerceAtLeast(0.32f)
+                    if (shade < 0.999f) drawRect(Color.Black.copy(1f - shade), blendMode = BlendMode.SrcAtop)
+                }
+            }.then(if (!flipped) Modifier.clickable(MutableInteractionSource(), null) { onTap() } else Modifier),
         ) {
-            Box(Modifier.fillMaxSize().graphicsLayer {
-                transformOrigin = TransformOrigin(0.5f, 1f / 3f)
-                scaleX = flipScale; scaleY = flipScale
-                translationY = flipShift * density
-            }) {
-                CoverFlowCard(item, m.cover, m.backAspect, flipped, tracks, onClose, onPlayAll)
-            }
+            CoverFlowCard(item, cardW.value, cardH.value, wide, flipped, tracks, onClose, onPlayAll)
         }
     }
 }
@@ -606,72 +632,105 @@ private fun CoverFlowFloor(width: Float, cover: Float, modifier: Modifier) {
 // ============================================================ capa (frente + reflexo + verso)
 
 @Composable
-private fun CoverFlowCard(item: CoverFlowItem, size: Float, aspect: Float, flipped: Boolean, store: CoverFlowTrackStore, onClose: () -> Unit, onPlayAll: () -> Unit) {
+private fun CoverFlowCard(
+    item: CoverFlowItem, widthDp: Float, heightDp: Float, wide: Boolean, flipped: Boolean,
+    store: CoverFlowTrackStore, onClose: () -> Unit, onPlayAll: () -> Unit,
+) {
     val density = LocalDensity.current.density
-    val angle by animateFloatAsState(if (flipped) 180f else 0f, springFor(0.7f, 0.82f), label = "flip")
-    val reflA by animateFloatAsState(if (flipped) 0f else 1f, tween(250), label = "refl")
-    val w = size * aspect
-    Box(Modifier.size(w.dp, (size * 1.5f).dp)) {
-        // reflexo barato: a mesma imagem espelhada, com máscara de gradiente
-        Box(
-            Modifier.offset(x = ((w - size) / 2).dp, y = (size + 2f).dp).size(size.dp, (size * 0.5f).dp).graphicsLayer { alpha = reflA; compositingStrategy = CompositingStrategy.Offscreen }
-                .clip(RoundedCornerShape(2.dp)).drawWithContent {
-                    drawContent()
-                    drawRect(Brush.verticalGradient(0f to Color.White.copy(0.46f), 0.5f to Color.White.copy(0.10f), 1f to Color.Transparent), blendMode = BlendMode.DstIn)
-                },
-        ) {
-            ArtworkImage(item.artworkURL, Modifier.size(size.dp).graphicsLayer { scaleY = -1f }, cornerRadius = 2.dp)
+    val angle by animateFloatAsState(if (flipped) 180f else 0f, springFor(0.62f, 0.88f), label = "flip")
+    val reflA by animateFloatAsState(if (flipped) 0f else 1f, tween(200), label = "refl")
+    Box(Modifier.fillMaxSize()) {
+        if (!flipped || reflA > 0.01f) {
+            // reflexo barato: a mesma imagem espelhada, com máscara de gradiente
+            Box(
+                Modifier.offset(y = (heightDp + 2f).dp).size(widthDp.dp, (heightDp * 0.5f).dp)
+                    .graphicsLayer { alpha = reflA; compositingStrategy = CompositingStrategy.Offscreen }
+                    .clip(RoundedCornerShape(4.dp)).drawWithContent {
+                        drawContent()
+                        drawRect(Brush.verticalGradient(0f to Color.White.copy(0.42f), 0.5f to Color.White.copy(0.10f), 1f to Color.Transparent), blendMode = BlendMode.DstIn)
+                    },
+            ) {
+                ArtworkImage(item.artworkURL, Modifier.size(widthDp.dp, heightDp.dp).graphicsLayer { scaleY = -1f }, cornerRadius = 4.dp)
+            }
         }
-        Box(Modifier.size(w.dp, size.dp).graphicsLayer { rotationY = angle; cameraDistance = 2.2f * w / 160f }, contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(widthDp.dp, heightDp.dp).graphicsLayer {
+                rotationY = angle
+                cameraDistance = 14f * density
+            },
+            contentAlignment = Alignment.Center,
+        ) {
             if (angle < 90f) {
-                Box(Modifier.size(size.dp)) {
-                    ArtworkImage(item.artworkURL, Modifier.fillMaxSize(), cornerRadius = 2.dp)
+                Box(Modifier.fillMaxSize()) {
+                    ArtworkImage(item.artworkURL, Modifier.fillMaxSize(), cornerRadius = 4.dp)
                     Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color.White.copy(0.16f), Color.Transparent, Color.Transparent))))
-                    Box(Modifier.fillMaxSize().border(0.5.dp, Color.White.copy(0.10f), RoundedCornerShape(2.dp)))
+                    Box(Modifier.fillMaxSize().border(0.6.dp, Color.White.copy(0.14f), RoundedCornerShape(4.dp)))
                 }
             } else {
-                Box(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }) { CoverFlowBack(item, size, aspect, store, onClose, onPlayAll) }
+                Box(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }) {
+                    CoverFlowBack(item, wide, store, onClose, onPlayAll)
+                }
             }
         }
     }
 }
 
-// ============================================================ verso: faixas em vidro
+// ============================================================ verso: faixas em vidro (resolução nativa)
 
 @Composable
-private fun CoverFlowBack(item: CoverFlowItem, size: Float, aspect: Float, store: CoverFlowTrackStore, onClose: () -> Unit, onPlayAll: () -> Unit) {
-    val wide = aspect > 1.2f
-    val w = size * aspect
+private fun CoverFlowBack(item: CoverFlowItem, wide: Boolean, store: CoverFlowTrackStore, onClose: () -> Unit, onPlayAll: () -> Unit) {
     val tracks = store.cache[item.id]
-    val shape = RoundedCornerShape(12.dp)
-    Box(Modifier.size(w.dp, size.dp).shadow(14.dp, shape, ambientColor = Color.Black.copy(0.55f), spotColor = Color.Black.copy(0.55f)).clip(shape).border(0.8.dp, Brush.linearGradient(Theme.glassStrokeColors), shape)) {
-        // fundo: a própria capa em miniatura esticada (zero custo de blur)
-        ArtworkImage(item.artworkURL, Modifier.fillMaxSize(), cornerRadius = 0.dp)
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(0.58f)))
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.White.copy(0.10f), 0.5f to Color.Transparent, 1f to Color.Transparent)))
-        Box(Modifier.fillMaxSize().padding(10.dp)) {
+    val shape = RoundedCornerShape(22.dp)
+    Box(
+        Modifier.fillMaxSize()
+            .shadow(22.dp, shape, ambientColor = Color.Black.copy(0.65f), spotColor = Color.Black.copy(0.65f))
+            .clip(shape)
+            .background(Color(0xFF101018))
+            .border(1.dp, Brush.linearGradient(Theme.glassStrokeColors), shape),
+    ) {
+        // Fundo ambiente suave: capa borrada + véu escuro legível (nunca atrapalha a leitura das faixas).
+        ArtworkImage(item.artworkURL, Modifier.fillMaxSize().scale(1.25f).blur(28.dp), cornerRadius = 0.dp)
+        Box(Modifier.fillMaxSize().background(Color(0xFF0A0A12).copy(0.76f)))
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.White.copy(0.10f), 0.35f to Color.Transparent, 1f to Color.Black.copy(0.25f))))
+
+        Box(Modifier.fillMaxSize().padding(14.dp)) {
             if (wide) {
-                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Column(Modifier.width((size * 0.40f).dp).fillMaxHeight().clickable(MutableInteractionSource(), null) { onClose() }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ArtworkImage(item.artworkURL, Modifier.size((size * 0.32f).dp).border(0.5.dp, Color.White.copy(0.18f), RoundedCornerShape(6.dp)), cornerRadius = 6.dp)
-                        Text(item.title, style = Theme.rounded(13f, FontWeight.Bold, Color.White), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(item.subtitle, style = Theme.font(11f, color = Color.White.copy(0.62f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Column(Modifier.width(148.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ArtworkImage(
+                            item.artworkURL,
+                            Modifier.size(72.dp).border(0.6.dp, Color.White.copy(0.22f), RoundedCornerShape(10.dp))
+                                .clickable(MutableInteractionSource(), null) { onClose() },
+                            cornerRadius = 10.dp,
+                        )
+                        Text(item.title, style = Theme.rounded(15.5f, FontWeight.Bold, Color.White), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(item.subtitle, style = Theme.font(12.5f, color = Color.White.copy(0.68f)), maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.weight(1f))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { BackPlayButton(onPlayAll); BackCloseButton(onClose) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            BackPlayButton(onPlayAll)
+                            BackCloseButton(onClose)
+                        }
                     }
-                    Box(Modifier.weight(1f).fillMaxHeight().glass(RoundedCornerShape(14.dp))) { TrackList(tracks) }
+                    Box(
+                        Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(0.06f)).border(0.7.dp, Color.White.copy(0.14f), RoundedCornerShape(16.dp)),
+                    ) { TrackList(tracks) }
                 }
             } else {
-                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        ArtworkImage(item.artworkURL, Modifier.size(38.dp), cornerRadius = 5.dp)
-                        Column(Modifier.weight(1f)) {
-                            Text(item.title, style = Theme.rounded(13f, FontWeight.Bold, Color.White), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(item.subtitle, style = Theme.font(11f, color = Color.White.copy(0.62f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ArtworkImage(item.artworkURL, Modifier.size(48.dp).border(0.6.dp, Color.White.copy(0.2f), RoundedCornerShape(8.dp)), cornerRadius = 8.dp)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(item.title, style = Theme.rounded(15.5f, FontWeight.Bold, Color.White), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(item.subtitle, style = Theme.font(12.5f, color = Color.White.copy(0.68f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        BackPlayButton(onPlayAll); BackCloseButton(onClose)
+                        BackPlayButton(onPlayAll)
+                        BackCloseButton(onClose)
                     }
-                    Box(Modifier.weight(1f).fillMaxWidth().glass(RoundedCornerShape(14.dp))) { TrackList(tracks) }
+                    Box(
+                        Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(0.06f)).border(0.7.dp, Color.White.copy(0.14f), RoundedCornerShape(16.dp)),
+                    ) { TrackList(tracks) }
                 }
             }
         }
@@ -680,35 +739,52 @@ private fun CoverFlowBack(item: CoverFlowItem, size: Float, aspect: Float, store
 
 @Composable
 private fun BackPlayButton(onClick: () -> Unit) {
-    Box(Modifier.size(Chrome.minTouch).pressable(0.92f) { onClick() }, contentAlignment = Alignment.Center) {
-        Box(Modifier.size(36.dp).background(Theme.prismDiagonal, CircleShape), contentAlignment = Alignment.Center) { Icon(sf("play.fill"), "Tocar", tint = Theme.onPrism, modifier = Modifier.size(15.dp)) }
-    }
+    Box(
+        Modifier.size(44.dp).pressable(0.92f) { onClick() }
+            .clip(CircleShape).background(Theme.prismDiagonal).border(0.8.dp, Color.White.copy(0.5f), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) { Icon(sf("play.fill"), "Tocar", tint = Theme.onPrism, modifier = Modifier.size(18.dp)) }
 }
 
 @Composable
 private fun BackCloseButton(onClick: () -> Unit) {
-    Box(Modifier.size(Chrome.minTouch).pressable(0.92f) { onClick() }, contentAlignment = Alignment.Center) {
-        Box(Modifier.size(36.dp).background(Color.White.copy(0.16f), CircleShape), contentAlignment = Alignment.Center) { Icon(sf("chevron.left"), "Voltar", tint = Color.White, modifier = Modifier.size(14.dp)) }
-    }
+    Box(
+        Modifier.size(44.dp).pressable(0.92f) { onClick() }
+            .clip(CircleShape).background(Color.White.copy(0.14f)).border(0.8.dp, Color.White.copy(0.24f), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) { Icon(sf("xmark"), "Fechar", tint = Color.White, modifier = Modifier.size(16.dp)) }
 }
 
 @Composable
 private fun TrackList(tracks: List<Track>?) {
     when {
-        tracks == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp) }
-        tracks.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Sem faixas disponíveis", style = Theme.font(12f, color = Color.White.copy(0.6f))) }
-        tracks.size <= 4 -> Column(Modifier.fillMaxSize().padding(vertical = 4.dp)) {
-            // Single/EP: lista do tamanho do conteúdo + resumo embaixo (sem painel vazio enorme)
-            tracks.forEachIndexed { i, t -> BackRow(i, t, tracks) }
-            Spacer(Modifier.weight(1f))
-            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Icon(sf(if (tracks.size == 1) "music.note" else "square.stack"), null, tint = Theme.rose, modifier = Modifier.size(22.dp))
-                Text(if (tracks.size == 1) "Single" else "EP · ${tracks.size} faixas", style = Theme.font(12f, FontWeight.SemiBold, Color.White))
-                Text(totalDuration(tracks), style = Theme.font(11f, color = Color.White.copy(0.55f)))
-            }
-            Spacer(Modifier.weight(1f))
+        tracks == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
         }
-        else -> LazyColumn(Modifier.fillMaxSize()) { itemsIndexed(tracks, key = { i, t -> "${i}_${t.id}" }) { i, t -> BackRow(i, t, tracks) } }
+        tracks.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Sem faixas disponíveis", style = Theme.font(13.5f, color = Color.White.copy(0.65f)))
+        }
+        else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp)) {
+            itemsIndexed(tracks, key = { i, t -> "${i}_${t.id}" }) { i, t ->
+                BackRow(i, t, tracks)
+                if (i < tracks.lastIndex) HorizontalDivider(color = Color.White.copy(0.08f), modifier = Modifier.padding(start = 38.dp, end = 12.dp))
+            }
+            if (tracks.size <= 4) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(sf(if (tracks.size == 1) "music.note" else "square.stack"), null, tint = Theme.rose, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "${if (tracks.size == 1) "Single" else "EP · ${tracks.size} faixas"} · ${totalDuration(tracks)}",
+                            style = Theme.font(12f, FontWeight.Medium, Color.White.copy(0.58f)),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -721,15 +797,21 @@ private fun totalDuration(tracks: List<Track>): String {
 private fun BackRow(i: Int, t: Track, tracks: List<Track>) {
     val playing = AudioPlayer.currentTrack?.id == t.id
     Row(
-        Modifier.fillMaxWidth().height(Chrome.minTouch).pressable(0.99f) { Haptics.light(); AudioPlayer.play(t, tracks) }.padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Modifier.fillMaxWidth().height(44.dp).pressable(0.99f) { Haptics.light(); AudioPlayer.play(t, tracks) }.padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(Modifier.width(18.dp), contentAlignment = Alignment.CenterEnd) {
-            if (playing) Icon(sf("waveform"), null, tint = Theme.rose, modifier = Modifier.size(13.dp))
-            else Text("${i + 1}", style = Theme.font(11f, FontWeight.Medium, Color.White.copy(0.45f)))
+        Box(Modifier.width(20.dp), contentAlignment = Alignment.CenterEnd) {
+            if (playing) Icon(sf("waveform"), null, tint = Theme.rose, modifier = Modifier.size(14.dp))
+            else Text("${i + 1}", style = Theme.font(12f, FontWeight.Medium, Color.White.copy(0.5f)))
         }
-        Text(t.title, style = Theme.font(13f, if (playing) FontWeight.SemiBold else FontWeight.Normal, if (playing) Theme.rose else Color.White), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Text(t.formattedDuration, style = Theme.font(11f, color = Color.White.copy(0.45f)))
+        Text(
+            t.title,
+            style = Theme.font(14f, if (playing) FontWeight.SemiBold else FontWeight.Medium, if (playing) Theme.rose else Color.White),
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+        )
+        if (t.formattedDuration.isNotEmpty()) {
+            Text(t.formattedDuration, style = Theme.font(12f, color = Color.White.copy(0.5f)))
+        }
     }
 }
 

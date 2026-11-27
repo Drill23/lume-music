@@ -346,85 +346,84 @@ fun ReplayScreen(bottomInset: Dp) {
 
 @Composable
 fun ImportScreen(bottomInset: Dp) {
-    val ctx = LocalContext.current
+    val coordinator = remember { ImportCoordinator() }
     val scope = rememberCoroutineScope()
-    var tab by remember { mutableStateOf("Link") }
-    var link by remember { mutableStateOf("") }
-    var text by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var results by remember { mutableStateOf<List<ImportService.ImportResult>>(emptyList()) }
-
-    fun runImport(block: suspend () -> List<ImportService.ImportResult>) {
-        busy = true; error = null
-        scope.launch {
-            try { results = block() } catch (e: ImportException) { error = e.message } catch (e: Exception) { error = "Não foi possível importar agora." }
-            busy = false
-        }
-    }
-    val perm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) runImport { ImportService.importFromDevice(ctx) } else error = "Permita o acesso às músicas do aparelho para importar."
-    }
-
     val closeKeyboard = rememberKeyboardCloser()
+    var showList by remember { mutableStateOf(false) }
+    var rawListName by remember { mutableStateOf("") }
+    var rawListText by remember { mutableStateOf("") }
     var textFocused by remember { mutableStateOf(false) }
+
     Column(Modifier.fillMaxSize()) {
         DetailHeader("Importar músicas")
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            item { HRow(spacing = 8.dp) { items(listOf("Link", "Lista de texto", "Aparelho")) { t -> PrismChip(t, tab == t) { tab = t; error = null } } } }
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             item {
-                Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    when (tab) {
-                        "Link" -> {
-                            Text("Cole o link de uma playlist ou álbum do Spotify, YouTube Music, Apple Music ou Amazon Music.", style = Theme.font(14f, color = Theme.secondary))
-                            Box(Modifier.fillMaxWidth().height(52.dp).glass(RoundedCornerShape(26.dp)).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
-                                if (link.isEmpty()) Text("https://…", style = Theme.font(16f, color = Theme.tertiary))
-                                BasicTextField(link, { link = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-                                    keyboardActions = KeyboardActions(onGo = { closeKeyboard(); if (link.isNotBlank()) runImport { listOf(ImportService.importFromURL(link)) } }),
-                                    modifier = Modifier.fillMaxWidth())
-                            }
-                            PrismButton("Importar link", "link") { if (link.isNotBlank()) runImport { listOf(ImportService.importFromURL(link)) } }
-                        }
-                        "Lista de texto" -> {
-                            Text("Uma música por linha: “Artista - Música”. Também aceita M3U.", style = Theme.font(14f, color = Theme.secondary))
-                            Box(Modifier.fillMaxWidth().height(48.dp).glass(RoundedCornerShape(24.dp)).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
-                                if (name.isEmpty()) Text("Nome da playlist", style = Theme.font(16f, color = Theme.tertiary))
-                                BasicTextField(name, { name = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
-                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth())
-                            }
-                            Box(Modifier.fillMaxWidth().height(180.dp).glass(RoundedCornerShape(20.dp)).padding(14.dp)) {
-                                BasicTextField(text, { text = it }, textStyle = Theme.font(15f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-                                    modifier = Modifier.fillMaxSize().onFocusChanged { textFocused = it.isFocused })
-                                // campo de várias linhas: o Enter pula de linha, então o "OK" fica visível enquanto o teclado estiver aberto
-                                if (textFocused) KeyboardOkButton(Modifier.align(Alignment.BottomEnd))
-                            }
-                            PrismButton("Criar playlist", "text.badge.plus") { if (text.isNotBlank()) runImport { listOf(ImportService.importFromText(text, name)) } }
-                        }
-                        else -> {
-                            Text("Importe as músicas que já estão neste aparelho. Elas serão encontradas no catálogo para tocar.", style = Theme.font(14f, color = Theme.secondary))
-                            PrismButton("Ler músicas do aparelho", "music.note") {
-                                val p = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
-                                perm.launch(p)
-                            }
-                        }
-                    }
-                    if (busy) Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(20.dp), color = Theme.rose, strokeWidth = 2.dp); Text("Importando…", style = Theme.font(14f, color = Theme.secondary)) }
-                    error?.let { Text(it, style = Theme.font(14f, color = Theme.danger)) }
+                Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Importar músicas", style = Theme.font(32f, FontWeight.Bold, Theme.text))
+                    Text("Traga suas playlists e músicas de outros serviços para a Lume.", style = Theme.font(15f, color = Theme.secondary))
                 }
             }
-            items(results.size) { i ->
-                val r = results[i]
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).glass(RoundedCornerShape(20.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ArtworkImage(r.artworkURL.ifEmpty { r.tracks.firstOrNull()?.artworkURL ?: "" }, Modifier.size(56.dp), 12.dp, icon = "music.note.list")
-                    Column(Modifier.weight(1f)) { Text(r.playlistName, style = Theme.font(16f, FontWeight.SemiBold, Theme.text), maxLines = 1); Text("${r.tracks.size} músicas · ${r.sourceBadge}", style = Theme.font(13f, color = Theme.secondary)) }
-                    PrismButton("Salvar", modifier = Modifier.size(width = 86.dp, height = 44.dp), height = 44.dp) {
-                        val pl = LibraryStore.createPlaylist(r.playlistName, sourceBadge = r.sourceBadge, artworkURL = r.artworkURL, tracks = r.tracks)
-                        results = results - r
-                        AppModel.showToast("Playlist “${pl.name}” criada")
-                        AppModel.pop(); AppModel.push(LumeRoute.Playlist(pl.id))
+            item {
+                Box(Modifier.padding(horizontal = 20.dp)) {
+                    ImportHubPanel(coordinator)
+                }
+            }
+            if (coordinator.phase is ImportPhase.Idle) {
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().padding(horizontal = 20.dp).glass(RoundedCornerShape(24.dp)).padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 44.dp).pressable(0.98f) { com.adriano.lumemusic.platform.Haptics.light(); showList = !showList },
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            Box(
+                                Modifier.size(44.dp).clip(CircleShape).background(Theme.prismDiagonal),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(sf("text.badge.plus"), null, tint = Theme.onPrism, modifier = Modifier.size(20.dp)) }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("Lista de texto", style = Theme.font(17f, FontWeight.SemiBold, Theme.text))
+                                Text("Uma música por linha, no formato Artista - Música.", style = Theme.font(13.5f, color = Theme.secondary))
+                            }
+                            Icon(sf(if (showList) "chevron.up" else "chevron.down"), null, tint = Theme.tertiary, modifier = Modifier.size(18.dp))
+                        }
+                        if (showList) {
+                            Box(Modifier.fillMaxWidth().height(48.dp).glass(RoundedCornerShape(24.dp)).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
+                                if (rawListName.isEmpty()) Text("Nome da playlist", style = Theme.font(15f, color = Theme.tertiary))
+                                BasicTextField(
+                                    rawListName, { rawListName = it }, singleLine = true,
+                                    textStyle = Theme.font(15f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
+                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            Box(Modifier.fillMaxWidth().height(140.dp).glass(RoundedCornerShape(18.dp)).padding(12.dp)) {
+                                if (rawListText.isEmpty()) Text("Uma música por linha:\nArtista - Música\nOutro Artista - Outra Música", style = Theme.font(13.5f, color = Theme.tertiary))
+                                BasicTextField(
+                                    rawListText, { rawListText = it },
+                                    textStyle = Theme.font(14.5f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                                    modifier = Modifier.fillMaxSize().onFocusChanged { textFocused = it.isFocused },
+                                )
+                                if (textFocused) KeyboardOkButton(Modifier.align(Alignment.BottomEnd))
+                            }
+                            GlassButton("Criar playlist da lista", "music.note.list", height = 48.dp) {
+                                closeKeyboard()
+                                val t = rawListText.trim()
+                                val n = rawListName.trim()
+                                if (t.isNotEmpty()) {
+                                    scope.launch {
+                                        coordinator.run("Lista") {
+                                            val res = ImportService.importFromText(t, n)
+                                            if (res.tracks.isEmpty()) throw ImportException("Cole pelo menos uma música na lista.")
+                                            listOf(res)
+                                        }
+                                        rawListText = ""; rawListName = ""; showList = false
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

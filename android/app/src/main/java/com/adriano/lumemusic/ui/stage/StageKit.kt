@@ -90,8 +90,8 @@ fun StageSwitcher(selection: PlayerSurfaceTab, onSelect: (PlayerSurfaceTab) -> U
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
                     ) {
                         val c = if (active) Theme.onPrism else StageSecondary
-                        Icon(sf(t.icon), null, tint = c, modifier = Modifier.size(16.dp))
-                        Text(t.raw, style = Theme.font(12.5f, FontWeight.SemiBold, c), maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 5.dp))
+                        Icon(sf(t.icon), null, tint = c, modifier = Modifier.size(15.dp))
+                        Text(t.raw, style = Theme.font(11.5f, FontWeight.SemiBold, c), maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 4.dp))
                     }
                 }
             }

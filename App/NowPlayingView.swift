@@ -277,10 +277,13 @@ struct NowPlayingView: View {
       }
       Spacer()
       if player.sleepRemainingSeconds > 0 {
-        Label(Theme.formatTime(Double(player.sleepRemainingSeconds)), systemImage: "moon.zzz.fill")
-          .font(Theme.font(12.5, .semibold))
-          .foregroundStyle(Theme.secondary)
-          .monospacedDigit()
+        Button { showOptions = true; Haptics.light() } label: {
+          Label(Theme.formatTime(Double(player.sleepRemainingSeconds)), systemImage: "moon.zzz.fill")
+            .font(Theme.font(12.5, .semibold))
+            .foregroundStyle(Theme.accent)
+            .monospacedDigit()
+            .frame(minHeight: 40)
+        }
         Spacer()
       }
       AirPlayButton()
@@ -353,32 +356,56 @@ struct ProgressScrubber: View {
   }
 }
 
-// MARK: - System volume
+// MARK: - System volume (MPVolumeView nativo transparente sobre a barra Liquid Glass)
 
 struct VolumeRow: View {
   @StateObject private var volume = SystemVolume()
+  @State private var dragging = false
 
   var body: some View {
-    HStack(spacing: 12) {
-      Image(systemName: "speaker.fill").font(.system(size: 12, weight: .semibold))
+    HStack(spacing: 10) {
+      Button {
+        Haptics.soft()
+        volume.step(by: -0.10)
+      } label: {
+        Image(systemName: "speaker.fill")
+          .font(.system(size: 12, weight: .semibold))
+          .frame(width: 28, height: 28)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Diminuir volume")
+
       GeometryReader { g in
+        let barH: CGFloat = dragging ? 10 : 6
         ZStack(alignment: .leading) {
           Capsule().fill(Theme.text.opacity(0.18))
-          Capsule().fill(Theme.text.opacity(0.75)).frame(width: max(6, g.size.width * CGFloat(volume.level)))
+            .frame(height: barH)
+          Capsule().fill(Theme.text.opacity(dragging ? 0.98 : 0.78))
+            .frame(width: max(barH, g.size.width * CGFloat(volume.level)), height: barH)
+            .animation(.easeOut(duration: 0.08), value: volume.level)
+          // MPVolumeView real com largura total: recebe o toque/arraste real do usuário no iOS 18–26.
+          VolumeViewHost(volume: volume, dragging: $dragging)
+            .frame(width: g.size.width, height: 28)
         }
-        .frame(height: 6)
-        .frame(maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .gesture(
-          DragGesture(minimumDistance: 0)
-            .onChanged { v in volume.set(Float(min(1, max(0, v.location.x / max(1, g.size.width))))) }
-        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: dragging)
       }
-      .frame(height: 22)
-      Image(systemName: "speaker.wave.3.fill").font(.system(size: 12, weight: .semibold))
+      .frame(height: 28)
+
+      Button {
+        Haptics.soft()
+        volume.step(by: 0.10)
+      } label: {
+        Image(systemName: "speaker.wave.3.fill")
+          .font(.system(size: 12, weight: .semibold))
+          .frame(width: 28, height: 28)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Aumentar volume")
     }
     .foregroundStyle(Theme.secondary)
-    .background(VolumeViewHost(volume: volume).frame(width: 1, height: 1).opacity(0.01))
   }
 }
 
@@ -389,30 +416,138 @@ final class SystemVolume: ObservableObject {
   private var obs: NSKeyValueObservation?
 
   init() {
-    obs = AVAudioSession.sharedInstance().observe(\.outputVolume, options: [.new]) { [weak self] s, _ in
+    let session = AVAudioSession.sharedInstance()
+    level = session.outputVolume
+    obs = session.observe(\.outputVolume, options: [.new]) { [weak self] s, _ in
       let v = s.outputVolume
       Task { @MainActor in self?.level = v }
     }
   }
 
-  func set(_ v: Float) {
-    level = v
-    slider?.setValue(v, animated: false)
-    slider?.sendActions(for: .valueChanged)
+  func syncFromSlider(_ v: Float) {
+    level = min(1, max(0, v))
+  }
+
+  func step(by delta: Float) {
+    let next = min(1, max(0, level + delta))
+    level = next
+    if let s = slider {
+      s.setValue(next, animated: false)
+      s.sendActions(for: .valueChanged)
+    }
+  }
+}
+
+/// MPVolumeView invisível em tamanho real que hospeda o MPVolumeSlider nativo do sistema.
+private final class LumeVolumeView: MPVolumeView {
+  weak var coordinator: VolumeViewHost.Coordinator?
+  private weak var configuredSlider: UISlider?
+
+  private static let clearTrack: UIImage = {
+    UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in }
+  }()
+
+  private static let clearThumb: UIImage = {
+    // Thumb transparente de 28×28 para manter o arraste 100% sensível sem desenhar bolinha padrão.
+    UIGraphicsImageRenderer(size: CGSize(width: 28, height: 28)).image { _ in }
+  }()
+
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    attachSliderIfNeeded()
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    attachSliderIfNeeded()
+    if let s = configuredSlider {
+      s.frame = bounds
+    }
+  }
+
+  private func attachSliderIfNeeded() {
+    guard let s = findSlider(in: self) else { return }
+    if configuredSlider !== s {
+      configuredSlider = s
+      s.setMinimumTrackImage(Self.clearTrack, for: .normal)
+      s.setMaximumTrackImage(Self.clearTrack, for: .normal)
+      s.setThumbImage(Self.clearThumb, for: .normal)
+      s.setThumbImage(Self.clearThumb, for: .highlighted)
+      s.tintColor = .clear
+      s.minimumTrackTintColor = .clear
+      s.maximumTrackTintColor = .clear
+      s.isContinuous = true
+      if let c = coordinator {
+        s.addTarget(c, action: #selector(VolumeViewHost.Coordinator.touchDown(_:)), for: .touchDown)
+        s.addTarget(c, action: #selector(VolumeViewHost.Coordinator.valueChanged(_:)), for: .valueChanged)
+        s.addTarget(c, action: #selector(VolumeViewHost.Coordinator.touchUp(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        let tap = UITapGestureRecognizer(target: c, action: #selector(VolumeViewHost.Coordinator.handleTap(_:)))
+        tap.cancelsTouchesInView = false
+        s.addGestureRecognizer(tap)
+      }
+      MainActor.assumeIsolated {
+        coordinator?.volume.slider = s
+      }
+    }
+  }
+
+  private func findSlider(in view: UIView) -> UISlider? {
+    for sub in view.subviews {
+      if let s = sub as? UISlider { return s }
+      if let nested = findSlider(in: sub) { return nested }
+    }
+    return nil
   }
 }
 
 private struct VolumeViewHost: UIViewRepresentable {
   let volume: SystemVolume
-  func makeUIView(context: Context) -> MPVolumeView {
-    let v = MPVolumeView(frame: .zero)
+  @Binding var dragging: Bool
+
+  func makeCoordinator() -> Coordinator { Coordinator(volume: volume, dragging: $dragging) }
+
+  func makeUIView(context: Context) -> LumeVolumeView {
+    let v = LumeVolumeView(frame: CGRect(x: 0, y: 0, width: 220, height: 28))
     v.showsVolumeSlider = true
-    DispatchQueue.main.async {
-      volume.slider = v.subviews.compactMap { $0 as? UISlider }.first
-    }
+    v.showsRouteButton = false
+    v.backgroundColor = .clear
+    v.coordinator = context.coordinator
     return v
   }
-  func updateUIView(_ uiView: MPVolumeView, context: Context) {}
+
+  func updateUIView(_ uiView: LumeVolumeView, context: Context) {
+    uiView.coordinator = context.coordinator
+  }
+
+  final class Coordinator: NSObject {
+    let volume: SystemVolume
+    @Binding var dragging: Bool
+
+    init(volume: SystemVolume, dragging: Binding<Bool>) {
+      self.volume = volume
+      _dragging = dragging
+    }
+
+    @objc func touchDown(_ s: UISlider) {
+      Task { @MainActor in dragging = true; volume.syncFromSlider(s.value) }
+    }
+
+    @objc func valueChanged(_ s: UISlider) {
+      Task { @MainActor in volume.syncFromSlider(s.value) }
+    }
+
+    @objc func touchUp(_ s: UISlider) {
+      Task { @MainActor in dragging = false; volume.syncFromSlider(s.value) }
+    }
+
+    @objc func handleTap(_ g: UITapGestureRecognizer) {
+      guard let s = g.view as? UISlider, s.bounds.width > 1 else { return }
+      let frac = Float(min(1, max(0, g.location(in: s).x / s.bounds.width)))
+      s.setValue(frac, animated: false)
+      s.sendActions(for: .valueChanged)
+      Task { @MainActor in volume.syncFromSlider(frac) }
+    }
+  }
 }
 
 struct AirPlayButton: UIViewRepresentable {

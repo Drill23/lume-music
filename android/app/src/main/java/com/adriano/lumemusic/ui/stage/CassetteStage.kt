@@ -128,16 +128,16 @@ private fun CassetteStageContent(track: Track, artwork: String, modifier: Modifi
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val gw = maxWidth.value; val gh = maxHeight.value
-        val availH = max(150f, gh - 44f - 40f)
+        val availH = (gh - 82f).coerceAtLeast(110f)
         val w = min(min(gw - 28f, availH * TapeGeo.aspect), 420f)
         val flip by animateFloatAsState(if (sideB) 180f else 0f, spring(0.82f, 80f), label = "k7flip")
         val artBack = ArtworkStore.photo(track.artist) ?: artwork
 
-        Column(Modifier.fillMaxSize().padding(bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxSize().padding(top = 6.dp, bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.weight(1f))
             Box(
                 Modifier.size(w.dp, (w / TapeGeo.aspect).dp)
-                    .graphicsLayer { rotationY = flip; cameraDistance = 2.2f * w / 160f }
+                    .graphicsLayer { rotationY = flip; cameraDistance = 14f * density.density }
                     .pointerInput(Unit) { detectTapGestures { Haptics.medium(); AudioPlayer.togglePlayPause() } },
             ) {
                 if (flip < 90f) CassetteTape(w, track.title, track.artist, artwork, false, style, Modifier.fillMaxSize())

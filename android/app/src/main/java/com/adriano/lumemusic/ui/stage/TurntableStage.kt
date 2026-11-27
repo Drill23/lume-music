@@ -117,19 +117,19 @@ private fun TurntableStage(track: Track, artwork: String, modifier: Modifier) {
         val gw = maxWidth.value
         val gh = maxHeight.value
         val thick = if (store.turntable3D) 0.035f else 0f
-        val availH = max(170f, gh - 44f - 36f)
+        val availH = (gh - 78f).coerceAtLeast(110f)
         // largura útil inclui as margens da base (sombra/pés): base = w·(1 + 2·marginX/aspect)
         val w = min(min((gw - 16f) / (1f + 2f * DeckGeo.marginX / DeckGeo.aspect), availH / (1 + thick) * DeckGeo.aspect), 520f)
         val h = w / DeckGeo.aspect
 
-        Column(Modifier.fillMaxSize().padding(bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxSize().padding(top = 6.dp, bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.weight(1f))
             TurntableDeck(
                 h = h, artwork = artwork, playing = playing, progressQ = progressQ, finish = store.turntableFinish, edition = store.vinylEdition,
                 is3D = store.turntable3D, rpm45 = rpm45, pitch = pitch, modifier = Modifier.size(w.dp, (h * (1 + thick)).dp),
             )
-            Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 66.dp).height(44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 66.dp).height(50.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SpeedPicker(rpm45) { rpm45 = it }
                 PlayDockButton(playing)
                 PitchSlider(pitch, Modifier.weight(1f).defaultMinSize(minWidth = 80.dp)) { v ->

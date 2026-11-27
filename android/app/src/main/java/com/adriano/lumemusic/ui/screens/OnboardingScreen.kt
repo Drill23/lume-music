@@ -380,7 +380,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
                             }
                             Step.GENRES -> GenresStep(selectedGenres) { go(1) }
                             Step.ARTISTS -> ArtistsStep(chosenGenres, selectedArtists) { go(1) }
-                            Step.IMPORT -> ImportStep(onImport = { openImport = true; go(1) }, onNext = { go(1) })
+                            Step.IMPORT -> ImportStep(onNext = { go(1) })
                             Step.DONE -> DoneStep(markCY, chosenGenres, selectedArtists.size) { enterApp() }
                         }
                     }
@@ -655,24 +655,24 @@ private fun ArtistBubble(name: String, picture: String?, selected: Boolean, onCl
 // ============================================================ 5. importar
 
 @Composable
-private fun ImportStep(onImport: () -> Unit, onNext: () -> Unit) {
+private fun ImportStep(onNext: () -> Unit) {
+    val coordinator = remember { ImportCoordinator() }
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.padding(horizontal = 28.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.padding(horizontal = 24.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Traga sua música", style = roundedTitle.copy(fontSize = 28.sp, color = Theme.text), textAlign = TextAlign.Center)
-            Text("Já tem playlists em outro serviço? Traga tudo para cá com um toque.", style = Theme.font(14.5f, color = Theme.secondary), textAlign = TextAlign.Center)
+            Text("Músicas do celular com 1 toque, ou playlists do Spotify, YouTube Music, Deezer e mais.", style = Theme.font(14.5f, color = Theme.secondary), textAlign = TextAlign.Center)
         }
-        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 22.dp, vertical = 20.dp)) {
-            Column(
-                Modifier.fillMaxWidth().glass(RoundedCornerShape(24.dp)).pressable(0.97f) { onImport() }.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Box(Modifier.size(84.dp).glass(CircleShape), contentAlignment = Alignment.Center) { Icon(sf("square.and.arrow.down"), null, tint = Theme.sky, modifier = Modifier.size(40.dp)) }
-                Text("Importar playlists", style = Theme.font(17f, FontWeight.Bold, Theme.text))
-                Text("Spotify, YouTube Music, Deezer e mais", style = Theme.font(13.5f, color = Theme.secondary), textAlign = TextAlign.Center)
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 14.dp),
+        ) {
+            ImportHubPanel(coordinator)
+        }
+        Column(Modifier.padding(horizontal = 24.dp).padding(top = 6.dp, bottom = 22.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (coordinator.importedTracks > 0) {
+                PrismCta("Continuar (${coordinator.importedTracks} músicas)", "checkmark", 54) { onNext() }
+            } else {
+                GlassCta("Agora não, importo depois", 54) { onNext() }
             }
-        }
-        Column(Modifier.padding(horizontal = 28.dp).padding(top = 8.dp, bottom = 26.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            GlassCta("Agora não, importo depois", 54) { onNext() }
             Text("Você pode importar a qualquer hora em Biblioteca.", style = Theme.font(12f, color = Theme.tertiary))
         }
     }

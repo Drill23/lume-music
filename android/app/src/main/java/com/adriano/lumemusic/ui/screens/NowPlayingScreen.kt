@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -127,18 +128,18 @@ fun NowPlayingScreen() {
                 }
             }
 
-            // Seletor de palco (pílula de vidro com indicador deslizante)
-            StageSwitcher(mode, { t -> if (t != PlayerSurfaceTab.LYRICS) AppModel.playerStyle = t; AppModel.playerTab = t }, Modifier.padding(top = 6.dp, bottom = 4.dp))
+            // Seletor de palco (pílula de vidro com indicador deslizante) — sempre acima do palco.
+            StageSwitcher(mode, { t -> if (t != PlayerSurfaceTab.LYRICS) AppModel.playerStyle = t; AppModel.playerTab = t }, Modifier.padding(top = 6.dp, bottom = 4.dp).zIndex(10f))
 
             // Palco
-            Box((if (compact) Modifier.height(if (lyrics) 330.dp else 290.dp) else Modifier.weight(1f)).fillMaxWidth()) {
+            Box((if (compact) Modifier.height(if (lyrics) 330.dp else 290.dp) else Modifier.weight(1f)).fillMaxWidth().zIndex(1f)) {
                 Crossfade(AppModel.playerTab, animationSpec = tween(260), label = "stage") { tab ->
                     PlayerStages.forTab(tab).Content(track, art, Modifier)
                 }
             }
 
-            // Controles
-            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(if (lyrics) 14.dp else 20.dp)) {
+            // Controles — sempre acima do palco.
+            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 8.dp).zIndex(10f), verticalArrangement = Arrangement.spacedBy(if (lyrics) 14.dp else 20.dp)) {
                 Metadata(track, lyrics)
                 SeekBar(Modifier.fillMaxWidth())
                 Transport(lyrics)
@@ -282,7 +283,7 @@ private fun SeekBar(modifier: Modifier) {
     }
 }
 
-/** Volume do sistema (STREAM_MUSIC), com a mesma linha de 6 dp do iOS. */
+/** Volume do sistema (STREAM_MUSIC), com a mesma linha interativa de 6→10 dp e botões laterais do iOS. */
 @Composable
 private fun VolumeRow() {
     val ctx = LocalContext.current
@@ -291,27 +292,34 @@ private fun VolumeRow() {
     var level by remember { mutableFloatStateOf(am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) / maxV.toFloat()) }
     var dragging by remember { mutableStateOf(false) }
     var width by remember { mutableFloatStateOf(1f) }
+    val barH by animateDpAsState(if (dragging) 10.dp else 6.dp, spring(0.8f, 600f), label = "volH")
     LaunchedEffect(Unit) {
         while (true) {
             if (!dragging) level = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) / maxV.toFloat()
-            kotlinx.coroutines.delay(600)
+            kotlinx.coroutines.delay(500)
         }
     }
-    fun set(x: Float) {
-        val v = (x / width).coerceIn(0f, 1f); level = v
-        am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, (v * maxV).toInt(), 0)
+    fun applyLevel(v: Float) {
+        val c = v.coerceIn(0f, 1f)
+        level = c
+        am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, Math.round(c * maxV), 0)
     }
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Icon(sf("speaker.fill"), null, tint = Color.White.copy(0.62f), modifier = Modifier.size(14.dp))
+    fun set(x: Float) = applyLevel(x / width)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.size(28.dp).pressable(0.88f) { Haptics.light(); applyLevel(level - 0.1f) }, contentAlignment = Alignment.Center) {
+            Icon(sf("speaker.fill"), "Diminuir volume", tint = Color.White.copy(0.62f), modifier = Modifier.size(14.dp))
+        }
         Box(
-            Modifier.weight(1f).height(22.dp).onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
+            Modifier.weight(1f).height(28.dp).onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
                 .pointerInput(Unit) { detectTapGestures { set(it.x) } }
                 .pointerInput(Unit) { detectDragGestures(onDragStart = { dragging = true; set(it.x) }, onDragEnd = { dragging = false }, onDragCancel = { dragging = false }) { c, _ -> set(c.position.x); c.consume() } },
             contentAlignment = Alignment.CenterStart,
         ) {
-            Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(Color.White.copy(0.18f)))
-            Box(Modifier.fillMaxWidth(level).height(6.dp).clip(CircleShape).background(Color.White.copy(0.75f)))
+            Box(Modifier.fillMaxWidth().height(barH).clip(CircleShape).background(Color.White.copy(0.18f)))
+            Box(Modifier.fillMaxWidth(level).height(barH).clip(CircleShape).background(Color.White.copy(if (dragging) 0.98f else 0.78f)))
         }
-        Icon(sf("speaker.wave.3.fill"), null, tint = Color.White.copy(0.62f), modifier = Modifier.size(15.dp))
+        Box(Modifier.size(28.dp).pressable(0.88f) { Haptics.light(); applyLevel(level + 0.1f) }, contentAlignment = Alignment.Center) {
+            Icon(sf("speaker.wave.3.fill"), "Aumentar volume", tint = Color.White.copy(0.62f), modifier = Modifier.size(15.dp))
+        }
     }
 }

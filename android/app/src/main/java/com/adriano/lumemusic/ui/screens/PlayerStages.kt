@@ -87,13 +87,15 @@ object ArtworkStage : PlayerStage {
 
     @Composable
     override fun Content(track: Track, artwork: String, modifier: Modifier) {
-        val scale by animateFloatAsState(if (AudioPlayer.isPlaying) 1f else 0.86f, spring(0.72f, Spring.StiffnessLow), label = "cover")
-        Box(modifier.fillMaxSize().padding(horizontal = 28.dp), contentAlignment = Alignment.Center) {
+        val scale by animateFloatAsState(if (AudioPlayer.isPlaying) 1f else 0.88f, spring(0.76f, Spring.StiffnessLow), label = "cover")
+        // Usa o menor lado entre largura e altura disponíveis no palco: ao dar play (scale -> 1.0),
+        // a capa nunca invade a barra de palcos em cima nem o título da música embaixo.
+        BoxWithConstraints(modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
+            val side = minOf(maxWidth, maxHeight)
             ArtworkImage(
                 artwork.ifEmpty { track.artworkURL },
-                Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale }
-                    .shadow(28.dp * scale, RoundedCornerShape(26.dp), ambientColor = AudioPlayer.palette.vibrant, spotColor = AudioPlayer.palette.vibrant)
-                    .aspectRatio(1f),
+                Modifier.size(side).graphicsLayer { scaleX = scale; scaleY = scale }
+                    .shadow(24.dp * scale, RoundedCornerShape(26.dp), ambientColor = AudioPlayer.palette.vibrant, spotColor = AudioPlayer.palette.vibrant),
                 26.dp,
             )
         }
