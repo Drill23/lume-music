@@ -273,6 +273,7 @@ final class DownloadManager: ObservableObject {
 private final class NativeFileDownloader: NSObject, URLSessionDownloadDelegate {
   private let destination: URL
   private let onProgress: (Double) -> Void
+  private var lastReported: Double = -1
   private var continuation: CheckedContinuation<Int64, Error>?
   private var finished = false
 
@@ -306,8 +307,13 @@ private final class NativeFileDownloader: NSObject, URLSessionDownloadDelegate {
     totalBytesWritten: Int64,
     totalBytesExpectedToWrite: Int64
   ) {
-    if totalBytesExpectedToWrite > 0 {
-      onProgress(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
+    // Antes: um salto para a main + 2 @Published por pedaço de ~16 KB (centenas por faixa),
+    // re-renderizando toda lista que observa o DownloadManager. Agora: no máximo a cada 2%.
+    guard totalBytesExpectedToWrite > 0 else { return }
+    let fraction = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+    if fraction - lastReported >= 0.02 || fraction >= 1 {
+      lastReported = fraction
+      onProgress(fraction)
     }
   }
 
