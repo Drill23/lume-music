@@ -21,8 +21,8 @@ android {
         applicationId = "com.adriano.lumemusic"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
-        versionName = "5.1.7"
+        versionCode = 15
+        versionName = "5.1.8"
         vectorDrawables.useSupportLibrary = true
     }
 

@@ -101,15 +101,18 @@ final class UpdateService: ObservableObject {
       }
     }
 
-    // 2. Manifesto público do site (Cloudflare Pages, sem limite de taxa)
+    // 2. Manifesto público do site (Cloudflare Pages, por plataforma — autoritativo quando responde 200 com seção "ios")
     if let (ok, o) = await fetchSiteManifest() {
       if ok { anySuccess = true }
-      if let o, isNewer(o) {
-        return presentOrDefer(o, manual: manual)
+      if let o {
+        if isNewer(o) { return presentOrDefer(o, manual: manual) }
+        // O manifesto já confirmou a versão atual do iOS: NÃO cair no GitHub Releases (que pode ter tag só do Android).
+        offer = nil
+        return .upToDate
       }
     }
 
-    // 3. Fallback direto no GitHub Releases
+    // 3. Fallback direto no GitHub Releases (apenas se o manifesto do site estiver indisponível)
     if let (ok, o) = await fetchGitHubLatest() {
       if ok { anySuccess = true }
       if let o, isNewer(o) {

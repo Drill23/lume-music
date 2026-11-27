@@ -146,17 +146,20 @@ class UpdateService(
             }
         }
 
-        // 2. Manifesto público do site (Cloudflare Pages, sem limite de taxa)
+        // 2. Manifesto público do site (Cloudflare Pages, por plataforma — autoritativo quando responde 200 com seção "android")
         val siteUrl = "$SITE_MANIFEST_URL?t=${now()}"
         val sr = try { http.get(siteUrl, 8000) } catch (_: IOException) { null }
         if (sr != null && sr.code == 200 && sr.body != null) {
             anySuccess = true
             store.put(K_LAST, now().toString())
             val info = parseSiteManifest(sr.body, "android")
-            if (info != null && isNewer(info, currentBuild, currentName)) return UpdateFetchResult.Available(info)
+            if (info != null) {
+                return if (isNewer(info, currentBuild, currentName)) UpdateFetchResult.Available(info)
+                else UpdateFetchResult.UpToDate
+            }
         }
 
-        // 3. Fallback direto no GitHub Releases
+        // 3. Fallback direto no GitHub Releases (apenas se o manifesto do site estiver indisponível)
         val gr = try { http.get(GITHUB_LATEST_URL, 8000) } catch (_: IOException) { null }
         if (gr != null && gr.code == 200 && gr.body != null) {
             anySuccess = true

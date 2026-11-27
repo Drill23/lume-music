@@ -1,18 +1,20 @@
 {
-  "versionName": "5.1.7",
-  "build": 14,
+  "versionName": "5.1.8",
+  "build": 15,
   "mandatory": false,
-  "notes": "• Refinamento visual completo no Android (Liquid Glass no player mesmo no modo claro)\n• Menus e submenus redesenhados em cartões agrupados com compartilhar e estilos\n• Botões, chips, mini player, barra inferior, grade de álbuns e Ajustes lapidados",
+  "notes": "• Atualizações agora separadas por plataforma (atualizar só o Android não avisa o iPhone, e vice-versa)",
   "android": {
-    "build": 14,
-    "versionName": "5.1.7",
+    "build": 15,
+    "versionName": "5.1.8",
     "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-Android.apk",
+    "notes": "• Atualizações agora isoladas por plataforma (Android só recebe novidades do Android)\n• Refinamento visual completo de botões, Liquid Glass no player, menus agrupados e cabeçalhos full-bleed",
     "mandatory": false
   },
   "ios": {
-    "build": 13,
-    "versionName": "5.1.6",
+    "build": 15,
+    "versionName": "5.1.8",
     "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-iPhone.ipa",
+    "notes": "• Atualizações agora isoladas por plataforma (iPhone só recebe novidades do iPhone, nunca avisos de atualização exclusiva do Android)",
     "mandatory": false
   }
 }

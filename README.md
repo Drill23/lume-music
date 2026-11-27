@@ -1,4 +1,4 @@
-# Lume Music 5.1.6
+# Lume Music 5.1.8
 
 **Site:** https://lume-music-enq.pages.dev (espelho: https://drill23.github.io/lume-music/)
 

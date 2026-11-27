@@ -283,6 +283,14 @@ class PurchaseProtectionTest {
         assertEquals("5.1.7", fromSite.versionName)
         assertNull(svcSite.fetch(14, "5.1.7"))
 
+        // 1b. Manifesto do site diz que Android está atualizado (5.1.7) mesmo com GitHub em tag 5.1.8 (ex.: release só de iOS) → NÃO oferece falso update!
+        val httpIso = RouteHttp().apply {
+            routes["/api/app/update"] = HttpResult(200, """{"ok":true,"available":false}""")
+            routes["version.json"] = HttpResult(200, """{"android":{"build":14,"versionName":"5.1.7","url":"https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-Android.apk"},"ios":{"build":15,"versionName":"5.1.8","url":"https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-iPhone.ipa"}}""")
+            routes["releases/latest"] = HttpResult(200, """{"tag_name":"v5.1.8","body":"Só iOS","assets":[{"name":"Lume-Music-Android.apk","browser_download_url":"https://github.com/Drill23/lume-music/releases/download/v5.1.8/Lume-Music-Android.apk"}]}""")
+        }
+        assertNull(UpdateService(httpIso, Mem(), { "https://painel.test" }).fetch(14, "5.1.7"))
+
         // 2. Painel e site sem oferta → cai direto no GitHub Releases por semver
         val httpGh = RouteHttp().apply {
             routes["/api/app/update"] = HttpResult(200, """{"ok":true,"available":false}""")
