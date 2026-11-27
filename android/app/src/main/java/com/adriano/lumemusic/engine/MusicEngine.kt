@@ -201,18 +201,25 @@ object MusicEngine {
         return null
     }
 
-    /** Escolhe o melhor formato progressivo: áudio puro m4a (itag 140) → itag 18 → qualquer mp4. */
+    /**
+     * Política igual à do iOS (27/11/2026): MP4 progressivo (itag 18) é o PRIMÁRIO — toca a faixa inteira e aceita
+     * seek/reconexão em qualquer Range. O áudio puro (itag 140) responde 403 a qualquer Range depois de ~1 MB sem
+     * PO token (testado com curl), então só é usado quando não há progressivo.
+     */
     fun pickProgressive(playerJson: kotlinx.serialization.json.JsonElement): Triple<String, Int, Int>? {
         val sd = playerJson["streamingData"] ?: return null
         val combined = sd["formats"].objs()
         val adaptive = sd["adaptiveFormats"].objs()
         fun url(f: JsonObject) = f["url"].str()
-        val audio140 = adaptive.firstOrNull { it["itag"].int() == 140 && url(it) != null }
-        if (audio140 != null) return Triple(url(audio140)!!, maxOf(96000, audio140["bitrate"].int() ?: 128000), 140)
         val v18 = combined.firstOrNull { it["itag"].int() == 18 && url(it) != null }
             ?: combined.firstOrNull { (it["mimeType"].str() ?: "").contains("mp4") && url(it) != null }
         if (v18 != null) return Triple(url(v18)!!, maxOf(96000, v18["bitrate"].int() ?: 128000), v18["itag"].int() ?: 18)
-        val anyAudio = adaptive.firstOrNull { (it["mimeType"].str() ?: "").startsWith("audio/mp4") && url(it) != null }
+        val audio140 = adaptive.firstOrNull { it["itag"].int() == 140 && url(it) != null }
+        if (audio140 != null) return Triple(url(audio140)!!, maxOf(96000, audio140["bitrate"].int() ?: 128000), 140)
+        val anyAudio = adaptive.firstOrNull {
+            val m = it["mimeType"].str() ?: ""
+            m.startsWith("audio/mp4") && m.contains("mp4a.40.2") && url(it) != null
+        } ?: adaptive.firstOrNull { (it["mimeType"].str() ?: "").startsWith("audio/mp4") && url(it) != null }
         if (anyAudio != null) return Triple(url(anyAudio)!!, anyAudio["bitrate"].int() ?: 128000, anyAudio["itag"].int() ?: 0)
         return null
     }

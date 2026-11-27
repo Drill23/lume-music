@@ -62,10 +62,12 @@ class EngineParsersTest {
         assertNull(InnerTube.parseClock("abc"))
     }
 
-    @Test fun picksAudioItag140ThenFallsBackTo18() {
+    @Test fun picksItag18FirstThenFallsBackTo140() {
         val both = Json.parseToJsonElement("""{"streamingData":{"formats":[{"itag":18,"url":"https://a/18","mimeType":"video/mp4","bitrate":444000}],
           "adaptiveFormats":[{"itag":251,"url":"https://a/251"},{"itag":140,"url":"https://a/140","bitrate":130000}]}}""")
-        assertEquals("https://a/140", MusicEngine.pickProgressive(both)!!.first)
+        assertEquals("https://a/18", MusicEngine.pickProgressive(both)!!.first)
+        val only140 = Json.parseToJsonElement("""{"streamingData":{"adaptiveFormats":[{"itag":251,"url":"https://a/251"},{"itag":140,"url":"https://a/140","bitrate":130000}]}}""")
+        assertEquals(140, MusicEngine.pickProgressive(only140)!!.third)
         val only18 = Json.parseToJsonElement("""{"streamingData":{"formats":[{"itag":18,"url":"https://a/18","mimeType":"video/mp4","bitrate":444000}]}}""")
         val p = MusicEngine.pickProgressive(only18)!!
         assertEquals("https://a/18", p.first); assertEquals(18, p.third)

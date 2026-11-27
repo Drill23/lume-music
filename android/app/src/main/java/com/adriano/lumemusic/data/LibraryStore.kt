@@ -52,6 +52,7 @@ private data class Snapshot(
     val introEnabled: Boolean = true,
     val playerSurface: String = PlayerSurfaceTab.ARTWORK.raw,
     val lyricsFontScale: Float = 1f,
+    val lockArtStyle: String = LockArtStyle.AUTOMATIC.raw,
 )
 
 /**
@@ -100,6 +101,13 @@ object LibraryStore {
     var introEnabled by Saved(true)
     var playerSurface by Saved(PlayerSurfaceTab.ARTWORK)
     var lyricsFontScale by Saved(1f)
+    /** Arte da tela de bloqueio: Automático (segue o palco), Capa, Vinil ou Fita K7. */
+    var lockArtStyle by Saved(LockArtStyle.AUTOMATIC)
+
+    /** Estilo efetivo: no Automático, K7 se o palco preferido for a fita; senão vinil (igual ao iOS). */
+    val resolvedLockArtStyle: LockArtStyle
+        get() = if (lockArtStyle != LockArtStyle.AUTOMATIC) lockArtStyle
+        else if (playerSurface == PlayerSurfaceTab.CASSETTE) LockArtStyle.CASSETTE else LockArtStyle.VINYL
 
     private val storeFile get() = File(File(appContext.filesDir, "LumeMusic").also { it.mkdirs() }, "library_v1.json")
     val offlineDir: File get() = File(appContext.filesDir, "OfflineAudio").also { it.mkdirs() }
@@ -441,6 +449,7 @@ object LibraryStore {
             introEnabled = snap.introEnabled
             playerSurface = PlayerSurfaceTab.fromRaw(snap.playerSurface)
             lyricsFontScale = snap.lyricsFontScale
+            lockArtStyle = LockArtStyle.fromRaw(snap.lockArtStyle)
         } catch (_: Exception) {}
     }
 
@@ -452,7 +461,7 @@ object LibraryStore {
             visualizerStyle.raw, soundProfile.raw, animatedArtEnabled, autoTranslateLyrics, followedArtists, playCounts,
             seenReleaseIds.toList(), savedAlbums, customEQGains, crossfadeSeconds, offlineMode, autoDownloadFavorites,
             totalListeningSeconds, turntableFinish.raw, vinylEdition.raw, turntable3D, cassetteStyle.raw, introEnabled,
-            playerSurface.raw, lyricsFontScale,
+            playerSurface.raw, lyricsFontScale, lockArtStyle.raw,
         )
         saveJob?.cancel()
         saveJob = scope.launch {

@@ -11,7 +11,9 @@ import com.adriano.lumemusic.data.Track
 import com.adriano.lumemusic.data.newTrack
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import java.util.concurrent.ConcurrentHashMap
 
@@ -45,64 +47,94 @@ private data class GenreDisk(
     val playlists: List<RemotePlaylist>, val updatedAt: Long,
 )
 
-/** Exploração por país, gênero, playlists editoriais e mixes personalizados. */
+/** Exploração por país, gênero, playlists editoriais e mixes personalizados (porta de CatalogExplorerService.swift). */
 object CatalogExplorerService {
     private val countryCache = ConcurrentHashMap<String, CountryChartBundle>()
     private val genreCache = ConcurrentHashMap<String, GenreHubBundle>()
     private val playlistCache = ConcurrentHashMap<Long, Pair<List<Track>, Long>>()
     private const val TTL = 2 * 3600_000L
+    private const val DEEZER_TOP_WORLDWIDE = 3155776842L
 
-    suspend fun countryChart(country: ChartCountry, force: Boolean = false): CountryChartBundle = coroutineScope {
-        val now = System.currentTimeMillis()
-        if (!force) countryCache[country.code]?.let { if (now - it.updatedAt < TTL) return@coroutineScope it }
-        val disk = DiscNet.caches("lume_country_${country.code}.json")
-        if (!force) {
+    // ---------------- Paradas por País ----------------
+
+    /** Último pacote salvo (memória/disco), de qualquer idade. Serve para mostrar algo NA HORA e atualizar depois. */
+    suspend fun cachedCountryChart(country: ChartCountry): CountryChartBundle? {
+        countryCache[country.code]?.let { return it }
+        return withContext(Dispatchers.IO) {
             try {
-                if (disk.exists()) {
-                    val d = LumeJson.decodeFromString(CountryDisk.serializer(), disk.readText())
-                    if (now - d.updatedAt < TTL && d.topSongs.isNotEmpty()) {
-                        val b = CountryChartBundle(country, d.topSongs, d.topAlbums, d.topArtists, d.trending, d.updatedAt)
-                        countryCache[country.code] = b
-                        return@coroutineScope b
-                    }
-                }
-            } catch (_: Exception) {}
+                val f = DiscNet.caches("lume_country_v2_${country.code}.json")
+                if (!f.exists()) return@withContext null
+                val d = LumeJson.decodeFromString(CountryDisk.serializer(), f.readText())
+                if (d.topSongs.isEmpty()) return@withContext null
+                CountryChartBundle(country, d.topSongs, d.topAlbums, d.topArtists, d.trending, d.updatedAt).also { countryCache[country.code] = it }
+            } catch (_: Exception) { null }
         }
-        val songsT = async { fetchAppleCountrySongs(country.code) }
-        val albumsT = async { fetchAppleCountryAlbums(country.code) }
+    }
+
+    /** Etapa rápida: só músicas e álbuns (compartilha o cache com a Home). Preserva artistas/em alta já conhecidos. */
+    suspend fun countryChartFast(country: ChartCountry, force: Boolean = false): CountryChartBundle? {
+        val place = ChartPlace.place(country.code) ?: return cachedCountryChart(country)
+        val list = ChartsService.load(place, force) ?: return cachedCountryChart(country)
+        val prev = cachedCountryChart(country)
+        val bundle = CountryChartBundle(country, list.songs, list.albums, prev?.topArtists ?: emptyList(), prev?.trending ?: emptyList(), list.updatedAt)
+        countryCache[country.code] = bundle
+        return bundle
+    }
+
+    /** Pacote completo: músicas, álbuns, artistas ranqueados e "em alta" do YouTube Music do país. */
+    suspend fun countryChart(country: ChartCountry, force: Boolean = false): CountryChartBundle = coroutineScope {
+        if (!force) countryCache[country.code]?.let {
+            if (System.currentTimeMillis() - it.updatedAt < TTL && (it.topArtists.isNotEmpty() || it.trending.isNotEmpty())) return@coroutineScope it
+        }
+        val fastT = async { countryChartFast(country, force) }
         val ytmT = async { fetchYTMCountryCharts(country.ytmCode) }
-        val songs = songsT.await(); val albums = albumsT.await(); val ytm = ytmT.await()
+        val fast = fastT.await(); val ytm = ytmT.await()
+        val songs = fast?.topSongs ?: emptyList()
+
         var artists = emptyList<ArtistInfo>()
-        if (ytm.first.isNotEmpty()) artists = resolveArtists(ytm.first, 16)
+        if (country.code == "world") {
+            // Global: artistas da própria parada global do Deezer (a lista de artistas do YouTube Global é dominada pela Índia).
+            ChartParsers.deezerPlaylistTracks(DEEZER_TOP_WORLDWIDE)?.let { artists = it.artists.take(16) }
+        } else if (ytm.first.isNotEmpty()) {
+            artists = resolveArtists(ytm.first, 16)
+        }
         if (artists.isEmpty()) artists = resolveArtists(songs.map { primaryArtist(it.artist) }, 16)
-        val bundle = CountryChartBundle(country, songs, albums, artists, ytm.second, System.currentTimeMillis())
+
+        val bundle = CountryChartBundle(country, songs, fast?.topAlbums ?: emptyList(), artists, ytm.second, System.currentTimeMillis())
         if (songs.isNotEmpty()) {
             countryCache[country.code] = bundle
-            try {
-                disk.writeText(LumeJson.encodeToString(CountryDisk.serializer(), CountryDisk(songs, albums, artists, ytm.second, bundle.updatedAt)))
-            } catch (_: Exception) {}
+            withContext(Dispatchers.IO) {
+                try {
+                    DiscNet.caches("lume_country_v2_${country.code}.json").writeText(
+                        LumeJson.encodeToString(CountryDisk.serializer(), CountryDisk(songs, bundle.topAlbums, artists, ytm.second, bundle.updatedAt)))
+                } catch (_: Exception) {}
+            }
         }
         bundle
+    }
+
+    // ---------------- Hub de Gênero Musical ----------------
+
+    /** Último hub salvo (qualquer idade) para mostrar na hora e atualizar em seguida. */
+    suspend fun cachedGenreHub(genre: MusicGenre): GenreHubBundle? {
+        genreCache[genre.id]?.let { return it }
+        return withContext(Dispatchers.IO) {
+            try {
+                val f = DiscNet.caches("lume_genre_v2_${genre.id}.json")
+                if (!f.exists()) return@withContext null
+                val d = LumeJson.decodeFromString(GenreDisk.serializer(), f.readText())
+                if (d.topSongs.isEmpty()) return@withContext null
+                GenreHubBundle(genre, d.topSongs, d.topAlbums, d.topArtists, d.playlists, d.updatedAt).also { genreCache[genre.id] = it }
+            } catch (_: Exception) { null }
+        }
     }
 
     suspend fun genreHub(genre: MusicGenre, force: Boolean = false): GenreHubBundle = coroutineScope {
         val now = System.currentTimeMillis()
         if (!force) genreCache[genre.id]?.let { if (now - it.updatedAt < TTL) return@coroutineScope it }
-        val disk = DiscNet.caches("lume_genre_${genre.id}.json")
-        if (!force) {
-            try {
-                if (disk.exists()) {
-                    val d = LumeJson.decodeFromString(GenreDisk.serializer(), disk.readText())
-                    if (now - d.updatedAt < TTL && d.topSongs.isNotEmpty()) {
-                        val b = GenreHubBundle(genre, d.topSongs, d.topAlbums, d.topArtists, d.playlists, d.updatedAt)
-                        genreCache[genre.id] = b
-                        return@coroutineScope b
-                    }
-                }
-            } catch (_: Exception) {}
-        }
-        val sT = async { fetchAppleGenreSongs(genre) }
-        val aT = async { fetchAppleGenreAlbums(genre) }
+        if (!force) cachedGenreHub(genre)?.let { if (now - it.updatedAt < TTL) return@coroutineScope it }
+        val sT = async { GenreSources.songs(genre, 30) }
+        val aT = async { GenreSources.albums(genre, 16) }
         val pT = async { SearchService.playlists(genre.playlistQuery, 10) }
         val appleSongs = sT.await(); val appleAlbums = aT.await(); val playlists = pT.await()
         val songs = appleSongs.toMutableList()
@@ -115,12 +147,17 @@ object CatalogExplorerService {
         val bundle = GenreHubBundle(genre, songs.take(35), appleAlbums, artists, playlists, System.currentTimeMillis())
         if (bundle.topSongs.isNotEmpty()) {
             genreCache[genre.id] = bundle
-            try {
-                disk.writeText(LumeJson.encodeToString(GenreDisk.serializer(), GenreDisk(bundle.topSongs, appleAlbums, artists, playlists, bundle.updatedAt)))
-            } catch (_: Exception) {}
+            withContext(Dispatchers.IO) {
+                try {
+                    DiscNet.caches("lume_genre_v2_${genre.id}.json").writeText(
+                        LumeJson.encodeToString(GenreDisk.serializer(), GenreDisk(bundle.topSongs, appleAlbums, artists, playlists, bundle.updatedAt)))
+                } catch (_: Exception) {}
+            }
         }
         bundle
     }
+
+    // ---------------- Faixas de Playlist Editorial ----------------
 
     suspend fun playlistTracks(deezerId: Long): List<Track> {
         playlistCache[deezerId]?.let { if (System.currentTimeMillis() - it.second < 3600_000L) return it.first }
@@ -147,8 +184,8 @@ object CatalogExplorerService {
     ): List<PersonalizedMix> {
         val mixes = mutableListOf<PersonalizedMix>()
         val br = feed?.topBrazil ?: emptyList()
+        val brHits = feed?.brazilianHits ?: emptyList()
         val gl = feed?.topGlobal ?: emptyList()
-        val tr = feed?.trending ?: emptyList()
         if (mostPlayed.isNotEmpty()) mixes.add(
             PersonalizedMix("mix_norepeat", "No Repeat", "As que você não para de ouvir", "SEU SOM", "repeat", 0xFF7BA9, 0xAD8CFF, mostPlayed.take(30)),
         )
@@ -172,50 +209,20 @@ object CatalogExplorerService {
         if (favorites.isNotEmpty()) mixes.add(
             PersonalizedMix("mix_favorites", "Radar de Curtidas", "Suas favoritas em sequência", "CURTIDAS", "heart.fill", 0xF43F5E, 0x9F1239, favorites.take(30)),
         )
-        if (br.isNotEmpty()) mixes.add(
-            PersonalizedMix("mix_br_radar", "Radar Brasil", "O que domina o país hoje", "BRASIL", "flame.fill", 0x10B981, 0x047857, br.take(30)),
+        if (brHits.isNotEmpty() || br.isNotEmpty()) mixes.add(
+            PersonalizedMix("mix_br_radar", "Radar Brasil",
+                if (brHits.isEmpty()) "O que mais toca no Brasil hoje" else "Só música brasileira que está tocando",
+                "BRASIL", "flame.fill", 0x10B981, 0x047857, (if (brHits.isEmpty()) br else brHits).take(30)),
         )
-        if (tr.isNotEmpty() || gl.isNotEmpty()) mixes.add(
-            PersonalizedMix("mix_global_wave", "Onda Global", "Hits subindo no mundo inteiro", "MUNDO", "globe.americas.fill", 0x06B6D4, 0x3B82F6, dedupeTracks(tr + gl).take(30)),
+        if (gl.isNotEmpty()) mixes.add(
+            PersonalizedMix("mix_global_wave", "Onda Global", "Os hits que o mundo está ouvindo", "MUNDO", "globe.americas.fill", 0x06B6D4, 0x3B82F6, dedupeTracks(gl).take(30)),
         )
         return mixes
     }
 
     // ---------------- Fetchers ----------------
 
-    private val reApple = Regex("""\d{2,4}x\d{2,4}(bb|cc)""")
-    private fun upscale1000(url: String) = url.replace(reApple, "1000x1000bb")
-
-    private suspend fun fetchAppleCountrySongs(country: String): List<Track> {
-        val obj = DiscNet.json("https://rss.marketingtools.apple.com/api/v2/$country/music/most-played/50/songs.json", 6, retries = 2)
-        return obj["feed"]["results"].objs().mapNotNull { r ->
-            val title = r["name"].str() ?: return@mapNotNull null
-            newTrack(
-                title = title, artist = r["artistName"].str() ?: "", artworkURL = upscale1000(r["artworkUrl100"].str() ?: ""),
-                sourceService = "Apple ${country.uppercase()}",
-                isExplicit = (r["contentAdvisoryRating"].str() ?: "").lowercase().startsWith("explic"),
-            )
-        }
-    }
-
-    private suspend fun fetchAppleCountryAlbums(country: String): List<AlbumShowcase> {
-        val obj = DiscNet.json("https://rss.marketingtools.apple.com/api/v2/$country/music/most-played/25/albums.json", 6, retries = 2)
-        return obj["feed"]["results"].objs().mapNotNull { r ->
-            val idStr = r["id"].strLoose() ?: return@mapNotNull null
-            var title = r["name"].str() ?: return@mapNotNull null
-            var kind = "Álbum"
-            for ((suffix, k) in listOf(" - Single" to "Single", " - EP" to "EP")) {
-                if (title.endsWith(suffix)) { title = title.dropLast(suffix.length); kind = k }
-            }
-            val date = r["releaseDate"].str()
-            val genre = r["genres"].objs().mapNotNull { it["name"].str() }.firstOrNull { it != "Música" && it != "Music" } ?: ""
-            AlbumShowcase(
-                "alb_$idStr", title, r["artistName"].str() ?: "", upscale1000(r["artworkUrl100"].str() ?: ""),
-                year = DiscText.year(date), genre = genre, releaseDate = date, kind = kind, itunesId = idStr.toLongOrNull(),
-            )
-        }
-    }
-
+    /** YouTube Music Charts do país: artistas em alta (ranqueados) + faixas da playlist "<País>: 20 vídeos em alta". */
     private suspend fun fetchYTMCountryCharts(ytmCode: String): Pair<List<String>, List<Track>> {
         val body = jsonObjectOf(
             "context" to InnerTube.webContext, "browseId" to "FEmusic_charts",
@@ -223,52 +230,36 @@ object CatalogExplorerService {
         )
         val charts = DiscNet.postJson("https://music.youtube.com/youtubei/v1/browse?prettyPrint=false", body, headers = InnerTube.ytHeaders)
             ?: return emptyList<String>() to emptyList()
-        val names = mutableListOf<String>()
-        val tracks = mutableListOf<Track>()
+        val artistNames = mutableListOf<String>()
+        var trendingId: String? = null
         charts.walk { d ->
             val r = d["musicResponsiveListItemRenderer"].obj()
             if (r != null) {
-                val vid = r["playlistItemData"]["videoId"].str()
                 val cols = r["flexColumns"].objs()
-                val c0 = cols.getOrNull(0)?.let { InnerTube.textOfColumn(it) } ?: ""
-                val c1 = cols.getOrNull(1)?.let { InnerTube.textOfColumn(it) } ?: ""
-                if (!vid.isNullOrEmpty() && c0.isNotEmpty()) {
-                    val th = r["thumbnail"]["musicThumbnailRenderer"]["thumbnail"]["thumbnails"].objs()
-                    val thumb = th.lastOrNull()?.get("url").str() ?: ""
-                    tracks.add(newTrack(videoId = vid, title = c0, artist = c1, artworkURL = thumb, sourceService = "YouTube Music"))
-                } else if (c0.isNotEmpty()) names.add(c0)
+                val hasVideo = r["playlistItemData"]["videoId"].str() != null
+                val c0 = cols.firstOrNull()?.let { InnerTube.textOfColumn(it) } ?: ""
+                if (!hasVideo && c0.isNotEmpty()) artistNames.add(c0)
+            }
+            val two = d["musicTwoRowItemRenderer"].obj()
+            if (trendingId == null && two != null) {
+                val text = InnerTube.runsArray(two["title"]).firstOrNull()
+                val bid = two["navigationEndpoint"]["browseEndpoint"]["browseId"].str()
+                if (text != null && text.lowercase().contains("vídeos em alta") && bid != null) trendingId = bid
             }
             false
         }
-        return names to tracks
-    }
-
-    private suspend fun fetchAppleGenreSongs(genre: MusicGenre): List<Track> {
-        val gid = genre.appleGenreId ?: return emptyList()
-        val obj = DiscNet.json("https://itunes.apple.com/${genre.appleCountry}/rss/topsongs/limit=30/genre=$gid/json", 6, retries = 1)
-        return obj["feed"]["entry"].objs().mapNotNull { e ->
-            val title = e["im:name"]["label"].str() ?: return@mapNotNull null
-            val artist = e["im:artist"]["label"].str() ?: return@mapNotNull null
-            val art = upscale1000(e["im:image"].objs().lastOrNull()?.get("label").str() ?: "")
-            val album = e["im:collection"]["im:name"]["label"].str() ?: ""
-            newTrack(title = title, artist = artist, album = album, artworkURL = art, sourceService = genre.title)
+        val tracks = mutableListOf<Track>()
+        trendingId?.let { pid ->
+            val obj = DiscNet.postJson("https://music.youtube.com/youtubei/v1/browse?prettyPrint=false",
+                jsonObjectOf("context" to InnerTube.webContext, "browseId" to pid), headers = InnerTube.ytHeaders)
+            obj?.walk { d ->
+                val r = d["musicResponsiveListItemRenderer"].obj()
+                if (r != null) InnerTube.ytmChartTrack(r)?.let { tracks.add(it) }
+                false
+            }
         }
-    }
-
-    private suspend fun fetchAppleGenreAlbums(genre: MusicGenre): List<AlbumShowcase> {
-        val gid = genre.appleGenreId ?: return emptyList()
-        val obj = DiscNet.json("https://itunes.apple.com/${genre.appleCountry}/rss/topalbums/limit=16/genre=$gid/json", 6, retries = 1)
-        return obj["feed"]["entry"].objs().mapNotNull { e ->
-            val title = e["im:name"]["label"].str() ?: return@mapNotNull null
-            val artist = e["im:artist"]["label"].str() ?: return@mapNotNull null
-            val idStr = e["id"]["attributes"]["im:id"].str() ?: Track.stableId(title, artist)
-            val art = upscale1000(e["im:image"].objs().lastOrNull()?.get("label").str() ?: "")
-            val release = e["im:releaseDate"]["label"].str()
-            AlbumShowcase(
-                "alb_$idStr", title, artist, art, year = DiscText.year(release), genre = genre.title,
-                releaseDate = release?.take(10), kind = "Álbum", itunesId = idStr.toLongOrNull(),
-            )
-        }
+        val seen = HashSet<String>()
+        return artistNames to tracks.filter { seen.add(it.id) }
     }
 
     private suspend fun resolveArtists(names: List<String>, limit: Int): List<ArtistInfo> = coroutineScope {

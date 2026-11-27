@@ -189,6 +189,7 @@ private fun RouteHost(route: LumeRoute, bottomInset: androidx.compose.ui.unit.Dp
         is LumeRoute.Genre -> GenreHubScreen(route.genre, bottomInset)
         is LumeRoute.Mix -> MixScreen(route.mix, bottomInset)
         LumeRoute.Releases -> ReleasesScreen(bottomInset)
+        LumeRoute.GenresHub -> com.adriano.lumemusic.ui.screens.GenresHubScreen(bottomInset)
         LumeRoute.Downloads -> DownloadsScreen(bottomInset)
         LumeRoute.Replay -> ReplayScreen(bottomInset)
         LumeRoute.Equalizer -> EqualizerScreen(bottomInset)

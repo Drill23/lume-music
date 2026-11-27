@@ -362,12 +362,40 @@ object AudioPlayer {
 
     // ---------------- Pipeline de início de faixa ----------------
 
+    // Arte composta (vinil / fita K7) da tela de bloqueio: a capa simples vai primeiro, esta troca quando ficar pronta.
+    private var lockArtJob: Job? = null
+    private var lockArtBytes: ByteArray? = null
+    private var lockArtTrackId: String? = null
+
     private fun buildItem(track: Track, art: String): MediaItem {
         val local = LibraryStore.isDownloaded(track.id)
         val uri = if (local) File(LibraryStore.localAudioFile(track.id).path).toUri() else StreamResolver.uriFor(track)
         val md = MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist).setAlbumTitle(track.album.ifEmpty { null })
-            .setArtworkUri(if (art.isNotEmpty()) art.toUri() else null).build()
-        return MediaItem.Builder().setMediaId(track.id).setUri(uri).setMediaMetadata(md).build()
+        val composite = lockArtBytes?.takeIf { lockArtTrackId == track.id }
+        if (composite != null) md.setArtworkData(composite, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+        else md.setArtworkUri(if (art.isNotEmpty()) art.toUri() else null)
+        return MediaItem.Builder().setMediaId(track.id).setUri(uri).setMediaMetadata(md.build()).build()
+    }
+
+    /** Redesenha a arte da tela de bloqueio (ex.: o estilo mudou nos Ajustes). */
+    fun refreshLockScreenArtwork() { currentTrack?.let { scheduleLockArtwork(it) } }
+
+    /** Desenhada uma vez por faixa+estilo, fora da thread principal; nunca atrasa o início da música. */
+    private fun scheduleLockArtwork(track: Track) {
+        lockArtJob?.cancel()
+        val style = LibraryStore.resolvedLockArtStyle
+        val cover = currentArtwork.ifEmpty { ArtworkStore.url(track) }
+        lockArtJob = scope.launch {
+            val bytes = if (style == com.adriano.lumemusic.data.LockArtStyle.COVER) null else LockScreenArtwork.image(app, track, cover, style)
+            if (currentTrack?.id != track.id) return@launch
+            if (bytes == null && lockArtBytes == null) return@launch
+            lockArtBytes = bytes; lockArtTrackId = if (bytes != null) track.id else null
+            try {
+                if (player.mediaItemCount > 0 && player.currentMediaItem?.mediaId == track.id) {
+                    player.replaceMediaItem(0, buildItem(track, currentArtwork))
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     private fun startCurrentTrack() {
@@ -385,7 +413,8 @@ object AudioPlayer {
         crossfadeTriggered = false
         LibraryStore.recordPlay(track)
         sessionHistory = (listOf(track) + sessionHistory.filter { it.id != track.id }).take(40)
-        lyricsJob?.cancel(); artJob?.cancel(); prefetchJob?.cancel()
+        lyricsJob?.cancel(); artJob?.cancel(); prefetchJob?.cancel(); lockArtJob?.cancel()
+        lockArtBytes = null; lockArtTrackId = null
         retriedTrackIds.remove(track.id)
         currentArtwork = ArtworkStore.url(track)
 
@@ -405,6 +434,7 @@ object AudioPlayer {
                         player.replaceMediaItem(0, buildItem(track, art).let { it })
                     }
                 } catch (_: Exception) {}
+                scheduleLockArtwork(track)
             }
             if (LibraryStore.animatedArtEnabled && track.animatedArtworkURL == null) {
                 val anim = MusicEngine.fetchAnimatedArtwork(track.title, track.artist, track.album)

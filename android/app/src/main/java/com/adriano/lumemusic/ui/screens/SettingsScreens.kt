@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.adriano.lumemusic.BuildConfig
 import com.adriano.lumemusic.audio.AudioPlayer
 import com.adriano.lumemusic.data.CassetteStyle
+import com.adriano.lumemusic.data.LockArtStyle
 import com.adriano.lumemusic.data.LibraryStore
 import com.adriano.lumemusic.data.PlayerSurfaceTab
 import com.adriano.lumemusic.data.SleepTimerOption
@@ -147,6 +148,16 @@ fun SettingsScreen(bottomInset: Dp) {
                     Section("Edição do disco") { ChipsRow(VinylEdition.entries.map { it.raw to it }, s.vinylEdition) { s.vinylEdition = it } }
                     ToggleRow("cube", "Perspectiva 3D no Vinil", null, s.turntable3D) { s.turntable3D = it }
                     Section("Estilo da fita K7") { ChipsRow(CassetteStyle.entries.map { it.raw to it }, s.cassetteStyle) { s.cassetteStyle = it } }
+                }
+            }
+            item {
+                Card("Tela de bloqueio") {
+                    Section("Arte da tela de bloqueio", "Com o celular bloqueado aparece o disco de vinil ou a fita K7 com a capa da música. No Automático, segue o estilo do Tocando agora.") {
+                        ChipsRow(LockArtStyle.entries.map { it.title to it }, s.lockArtStyle) {
+                            s.lockArtStyle = it
+                            com.adriano.lumemusic.audio.AudioPlayer.refreshLockScreenArtwork()
+                        }
+                    }
                 }
             }
             item {

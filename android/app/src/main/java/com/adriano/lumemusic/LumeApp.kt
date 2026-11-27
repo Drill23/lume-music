@@ -24,6 +24,7 @@ class LumeApp : Application(), SingletonImageLoader.Factory {
         com.adriano.lumemusic.ui.AppModel.loadPrefs(this)
         LibraryStore.init(this)
         DownloadManager.init(this)
+        com.adriano.lumemusic.ui.HomeStore.init(this)
         Access.init(this)
         AudioPlayer.init(this)
     }
