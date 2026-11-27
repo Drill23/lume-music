@@ -1,0 +1,170 @@
+package com.adriano.lumemusic.ui.screens
+
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import com.adriano.lumemusic.access.AccessInfo
+import com.adriano.lumemusic.access.AccessService
+import com.adriano.lumemusic.access.AccessState
+import com.adriano.lumemusic.access.Access
+import com.adriano.lumemusic.access.ActivateResult
+import com.adriano.lumemusic.ui.LumeWordmark
+import com.adriano.lumemusic.ui.PrismButton
+import com.adriano.lumemusic.ui.glass
+import com.adriano.lumemusic.ui.pressable
+import com.adriano.lumemusic.ui.theme.Theme
+import com.adriano.lumemusic.ui.theme.sf
+import kotlinx.coroutines.launch
+
+/** Caixas do código (6 caracteres) + botão. Reutilizada no portão e no onboarding. */
+@Composable
+fun AccessCodeEntry(title: String, subtitle: String?, buttonTitle: String = "Ativar", onActivated: (AccessInfo) -> Unit) {
+    var raw by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val focus = remember { FocusRequester() }
+    val code = AccessService.normalizeCode(raw).take(6)
+
+    fun submit() {
+        if (busy) return
+        if (!AccessService.isValidCodeFormat(code)) { error = "O código tem 6 letras e números."; return }
+        busy = true; error = null
+        scope.launch {
+            when (val r = Access.service.activate(code, android.os.Build.MODEL)) {
+                is ActivateResult.Success -> onActivated(r.info)
+                is ActivateResult.Failure -> error = r.message
+            }
+            busy = false
+        }
+    }
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Text(title, style = Theme.font(26f, FontWeight.Bold, Theme.text), textAlign = TextAlign.Center)
+        if (subtitle != null) Text(subtitle, style = Theme.font(15f, color = Theme.secondary), textAlign = TextAlign.Center)
+        Box(Modifier.fillMaxWidth().clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { focus.requestFocus() }) {
+            BasicTextField(
+                raw, { raw = AccessService.normalizeCode(it).filter { c -> c.isLetterOrDigit() }.take(6); error = null },
+                modifier = Modifier.focusRequester(focus).size(1.dp), singleLine = true, cursorBrush = SolidColor(Color.Transparent),
+                textStyle = Theme.font(1f, color = Color.Transparent),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { submit() }),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (i in 0 until 6) {
+                    val ch = code.getOrNull(i)?.toString() ?: ""
+                    val active = i == code.length.coerceAtMost(5)
+                    Box(
+                        Modifier.weight(1f).height(60.dp).glass(RoundedCornerShape(16.dp))
+                            .then(if (active) Modifier.border(1.5.dp, Theme.prismDiagonal, RoundedCornerShape(16.dp)) else Modifier),
+                        contentAlignment = Alignment.Center,
+                    ) { Text(ch, style = Theme.rounded(26f, FontWeight.Bold, Theme.text)) }
+                }
+            }
+        }
+        error?.let { Text(it, style = Theme.font(14f, FontWeight.Medium, Theme.danger), textAlign = TextAlign.Center) }
+        if (busy) CircularProgressIndicator(Modifier.size(26.dp), color = Theme.rose, strokeWidth = 2.5.dp)
+        else PrismButton(buttonTitle) { submit() }
+    }
+}
+
+@Composable
+fun AccessSuccessView(info: AccessInfo, buttonTitle: String, onContinue: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Box(Modifier.size(96.dp).glass(androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+            Icon(sf("checkmark.seal.fill"), null, tint = Theme.ok, modifier = Modifier.size(52.dp))
+        }
+        Text(info.successMessage(), style = Theme.font(22f, FontWeight.Bold, Theme.text), textAlign = TextAlign.Center)
+        info.note?.takeIf { it.isNotBlank() }?.let { Text(it, style = Theme.font(15f, color = Theme.secondary), textAlign = TextAlign.Center) }
+        PrismButton(buttonTitle) { onContinue() }
+    }
+}
+
+/** Portão: aparece sobre tudo quando o painel está ligado e não há acesso válido. */
+@Composable
+fun AccessGateScreen() {
+    val state by Access.service.state.collectAsState()
+    var justActivated by remember { mutableStateOf<AccessInfo?>(null) }
+    val locked = state as? AccessState.Locked
+    if (locked == null && justActivated == null) return
+    Box(Modifier.fillMaxSize().background(Theme.canvas).statusBarsPadding().navigationBarsPadding().imePadding(), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(Theme.lavender.copy(0.25f), Color.Transparent), radius = 1200f)))
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(28.dp)) {
+            LumeWordmark(34f)
+            AnimatedContent(justActivated, transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) }, label = "gate") { ja ->
+                if (ja != null) AccessSuccessView(ja, "Entrar na Lume") { justActivated = null }
+                else AccessCodeEntry(
+                    title = if (locked?.message == null) "Digite seu código de acesso" else "Precisamos do seu código",
+                    subtitle = locked?.message,
+                ) { justActivated = it }
+            }
+            Text("Sua biblioteca continua guardada neste aparelho.", style = Theme.font(13f, color = Theme.tertiary))
+        }
+    }
+}
+
+/** Cartão "Seu acesso" dos Ajustes: código mascarado, status, validade e "Trocar código". */
+@Composable
+fun AccessStatusCard() {
+    val state by Access.service.state.collectAsState()
+    val info = (state as? AccessState.Active)?.info ?: return
+    var changing by remember { mutableStateOf(false) }
+    val until = if (info.lifetime) "Vitalício" else info.expires?.let { java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date(it)) } ?: ""
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).glass(RoundedCornerShape(22.dp)).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Icon(sf("checkmark.seal.fill"), null, tint = Theme.ok, modifier = Modifier.size(30.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Seu acesso", style = Theme.font(16f, FontWeight.SemiBold, Theme.text))
+            Text("${info.maskedCode} · " + if (info.lifetime) "Acesso vitalício" else "Ativo até $until", style = Theme.font(13.5f, color = Theme.secondary))
+        }
+        Box(Modifier.height(44.dp).pressable(0.95f) { changing = true }.glass(RoundedCornerShape(50)).padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+            Text("Trocar código", style = Theme.font(13.5f, FontWeight.SemiBold, Theme.accent))
+        }
+    }
+    if (changing) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { changing = false }, containerColor = Theme.canvasRaised, title = { Text("Trocar código?", color = Theme.text) },
+        text = { Text("Você voltará para a tela do código. Sua biblioteca continua guardada.", color = Theme.secondary) },
+        confirmButton = { androidx.compose.material3.TextButton({ Access.service.signOut(); changing = false }) { Text("Trocar", color = Theme.danger) } },
+        dismissButton = { androidx.compose.material3.TextButton({ changing = false }) { Text("Cancelar", color = Theme.secondary) } },
+    )
+}

@@ -1,0 +1,408 @@
+package com.adriano.lumemusic.ui.screens
+
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.adriano.lumemusic.audio.AudioPlayer
+import com.adriano.lumemusic.data.DownloadManager
+import com.adriano.lumemusic.data.DownloadState
+import com.adriano.lumemusic.data.LibraryStore
+import com.adriano.lumemusic.data.MusicPlaylist
+import com.adriano.lumemusic.data.Track
+import com.adriano.lumemusic.engine.ImportException
+import com.adriano.lumemusic.engine.ImportService
+import com.adriano.lumemusic.ui.AlbumTile
+import com.adriano.lumemusic.ui.AppModel
+import com.adriano.lumemusic.ui.ArtistAvatar
+import com.adriano.lumemusic.ui.ArtworkImage
+import com.adriano.lumemusic.ui.DetailTopBar
+import com.adriano.lumemusic.ui.EmptyState
+import com.adriano.lumemusic.ui.GlassButton
+import com.adriano.lumemusic.ui.GlassIconButton
+import com.adriano.lumemusic.ui.HRow
+import com.adriano.lumemusic.ui.LumeRoute
+import com.adriano.lumemusic.ui.PrismButton
+import com.adriano.lumemusic.ui.PrismChip
+import com.adriano.lumemusic.ui.SectionHeader
+import com.adriano.lumemusic.ui.TrackRow
+import com.adriano.lumemusic.ui.glass
+import com.adriano.lumemusic.ui.pressable
+import com.adriano.lumemusic.ui.theme.Theme
+import com.adriano.lumemusic.ui.theme.sf
+import kotlinx.coroutines.launch
+
+private val filters = listOf("Tudo", "Playlists", "Álbuns", "Artistas", "Baixadas")
+
+@Composable
+fun LibraryScreen(bottomInset: Dp) {
+    var filter by remember { mutableStateOf("Tudo") }
+    var showNew by remember { mutableStateOf(false) }
+    val store = LibraryStore
+    val failed = DownloadManager.failedItems
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+        item {
+            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Biblioteca", style = Theme.font(32f, FontWeight.Bold, Theme.text), modifier = Modifier.weight(1f))
+                GlassIconButton("plus", desc = "Nova playlist") { showNew = true }
+            }
+        }
+        item { HRow(spacing = 8.dp) { items(filters) { f -> PrismChip(f, filter == f) { filter = f } } } }
+        if (failed.isNotEmpty()) item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).pressable(0.98f) { DownloadManager.retryAllFailed() }.glass(RoundedCornerShape(18.dp), tint = Theme.danger).padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(sf("exclamationmark.triangle.fill"), null, tint = Theme.danger, modifier = Modifier.size(22.dp))
+                Column { Text("${failed.size} downloads falharam", style = Theme.font(15f, FontWeight.SemiBold, Theme.text)); Text("Toque para tentar novamente", style = Theme.font(12.5f, color = Theme.secondary)) }
+            }
+        }
+        if (filter == "Tudo") item {
+            val quick = listOf(
+                Triple("Curtidas", "heart.fill", store.favoriteTracks), Triple("Histórico", "clock.fill", store.recentTracks),
+                Triple("Mais ouvidas", "chart.line.uptrend.xyaxis", store.mostPlayedTracks), Triple("Baixadas", "arrow.down.circle.fill", store.downloadedTracks),
+            )
+            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                quick.chunked(2).forEach { pair ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        pair.forEach { (t, icon, list) ->
+                            Row(Modifier.weight(1f).height(64.dp).pressable(0.96f) { AppModel.push(LumeRoute.Tracks(t, list)) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Icon(sf(icon), null, tint = Theme.rose, modifier = Modifier.size(22.dp))
+                                Column { Text(t, style = Theme.font(15f, FontWeight.SemiBold, Theme.text), maxLines = 1); Text("${list.size}", style = Theme.font(12.5f, color = Theme.secondary)) }
+                            }
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth().height(64.dp).pressable(0.97f) { AppModel.push(LumeRoute.Replay) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(sf("sparkles"), null, tint = Theme.lavender, modifier = Modifier.size(22.dp)); Text("Lume Replay · Seu Resumo", style = Theme.font(15f, FontWeight.SemiBold, Theme.text), modifier = Modifier.weight(1f)); Icon(sf("chevron.right"), null, tint = Theme.tertiary)
+                }
+                Row(Modifier.fillMaxWidth().height(64.dp).pressable(0.97f) { AppModel.push(LumeRoute.ImportHub) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(sf("square.and.arrow.down"), null, tint = Theme.sky, modifier = Modifier.size(22.dp)); Text("Importar", style = Theme.font(15f, FontWeight.SemiBold, Theme.text), modifier = Modifier.weight(1f)); Icon(sf("chevron.right"), null, tint = Theme.tertiary)
+                }
+            }
+        }
+        if (filter in listOf("Tudo", "Playlists")) item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SectionHeader("Suas playlists")
+                if (store.playlists.isEmpty()) EmptyState("music.note.list", "Nenhuma playlist", "Crie uma playlist ou importe do Spotify, YouTube Music e Apple Music.")
+                else store.playlists.forEach { PlaylistRow(it) }
+            }
+        }
+        if (filter in listOf("Tudo", "Álbuns")) item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SectionHeader("Álbuns salvos")
+                if (store.savedAlbums.isEmpty()) EmptyState("square.stack.fill", "Nenhum álbum salvo", "Salve álbuns para tê-los sempre à mão.")
+                else HRow { items(store.savedAlbums, key = { it.id }) { a -> AlbumTile(a) { AppModel.push(LumeRoute.Album(a)) } } }
+            }
+        }
+        if (filter in listOf("Tudo", "Artistas")) item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SectionHeader("Artistas")
+                if (store.followedArtists.isEmpty()) EmptyState("person.fill", "Nenhum artista encontrado", "Siga artistas pela página deles.")
+                else store.followedArtists.forEach { a ->
+                    Row(Modifier.fillMaxWidth().height(60.dp).pressable(0.98f) { AppModel.openArtist(a) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        ArtistAvatar(a, 48.dp); Text(a, style = Theme.font(16f, color = Theme.text), maxLines = 1, modifier = Modifier.weight(1f)); Icon(sf("chevron.right"), null, tint = Theme.tertiary)
+                    }
+                }
+            }
+        }
+        if (filter in listOf("Tudo", "Baixadas")) {
+            val dl = store.downloadedTracks
+            item { SectionHeader("Baixadas (${dl.size})", actionLabel = "Central", onAction = { AppModel.push(LumeRoute.Downloads) }) }
+            if (dl.isEmpty()) item { EmptyState("arrow.down.circle", "Nenhuma música baixada", "Baixe músicas para ouvir sem internet.") }
+            else items(dl.take(if (filter == "Tudo") 6 else 500), key = { "dl${it.id}" }) { TrackRow(it, queue = dl) }
+        }
+        if (filter == "Tudo" && store.recentTracks.isNotEmpty()) {
+            item { SectionHeader("Tocadas recentemente", actionLabel = "Ver tudo", onAction = { AppModel.push(LumeRoute.Tracks("Histórico", store.recentTracks)) }) }
+            items(store.recentTracks.take(5), key = { "rc${it.id}" }) { TrackRow(it, queue = store.recentTracks) }
+        }
+    }
+    if (showNew) NewPlaylistDialog { showNew = false }
+}
+
+@Composable
+fun NewPlaylistDialog(onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss, containerColor = Theme.canvasRaised,
+        title = { Text("Nova playlist", color = Theme.text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Dê um nome para a sua nova playlist.", style = Theme.font(14f, color = Theme.secondary))
+                Box(Modifier.fillMaxWidth().height(48.dp).glass(RoundedCornerShape(24.dp)).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
+                    if (name.isEmpty()) Text("Nome", style = Theme.font(16f, color = Theme.tertiary))
+                    BasicTextField(name, { name = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose), modifier = Modifier.fillMaxWidth())
+                }
+            }
+        },
+        confirmButton = { TextButton({ if (name.isNotBlank()) { LibraryStore.createPlaylist(name.trim()); onDismiss() } }) { Text("Criar", color = Theme.accent) } },
+        dismissButton = { TextButton(onDismiss) { Text("Cancelar", color = Theme.secondary) } },
+    )
+}
+
+@Composable
+private fun PlaylistRow(pl: MusicPlaylist) {
+    Row(Modifier.fillMaxWidth().height(64.dp).pressable(0.98f) { AppModel.push(LumeRoute.Playlist(pl.id)) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        ArtworkImage(pl.artworkURL, Modifier.size(54.dp), 12.dp, icon = "music.note.list")
+        Column(Modifier.weight(1f)) {
+            Text(pl.name, style = Theme.font(16f, FontWeight.Medium, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${pl.trackIds.size} músicas" + if (pl.sourceBadge != "Lume") " · ${pl.sourceBadge}" else "", style = Theme.font(13f, color = Theme.secondary), maxLines = 1)
+        }
+        Icon(sf("chevron.right"), null, tint = Theme.tertiary, modifier = Modifier.size(18.dp))
+    }
+}
+
+@Composable
+fun PlaylistScreen(id: String, bottomInset: Dp) {
+    val pl = LibraryStore.playlists.firstOrNull { it.id == id }
+    var confirm by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize()) {
+        DetailTopBar(pl?.name ?: "Playlist") {
+            GlassIconButton("trash", desc = "Excluir") { confirm = true }
+        }
+        if (pl == null) { EmptyState("music.note.list", "Playlist não encontrada", ""); return@Column }
+        val tracks = LibraryStore.tracks(pl)
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            item {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ArtworkImage(pl.artworkURL, Modifier.size(190.dp), 24.dp, icon = "music.note.list")
+                    Text(pl.name, style = Theme.font(24f, FontWeight.Bold, Theme.text))
+                    Text("${tracks.size} músicas · ${pl.sourceBadge}", style = Theme.font(13.5f, color = Theme.secondary))
+                }
+            }
+            item { PlayShuffleRow(tracks, pl.name) }
+            item {
+                Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    GlassButton("Baixar tudo", "arrow.down.circle", modifier = Modifier.weight(1f)) { DownloadManager.downloadPlaylist(pl); AppModel.showToast("Baixando ${tracks.size} músicas") }
+                }
+            }
+            if (tracks.isEmpty()) item { EmptyState("music.note", "Playlist vazia", "Adicione músicas pelo menu ••• de qualquer faixa.") }
+            items(tracks, key = { "pl${it.id}" }) { t ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { TrackRow(t, queue = tracks) }
+                    Box(Modifier.size(44.dp).pressable(0.85f) { LibraryStore.removeTrack(t.id, pl.id) }, contentAlignment = Alignment.Center) { Icon(sf("minus.circle.fill"), "Remover da playlist", tint = Theme.tertiary, modifier = Modifier.size(22.dp)) }
+                }
+            }
+        }
+    }
+    if (confirm && pl != null) AlertDialog(
+        onDismissRequest = { confirm = false }, containerColor = Theme.canvasRaised, title = { Text("Excluir playlist?", color = Theme.text) },
+        text = { Text("“${pl.name}” será removida. As músicas continuam na biblioteca.", color = Theme.secondary) },
+        confirmButton = { TextButton({ LibraryStore.deletePlaylist(pl.id); confirm = false; AppModel.pop() }) { Text("Excluir", color = Theme.danger) } },
+        dismissButton = { TextButton({ confirm = false }) { Text("Cancelar", color = Theme.secondary) } },
+    )
+}
+
+@Composable
+fun DownloadsScreen(bottomInset: Dp) {
+    val dl = LibraryStore.downloadedTracks
+    val states = DownloadManager.statesById
+    val active = states.filter { it.value.isActive }
+    Column(Modifier.fillMaxSize()) {
+        DetailTopBar("Central de Downloads")
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            item {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).glass(RoundedCornerShape(22.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Armazenamento offline", style = Theme.font(13f, color = Theme.secondary))
+                    Text(LibraryStore.offlineStorageFormatted, style = Theme.font(28f, FontWeight.Bold, Theme.text))
+                    Text("${dl.size} músicas baixadas · ${DownloadManager.pendingCount} na fila", style = Theme.font(13.5f, color = Theme.secondary))
+                    if (DownloadManager.pendingCount > 0) LinearProgressIndicator(progress = { DownloadManager.overallProgress.toFloat() }, modifier = Modifier.fillMaxWidth().clip(CircleShape), color = Theme.rose, trackColor = Theme.fill)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        GlassButton(if (DownloadManager.paused) "Retomar" else "Pausar", if (DownloadManager.paused) "play.fill" else "pause.fill", modifier = Modifier.weight(1f)) { DownloadManager.togglePauseAll() }
+                        GlassButton("Cancelar tudo", "xmark.circle", modifier = Modifier.weight(1f)) { DownloadManager.cancelAll() }
+                    }
+                }
+            }
+            if (active.isNotEmpty()) {
+                item { SectionHeader("Em andamento") }
+                items(active.keys.toList(), key = { "act$it" }) { id ->
+                    val t = LibraryStore.tracksById[id] ?: return@items
+                    val st = states[id]
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        com.adriano.lumemusic.ui.TrackArtwork(t, Modifier.size(46.dp), 8.dp)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(t.title, style = Theme.font(15f, color = Theme.text), maxLines = 1)
+                            LinearProgressIndicator(progress = { (st?.fraction ?: 0.0).toFloat() }, modifier = Modifier.fillMaxWidth().clip(CircleShape), color = Theme.rose, trackColor = Theme.fill)
+                            Text(when (st) { is DownloadState.Queued -> "Na fila"; is DownloadState.Resolving -> "Preparando…"; else -> "Baixando…" }, style = Theme.font(12f, color = Theme.secondary))
+                        }
+                        Box(Modifier.size(44.dp).pressable(0.85f) { DownloadManager.cancel(id) }, contentAlignment = Alignment.Center) { Icon(sf("xmark.circle.fill"), "Cancelar", tint = Theme.tertiary) }
+                    }
+                }
+            }
+            val failed = DownloadManager.failedItems
+            if (failed.isNotEmpty()) {
+                item { SectionHeader("Falharam", actionLabel = "Tentar todas", onAction = { DownloadManager.retryAllFailed() }) }
+                items(failed, key = { "f${it.first.id}" }) { (t, reason) ->
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(56.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) { Text(t.title, style = Theme.font(15f, color = Theme.text), maxLines = 1); Text(reason, style = Theme.font(12.5f, color = Theme.danger)) }
+                        Box(Modifier.size(44.dp).pressable(0.85f) { DownloadManager.retry(t.id) }, contentAlignment = Alignment.Center) { Icon(sf("arrow.clockwise"), "Tentar de novo", tint = Theme.accent) }
+                    }
+                }
+            }
+            item { SectionHeader("Baixadas (${dl.size})") }
+            if (dl.isEmpty()) item { EmptyState("arrow.down.circle", "Nenhuma música baixada", "Use ••• › Baixar em qualquer música.") }
+            items(dl, key = { "d${it.id}" }) { t ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { TrackRow(t, queue = dl) }
+                    Text(LibraryStore.fileSizeFormatted(t.id), style = Theme.font(12f, color = Theme.tertiary), modifier = Modifier.padding(end = 20.dp))
+                }
+            }
+            if (dl.isNotEmpty()) item { Box(Modifier.padding(horizontal = 20.dp)) { GlassButton("Apagar todos os downloads", "trash") { LibraryStore.removeAllDownloads(); AppModel.showToast("Downloads apagados") } } }
+        }
+    }
+}
+
+@Composable
+fun ReplayScreen(bottomInset: Dp) {
+    val s = LibraryStore.replaySummary
+    Column(Modifier.fillMaxSize()) {
+        DetailTopBar("Lume Replay")
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            item {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).clip(RoundedCornerShape(28.dp)).background(Theme.prismDiagonal).padding(22.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Seu resumo", style = Theme.font(14f, FontWeight.SemiBold, Theme.onPrism.copy(0.7f)))
+                    Text("${s.totalMinutes} min", style = Theme.rounded(48f, FontWeight.Bold, Theme.onPrism))
+                    Text("ouvidos em ${s.totalPlays} reproduções", style = Theme.font(15f, color = Theme.onPrism.copy(0.8f)))
+                    Row(horizontalArrangement = Arrangement.spacedBy(22.dp), modifier = Modifier.padding(top = 8.dp)) {
+                        Column { Text("${s.uniqueTracks}", style = Theme.rounded(24f, FontWeight.Bold, Theme.onPrism)); Text("músicas", style = Theme.font(12f, color = Theme.onPrism.copy(0.7f))) }
+                        Column { Text("${s.uniqueArtists}", style = Theme.rounded(24f, FontWeight.Bold, Theme.onPrism)); Text("artistas", style = Theme.font(12f, color = Theme.onPrism.copy(0.7f))) }
+                    }
+                }
+            }
+            if (s.topTracks.isEmpty()) item { EmptyState("sparkles", "Ainda sem histórico", "Ouça algumas músicas e volte aqui para ver o seu resumo.") }
+            else {
+                item { SectionHeader("Suas músicas favoritas") }
+                items(s.topTracks.size) { i -> val (t, n) = s.topTracks[i]
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { TrackRow(t, rank = i + 1, queue = s.topTracks.map { it.first }) }
+                        Text("$n×", style = Theme.font(13f, FontWeight.SemiBold, Theme.secondary), modifier = Modifier.padding(end = 20.dp))
+                    }
+                }
+                item { SectionHeader("Seus artistas") }
+                items(s.topArtists.size) { i -> val (name, n) = s.topArtists[i]
+                    Row(Modifier.fillMaxWidth().height(60.dp).pressable(0.98f) { AppModel.openArtist(name) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text("${i + 1}", style = Theme.font(14.5f, FontWeight.Bold, Theme.secondary), modifier = Modifier.width(26.dp))
+                        ArtistAvatar(name, 46.dp); Text(name, style = Theme.font(16f, color = Theme.text), maxLines = 1, modifier = Modifier.weight(1f)); Text("$n×", style = Theme.font(13f, color = Theme.secondary))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ImportScreen(bottomInset: Dp) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var tab by remember { mutableStateOf("Link") }
+    var link by remember { mutableStateOf("") }
+    var text by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var results by remember { mutableStateOf<List<ImportService.ImportResult>>(emptyList()) }
+
+    fun runImport(block: suspend () -> List<ImportService.ImportResult>) {
+        busy = true; error = null
+        scope.launch {
+            try { results = block() } catch (e: ImportException) { error = e.message } catch (e: Exception) { error = "Não foi possível importar agora." }
+            busy = false
+        }
+    }
+    val perm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) runImport { ImportService.importFromDevice(ctx) } else error = "Permita o acesso às músicas do aparelho para importar."
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        DetailTopBar("Importar músicas")
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            item { HRow(spacing = 8.dp) { items(listOf("Link", "Lista de texto", "Aparelho")) { t -> PrismChip(t, tab == t) { tab = t; error = null } } } }
+            item {
+                Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    when (tab) {
+                        "Link" -> {
+                            Text("Cole o link de uma playlist ou álbum do Spotify, YouTube Music, Apple Music ou Amazon Music.", style = Theme.font(14f, color = Theme.secondary))
+                            Box(Modifier.fillMaxWidth().height(52.dp).glass(RoundedCornerShape(26.dp)).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
+                                if (link.isEmpty()) Text("https://…", style = Theme.font(16f, color = Theme.tertiary))
+                                BasicTextField(link, { link = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose), modifier = Modifier.fillMaxWidth())
+                            }
+                            PrismButton("Importar link", "link") { if (link.isNotBlank()) runImport { listOf(ImportService.importFromURL(link)) } }
+                        }
+                        "Lista de texto" -> {
+                            Text("Uma música por linha: “Artista - Música”. Também aceita M3U.", style = Theme.font(14f, color = Theme.secondary))
+                            Box(Modifier.fillMaxWidth().height(48.dp).glass(RoundedCornerShape(24.dp)).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
+                                if (name.isEmpty()) Text("Nome da playlist", style = Theme.font(16f, color = Theme.tertiary))
+                                BasicTextField(name, { name = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose), modifier = Modifier.fillMaxWidth())
+                            }
+                            Box(Modifier.fillMaxWidth().height(180.dp).glass(RoundedCornerShape(20.dp)).padding(14.dp)) {
+                                BasicTextField(text, { text = it }, textStyle = Theme.font(15f, color = Theme.text), cursorBrush = SolidColor(Theme.rose), modifier = Modifier.fillMaxSize())
+                            }
+                            PrismButton("Criar playlist", "text.badge.plus") { if (text.isNotBlank()) runImport { listOf(ImportService.importFromText(text, name)) } }
+                        }
+                        else -> {
+                            Text("Importe as músicas que já estão neste aparelho. Elas serão encontradas no catálogo para tocar.", style = Theme.font(14f, color = Theme.secondary))
+                            PrismButton("Ler músicas do aparelho", "music.note") {
+                                val p = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+                                perm.launch(p)
+                            }
+                        }
+                    }
+                    if (busy) Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(20.dp), color = Theme.rose, strokeWidth = 2.dp); Text("Importando…", style = Theme.font(14f, color = Theme.secondary)) }
+                    error?.let { Text(it, style = Theme.font(14f, color = Theme.danger)) }
+                }
+            }
+            items(results.size) { i ->
+                val r = results[i]
+                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).glass(RoundedCornerShape(20.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ArtworkImage(r.artworkURL.ifEmpty { r.tracks.firstOrNull()?.artworkURL ?: "" }, Modifier.size(56.dp), 12.dp, icon = "music.note.list")
+                    Column(Modifier.weight(1f)) { Text(r.playlistName, style = Theme.font(16f, FontWeight.SemiBold, Theme.text), maxLines = 1); Text("${r.tracks.size} músicas · ${r.sourceBadge}", style = Theme.font(13f, color = Theme.secondary)) }
+                    PrismButton("Salvar", modifier = Modifier.size(width = 86.dp, height = 44.dp), height = 44.dp) {
+                        val pl = LibraryStore.createPlaylist(r.playlistName, sourceBadge = r.sourceBadge, artworkURL = r.artworkURL, tracks = r.tracks)
+                        results = results - r
+                        AppModel.showToast("Playlist “${pl.name}” criada")
+                        AppModel.pop(); AppModel.push(LumeRoute.Playlist(pl.id))
+                    }
+                }
+            }
+        }
+    }
+}
