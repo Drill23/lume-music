@@ -34,6 +34,9 @@ import androidx.compose.material.icons.rounded.FlightTakeoff
 import androidx.compose.material.icons.rounded.FreeBreakfast
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.HeartBroken
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.NewReleases
+import androidx.compose.material.icons.rounded.ViewCarousel
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
@@ -197,5 +200,8 @@ fun sf(name: String): ImageVector = when (name) {
     "person.outline" -> Icons.Rounded.PersonOutline
     "arrow.down.line" -> Icons.Rounded.ArrowDownward
     "dark" -> Icons.Rounded.DarkMode
+    "square.grid.2x2.fill" -> Icons.Rounded.GridView
+    "sparkles.rectangle.stack.fill" -> Icons.Rounded.NewReleases
+    "square.stack.3d.down.right.fill" -> Icons.Rounded.ViewCarousel
     else -> Icons.Rounded.MusicNote
 }

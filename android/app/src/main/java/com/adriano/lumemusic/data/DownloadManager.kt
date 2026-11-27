@@ -175,6 +175,9 @@ object DownloadManager {
                 }
                 if (bytes <= 32768) { dest.delete(); markFailed(working, "Arquivo incompleto"); return@launch }
 
+                // Só áudio: tira a faixa de vídeo do MP4 (remux sem recodificar; se falhar, mantém o original)
+                withContext(Dispatchers.IO) { AudioRemux.stripVideoTrack(dest) }
+
                 // Prefetch de capa e letra para uso 100% offline
                 withContext(Dispatchers.IO) {
                     try { LyricsService.fetchLyrics(working) } catch (_: Exception) {}

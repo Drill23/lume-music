@@ -37,6 +37,7 @@ sealed interface LumeRoute {
     data class Genre(val genre: MusicGenre) : LumeRoute
     data class Mix(val mix: PersonalizedMix) : LumeRoute
     data object Releases : LumeRoute
+    data object GenresHub : LumeRoute
     data object Downloads : LumeRoute
     data object Replay : LumeRoute
     data object Equalizer : LumeRoute
@@ -91,7 +92,7 @@ object AppModel {
     /** Estilo escolhido nos Ajustes para o palco do Tocando agora (nunca "Letra"). */
     var playerStyle: PlayerSurfaceTab
         get() = LibraryStore.playerSurface.let { if (it == PlayerSurfaceTab.LYRICS) PlayerSurfaceTab.ARTWORK else it }
-        set(v) { LibraryStore.playerSurface = if (v == PlayerSurfaceTab.LYRICS) PlayerSurfaceTab.ARTWORK else v; if (playerTab != PlayerSurfaceTab.LYRICS) playerTab = LibraryStore.playerSurface }
+        set(v) { LibraryStore.playerSurface = if (v == PlayerSurfaceTab.LYRICS) PlayerSurfaceTab.ARTWORK else v; if (playerTab != PlayerSurfaceTab.LYRICS) playerTab = LibraryStore.playerSurface; AudioPlayer.refreshLockScreenArtwork() }
 
     val currentStack get() = stacks.getValue(tab)
 
@@ -125,11 +126,19 @@ object AppModel {
 
     // ---------- Feed ----------
 
+    init {
+        // O feed é publicado em etapas (paradas primeiro, lançamentos depois): a UI reage a cada uma.
+        DiscoveryService.onPublish = { f -> scope.launch { feed = f } }
+    }
+
+    fun setFeedIfEmpty(f: DiscoverFeed) { if (feed == null) feed = f }
+
+    /** Mostra o cache na hora; se estiver velho (ou [force]), atualiza em segundo plano com chamadas coalescidas. */
     suspend fun loadFeed(force: Boolean = false) {
         if (feed == null) DiscoveryService.cachedFeed()?.let { feed = it }
         if (!force && System.currentTimeMillis() - lastFeedLoad < 600_000L && feed != null) return
         loadingFeed = feed == null
-        val fresh = if (force) DiscoveryService.refresh() else DiscoveryService.feed()
+        val fresh = DiscoveryService.refresh()
         feed = fresh
         loadingFeed = false
         lastFeedLoad = System.currentTimeMillis()

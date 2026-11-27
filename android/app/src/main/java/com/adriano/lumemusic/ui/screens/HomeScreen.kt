@@ -1,5 +1,6 @@
 package com.adriano.lumemusic.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,14 +13,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,30 +30,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.adriano.lumemusic.audio.AudioPlayer
-import com.adriano.lumemusic.data.ChartCountry
+import com.adriano.lumemusic.data.AlbumShowcase
+import com.adriano.lumemusic.data.AppTab
 import com.adriano.lumemusic.data.LibraryStore
-import com.adriano.lumemusic.data.MoodCategory
-import com.adriano.lumemusic.data.MusicGenre
-import com.adriano.lumemusic.data.Track
+import com.adriano.lumemusic.data.PersonalizedMix
 import com.adriano.lumemusic.engine.CatalogExplorerService
-import com.adriano.lumemusic.ui.AlbumTile
+import com.adriano.lumemusic.engine.DiscText
+import com.adriano.lumemusic.platform.Haptics
 import com.adriano.lumemusic.ui.AppModel
-import com.adriano.lumemusic.ui.ArtistBubble
 import com.adriano.lumemusic.ui.GlassIconButton
-import com.adriano.lumemusic.ui.GradientCard
 import com.adriano.lumemusic.ui.HRow
+import com.adriano.lumemusic.ui.HomeStore
 import com.adriano.lumemusic.ui.LumeRoute
 import com.adriano.lumemusic.ui.LumeWordmark
-import com.adriano.lumemusic.ui.PrismButton
+import com.adriano.lumemusic.ui.OnboardingGenres
 import com.adriano.lumemusic.ui.SectionHeader
 import com.adriano.lumemusic.ui.Skeleton
 import com.adriano.lumemusic.ui.TallTrackCard
-import com.adriano.lumemusic.ui.TrackRow
 import com.adriano.lumemusic.ui.glass
 import com.adriano.lumemusic.ui.pressable
 import com.adriano.lumemusic.ui.theme.Theme
@@ -64,152 +63,151 @@ fun greeting(): String {
     return when { h < 5 -> "Boa madrugada"; h < 12 -> "Bom dia"; h < 18 -> "Boa tarde"; else -> "Boa noite" }
 }
 
+/**
+ * Início — poucas coisas por vez, bem espaçadas: saudação, busca, continuar ouvindo, uma vitrine, atalhos,
+ * "Para você", Top 10 com seletor de países e lançamentos. Tudo aparece na hora a partir do cache (igual ao iOS).
+ */
 @Composable
 fun HomeScreen(bottomInset: Dp) {
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
-    val feed = AppModel.feed
-    val store = LibraryStore
-    PullToRefreshBox(refreshing, onRefresh = { scope.launch { refreshing = true; AppModel.loadFeed(force = true); AppModel.refreshArtistReleases(); refreshing = false } }, modifier = Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(26.dp)) {
-            item {
-                Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        LumeWordmark(24f)
-                        Text(greeting(), style = Theme.font(14f, color = Theme.secondary), modifier = Modifier.padding(top = 2.dp))
-                    }
-                    GlassIconButton("bell", badge = AppModel.hasUnseenReleases, desc = "Lançamentos") { AppModel.push(LumeRoute.Releases) }
-                    Spacer(Modifier.size(8.dp))
-                    GlassIconButton("gearshape", desc = "Ajustes") { AppModel.push(LumeRoute.Settings) }
-                }
-            }
-            item { FlowCard() }
+    LaunchedEffect(Unit) { HomeStore.start() }
+    PullToRefreshBox(
+        refreshing,
+        onRefresh = { scope.launch { refreshing = true; HomeStore.refresh(); AppModel.refreshArtistReleases(); refreshing = false } },
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset + 8.dp), verticalArrangement = Arrangement.spacedBy(32.dp)) {
+            item { Header() }
+            item { SearchPill() }
+            item { ContinueSection() }
+            item { Showcase() }
             item { Shortcuts() }
-            item { Top10Section() }
-
-            if (store.recentTracks.isNotEmpty()) item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader("Tocadas recentemente", actionLabel = "Ver tudo", onAction = { AppModel.push(LumeRoute.Tracks("Tocadas recentemente", store.recentTracks)) })
-                    val list = store.recentTracks.take(15)
-                    HRow { items(list, key = { it.id }) { TallTrackCard(it, queue = list) } }
-                }
-            }
-
-            val mixes = CatalogExplorerService.buildPersonalizedMixes(store.mostPlayedTracks, store.favoriteTracks, store.recentTracks, store.topListenedArtists, feed)
-            if (mixes.isNotEmpty()) item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader("Feito para você", "Mixes atualizados com o seu gosto")
-                    HRow { items(mixes, key = { it.id }) { m ->
-                        GradientCard(m.title, m.subtitle, m.icon, m.hexA, m.hexB, Modifier.size(width = 170.dp, height = 150.dp)) { AppModel.push(LumeRoute.Mix(m)) }
-                    } }
-                }
-            }
-
-            if (feed == null) item { Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { repeat(3) { Skeleton(Modifier.fillMaxWidth().height(64.dp)) } } }
-
-            feed?.let { f ->
-                val releases = (AppModel.artistReleases.ifEmpty { f.newReleases }).take(20)
-                if (releases.isNotEmpty()) item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionHeader("Lançamentos da semana", if (AppModel.artistReleases.isNotEmpty()) "Lançamentos recentes de quem você acompanha" else "Lançamentos no mundo",
-                            onAction = { AppModel.push(LumeRoute.Releases) })
-                        HRow { items(releases, key = { it.id }) { a -> AlbumTile(a, subtitle = a.artist) { AppModel.push(LumeRoute.Album(a)) } } }
-                    }
-                }
-                if (f.topArtists.isNotEmpty()) item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionHeader("Cantores mais ouvidos", "Brasil", onAction = { AppModel.push(LumeRoute.Artists("Cantores mais ouvidos", f.topArtists)) })
-                        HRow { items(f.topArtists.take(20), key = { it.id }) { a -> ArtistBubble(a) { AppModel.openArtist(a.name, a.deezerId) } } }
-                    }
-                }
-                if (f.topGlobal.isNotEmpty()) item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionHeader("Top 50 Mundo", "As mais tocadas no planeta agora", onAction = { AppModel.push(LumeRoute.Tracks("Top 50 Mundo", f.topGlobal)) })
-                        HRow { rankedCards(f.topGlobal.take(20), f.topGlobal) }
-                    }
-                }
-                if (f.trending.isNotEmpty()) item {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        SectionHeader("Em alta", "Subindo rápido nas paradas")
-                        Spacer(Modifier.height(8.dp))
-                        f.trending.take(8).forEach { TrackRow(it, queue = f.trending) }
-                    }
-                }
-            }
-
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader("Paradas pelo Mundo", "Toque em um país para abrir o Top 50")
-                    HRow { items(ChartCountry.all, key = { it.code }) { c ->
-                        GradientCard(c.name, c.region, null, c.hexA, c.hexB, Modifier.size(width = 150.dp, height = 96.dp), emoji = c.flag) { AppModel.push(LumeRoute.Country(c)) }
-                    } }
-                }
-            }
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader("Estilos do Brasil", "Paradas e playlists separadas por estilo")
-                    HRow { items(MusicGenre.all.filter { it.group == MusicGenre.Group.BRASIL }, key = { it.id }) { g ->
-                        GradientCard(g.title, null, g.icon, g.hexA, g.hexB, Modifier.size(width = 150.dp, height = 96.dp)) { AppModel.push(LumeRoute.Genre(g)) }
-                    } }
-                }
-            }
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader("Gêneros Internacionais")
-                    HRow { items(MusicGenre.all.filter { it.group == MusicGenre.Group.INTERNACIONAL }, key = { it.id }) { g ->
-                        GradientCard(g.title, null, g.icon, g.hexA, g.hexB, Modifier.size(width = 150.dp, height = 96.dp)) { AppModel.push(LumeRoute.Genre(g)) }
-                    } }
-                }
-            }
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader("Gêneros & Estilos")
-                    HRow { items(MoodCategory.presets, key = { it.id }) { m ->
-                        GradientCard(m.title, null, m.icon, m.hexA, m.hexB, Modifier.size(width = 150.dp, height = 96.dp)) { AppModel.push(LumeRoute.Mood(m)) }
-                    } }
-                }
-            }
-            item { Text(Theme.credit, style = Theme.font(12f, color = Theme.tertiary), modifier = Modifier.fillMaxWidth().padding(top = 8.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+            item { ForYou() }
+            item { TopTen() }
+            item { Releases() }
+            item { Text(Theme.credit, style = Theme.font(11.5f, color = Theme.tertiary), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
         }
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.rankedCards(list: List<Track>, queue: List<Track>) {
-    itemsIndexed(list, key = { i, t -> "$i${t.id}" }) { i, t -> TallTrackCard(t, rank = i + 1, queue = queue) }
+// ---------------- Cabeçalho ----------------
+
+@Composable
+private fun Header() {
+    Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            LumeWordmark(24f)
+            if (LibraryStore.offlineMode) {
+                Row(Modifier.height(24.dp).clip(RoundedCornerShape(50)).background(Theme.fillStrong).padding(horizontal = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(sf("airplane"), null, tint = Theme.accent, modifier = Modifier.size(12.dp))
+                    Text("Offline", style = Theme.font(11f, FontWeight.SemiBold, Theme.accent))
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            GlassIconButton("sparkles", size = 44.dp, desc = "Lume Replay") { AppModel.push(LumeRoute.Replay) }
+            GlassIconButton("bell", size = 44.dp, badge = AppModel.hasUnseenReleases, desc = "Novidades dos seus artistas") { AppModel.push(LumeRoute.Releases) }
+            GlassIconButton("gearshape", size = 44.dp, desc = "Ajustes") { AppModel.push(LumeRoute.Settings) }
+        }
+        Text(greeting(), style = Theme.font(34f, FontWeight.Bold, Theme.text))
+    }
 }
 
 @Composable
-private fun FlowCard() {
+private fun SearchPill() {
+    val shape = RoundedCornerShape(50)
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp).clip(RoundedCornerShape(26.dp)).glass(RoundedCornerShape(26.dp), elevation = 6.dp).padding(18.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
+        Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(50.dp).glass(shape).padding(start = 18.dp, end = 7.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text("Lume Flow", style = Theme.font(20f, FontWeight.Bold, Theme.text))
-            Text("Rádio infinita com o seu gosto", style = Theme.font(13.5f, color = Theme.secondary))
+        Row(Modifier.weight(1f).fillMaxSize().pressable(0.99f) { AppModel.select(AppTab.SEARCH) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(sf("magnifyingglass"), null, tint = Theme.secondary, modifier = Modifier.size(20.dp))
+            Text("Músicas, artistas, álbuns e trechos", style = Theme.font(15.5f, color = Theme.secondary), maxLines = 1)
         }
-        PrismButton("Tocar", "play.fill", modifier = Modifier.size(width = 112.dp, height = 48.dp), height = 48.dp) { AppModel.startFlow() }
+        Row(
+            Modifier.height(36.dp).pressable(0.94f) { Haptics.light(); AppModel.openLyricsSearch() }.clip(shape).background(Theme.fillStrong).padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(sf("quote.bubble.fill"), null, tint = Theme.accent, modifier = Modifier.size(14.dp))
+            Text("Letra", style = Theme.font(12f, FontWeight.SemiBold, Theme.accent))
+        }
     }
+}
+
+// ---------------- Continuar ouvindo ----------------
+
+@Composable
+private fun ContinueSection() {
+    val recent = LibraryStore.recentTracks.take(10)
+    if (recent.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionHeader("Continuar ouvindo", actionLabel = "Histórico", onAction = { AppModel.push(LumeRoute.Tracks("Histórico", LibraryStore.recentTracks)) })
+        HRow(spacing = 12.dp) { items(recent, key = { it.id }) { TallTrackCard(it, queue = recent, width = 128.dp) } }
+    }
+}
+
+// ---------------- Vitrine principal ----------------
+
+@Composable
+private fun Showcase() {
+    val place = HomeStore.homePlace
+    val feed = AppModel.feed
+    val chartAlbums = (HomeStore.homeList?.albums ?: emptyList()).take(6)
+    val fallback = ((feed?.newReleases?.takeIf { it.isNotEmpty() } ?: feed?.brazilReleases) ?: emptyList()).take(6)
+    val albums = chartAlbums.ifEmpty { fallback }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionHeader(
+            if (chartAlbums.isEmpty()) "Em destaque" else "Álbuns em alta · ${place.name}",
+            if (chartAlbums.isEmpty()) "Lançamentos que estão chamando atenção" else "Os mais ouvidos ${if (place.isGlobal) "no mundo" else "no país"} agora",
+            if (albums.isEmpty()) null else "Ver tudo",
+            onAction = if (albums.isEmpty()) null else {
+                { AppModel.push(LumeRoute.Albums("Álbuns em alta · ${place.name}", if (chartAlbums.isEmpty()) fallback else (HomeStore.homeList?.albums ?: emptyList()))) }
+            },
+        )
+        if (albums.isEmpty()) Skeleton(Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(332.dp), RoundedCornerShape(30.dp))
+        else androidx.compose.runtime.key(if (chartAlbums.isEmpty()) "fallback" else "chart_${place.id}") {
+            ReleaseHeroCarousel(albums, if (chartAlbums.isEmpty()) null else { idx, _ -> "#${idx + 1} · ${place.name.uppercase()}" })
+        }
+    }
+}
+
+// ---------------- Atalhos (onde fica cada coisa) ----------------
+
+private fun releaseItems(): List<AlbumShowcase> {
+    val feed = AppModel.feed ?: return AppModel.artistReleases
+    val regional = if (HomeStore.homePlace.id == "br") feed.brazilReleases + feed.newReleases else feed.newReleases + feed.brazilReleases
+    val seen = HashSet<String>()
+    val out = mutableListOf<AlbumShowcase>()
+    for (a in AppModel.artistReleases + regional) {
+        val key = DiscText.normalize(a.title) + "|" + DiscText.normalize(a.artist)
+        if (seen.add(key)) out.add(a)
+    }
+    return out
 }
 
 @Composable
 private fun Shortcuts() {
-    val store = LibraryStore
     val items: List<Triple<String, String, () -> Unit>> = listOf(
-        Triple("Curtidas", "heart.fill") { AppModel.push(LumeRoute.Tracks("Curtidas", store.favoriteTracks)) },
-        Triple("Baixadas", "arrow.down.circle.fill") { AppModel.push(LumeRoute.Tracks("Baixadas", store.downloadedTracks)) },
-        Triple("Histórico", "clock.fill") { AppModel.push(LumeRoute.Tracks("Histórico", store.recentTracks)) },
-        Triple("Lume Replay", "sparkles") { AppModel.push(LumeRoute.Replay) },
-        Triple("Cover Flow", "square.stack.fill") { AppModel.showCoverFlow = true },
-        Triple("Letra", "quote.bubble") { AppModel.openLyricsSearch() },
+        Triple("Paradas", "chart.bar.fill") { AppModel.push(LumeRoute.Country(HomeStore.place.chartCountry)) },
+        Triple("Gêneros", "square.grid.2x2.fill") { AppModel.push(LumeRoute.GenresHub) },
+        Triple("Lançamentos", "sparkles.rectangle.stack.fill") {
+            val list = releaseItems()
+            if (list.isEmpty()) AppModel.push(LumeRoute.Releases) else AppModel.push(LumeRoute.Albums("Lançamentos", list))
+        },
+        Triple("Cover Flow", "square.stack.3d.down.right.fill") { Haptics.medium(); AppModel.showCoverFlow = true },
+        Triple("Minhas playlists", "music.note.list") { AppModel.select(AppTab.LIBRARY) },
+        Triple("Lume Flow", "infinity") { Haptics.medium(); AppModel.startFlow() },
     )
     Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         items.chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 row.forEach { (title, icon, click) ->
-                    Column(Modifier.weight(1f).height(78.dp).pressable(0.95f) { click() }.glass(RoundedCornerShape(20.dp)), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Column(
+                        Modifier.weight(1f).height(80.dp).pressable(0.96f) { Haptics.light(); click() }.glass(RoundedCornerShape(22.dp)),
+                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                    ) {
                         Icon(sf(icon), null, tint = Theme.rose, modifier = Modifier.size(24.dp))
-                        Text(title, style = Theme.font(12.5f, FontWeight.SemiBold, Theme.text), modifier = Modifier.padding(top = 5.dp), maxLines = 1)
+                        Text(title, style = Theme.font(12.5f, FontWeight.SemiBold, Theme.text), modifier = Modifier.padding(top = 8.dp), maxLines = 1)
                     }
                 }
             }
@@ -217,16 +215,67 @@ private fun Shortcuts() {
     }
 }
 
-/** Top 10 com chips de país (Apple RSS por país via CatalogExplorerService). */
+// ---------------- Para você ----------------
+
 @Composable
-private fun Top10Section() {
-    var country by remember { mutableStateOf(ChartCountry.all.first()) }
-    val chart by androidx.compose.runtime.produceState<com.adriano.lumemusic.engine.CountryChartBundle?>(null, country) { value = null; value = CatalogExplorerService.countryChart(country) }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader("Top 10", "${country.flag} ${country.name}", "Top 50", onAction = { AppModel.push(LumeRoute.Country(country)) })
-        HRow(spacing = 8.dp) { items(ChartCountry.all, key = { it.code }) { c -> com.adriano.lumemusic.ui.PrismChip("${c.flag} ${c.name}", c.code == country.code) { country = c } } }
-        val c = chart
-        if (c == null) Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { repeat(4) { Skeleton(Modifier.fillMaxWidth().height(56.dp)) } }
-        else c.topSongs.take(10).forEachIndexed { i, t -> TrackRow(t, rank = i + 1, queue = c.topSongs) }
+private fun ForYou() {
+    val store = LibraryStore
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val mixes: List<PersonalizedMix> = run {
+        val fromHistory = CatalogExplorerService.buildPersonalizedMixes(
+            store.mostPlayedTracks, store.favoriteTracks, store.recentTracks, store.topListenedArtists, null,
+        ).filter { it.id in setOf("mix_norepeat", "mix_daily1", "mix_daily2", "mix_favorites") }
+        (HomeStore.genreMixes + fromHistory).take(6)
+    }
+    if (mixes.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionHeader("Para você", if (OnboardingGenres.selected(ctx).isEmpty()) "Com base no que você ouve" else "Seus gêneros e o que você ouve")
+        HRow(spacing = 14.dp) { items(mixes, key = { it.id }) { m -> PersonalizedMixCard(m) } }
+    }
+}
+
+// ---------------- Top 10 com seletor de país ----------------
+
+@Composable
+private fun TopTen() {
+    val place = HomeStore.place
+    val scope = rememberCoroutineScope()
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        SectionHeader(
+            place.title,
+            HomeStore.current?.caption ?: if (place.isGlobal) "Parada mundial · Deezer" else "Carregando a parada…",
+            "Top 50", onAction = { AppModel.push(LumeRoute.Country(place.chartCountry)) },
+        )
+        PlaceChipsBar(place.id) { p -> HomeStore.select(p) }
+        androidx.compose.runtime.key(place.id) {
+            ChartTrackList(HomeStore.current, HomeStore.isLoadingCurrent || !HomeStore.settled, 10) {
+                scope.launch { HomeStore.revalidate(place, force = true) }
+            }
+        }
+    }
+}
+
+// ---------------- Lançamentos ----------------
+
+@Composable
+private fun Releases() {
+    val items = releaseItems()
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionHeader(
+            "Lançamentos",
+            if (AppModel.artistReleases.isEmpty()) "Álbuns e singles recentes" else "Novidades dos seus artistas e do que está em alta",
+            if (items.isEmpty()) null else "Ver tudo",
+            onAction = if (items.isEmpty()) null else { { AppModel.push(LumeRoute.Albums("Lançamentos", items)) } },
+        )
+        if (items.isEmpty()) {
+            Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                repeat(3) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Skeleton(Modifier.size(150.dp), RoundedCornerShape(12.dp))
+                        Skeleton(Modifier.size(width = 110.dp, height = 13.dp), RoundedCornerShape(6.dp))
+                    }
+                }
+            }
+        } else HRow { items(items.take(16), key = { it.id }) { a -> DatedAlbumTile(a, 150.dp) } }
     }
 }

@@ -139,6 +139,8 @@ data class DiscoverFeed(
     val topAlbumsBrazil: List<AlbumShowcase>? = null,
     val topAlbumsGlobal: List<AlbumShowcase>? = null,
     val globalTopArtists: List<ArtistInfo>? = null,
+    /** Playlist "Top Brasil" (Deezer Charts): música realmente brasileira, ao contrário da parada da Apple que traz hits gringos. */
+    val brazilianHits: List<Track>? = null,
 )
 
 @Serializable
@@ -217,6 +219,16 @@ enum class CassetteStyle(val raw: String) {
     VINTAGE_CREAM("Vintage Creme");
 
     companion object { fun fromRaw(raw: String?) = entries.firstOrNull { it.raw == raw } ?: SMOKED_STUDIO }
+}
+
+/** Arte mostrada na tela de bloqueio / notificação de mídia. Raw values iguais aos do iOS. */
+enum class LockArtStyle(val raw: String, val title: String) {
+    AUTOMATIC("auto", "Automático"),
+    COVER("capa", "Capa"),
+    VINYL("vinil", "Vinil"),
+    CASSETTE("k7", "Fita K7");
+
+    companion object { fun fromRaw(raw: String?) = entries.firstOrNull { it.raw == raw } ?: AUTOMATIC }
 }
 
 enum class RepeatMode(val raw: String) {

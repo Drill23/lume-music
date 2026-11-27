@@ -1,6 +1,8 @@
 package com.adriano.lumemusic.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,35 +13,51 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.adriano.lumemusic.audio.AudioPlayer
+import com.adriano.lumemusic.data.ArtistInfo
+import com.adriano.lumemusic.data.ArtworkStore
 import com.adriano.lumemusic.data.ChartCountry
+import com.adriano.lumemusic.data.DownloadManager
 import com.adriano.lumemusic.data.MoodCategory
 import com.adriano.lumemusic.data.MusicGenre
 import com.adriano.lumemusic.data.Track
 import com.adriano.lumemusic.engine.CatalogExplorerService
+import com.adriano.lumemusic.engine.ChartList
+import com.adriano.lumemusic.engine.ChartPlace
+import com.adriano.lumemusic.engine.ChartsService
 import com.adriano.lumemusic.engine.CountryChartBundle
 import com.adriano.lumemusic.engine.GenreHubBundle
 import com.adriano.lumemusic.engine.MusicEngine
-import com.adriano.lumemusic.ui.AlbumTile
 import com.adriano.lumemusic.ui.AppModel
 import com.adriano.lumemusic.ui.ArtistBubble
 import com.adriano.lumemusic.ui.DetailTopBar
+import com.adriano.lumemusic.ui.EmptyState
+import com.adriano.lumemusic.ui.GlassIconButton
 import com.adriano.lumemusic.ui.GradientCard
 import com.adriano.lumemusic.ui.HRow
+import com.adriano.lumemusic.ui.HomeStore
 import com.adriano.lumemusic.ui.LumeRoute
 import com.adriano.lumemusic.ui.PrismChip
 import com.adriano.lumemusic.ui.SectionHeader
@@ -48,11 +66,13 @@ import com.adriano.lumemusic.ui.TallTrackCard
 import com.adriano.lumemusic.ui.TrackRow
 import com.adriano.lumemusic.ui.pressable
 import com.adriano.lumemusic.ui.theme.Theme
+import com.adriano.lumemusic.ui.theme.hex
+import kotlinx.coroutines.launch
 
 /** Botões Tocar / Aleatório de listas de faixas. */
 @Composable
-fun PlayShuffleRow(tracks: List<Track>, context: String) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+fun PlayShuffleRow(tracks: List<Track>, context: String, modifier: Modifier = Modifier.fillMaxWidth(), horizontalPadding: Dp = 20.dp) {
+    Row(modifier.padding(horizontal = horizontalPadding), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         com.adriano.lumemusic.ui.PrismButton("Tocar", "play.fill", modifier = Modifier.weight(1f)) {
             if (tracks.isNotEmpty()) { AudioPlayer.shuffleEnabled = false; AudioPlayer.play(tracks.first(), tracks, context) }
         }
@@ -63,71 +83,170 @@ fun PlayShuffleRow(tracks: List<Track>, context: String) {
 }
 
 @Composable
-fun ExploreScreen(bottomInset: Dp) {
-    var country by remember { mutableStateOf(ChartCountry.all.first()) }
-    val chart by produceState<CountryChartBundle?>(null, country) { value = null; value = CatalogExplorerService.countryChart(country) }
-    val feed = AppModel.feed
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-        item { Text("Explorar", style = Theme.font(32f, FontWeight.Bold, Theme.text), modifier = Modifier.statusBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp)) }
+private fun ExploreSkeleton() {
+    Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { repeat(8) { Skeleton(Modifier.fillMaxWidth().height(56.dp)) } }
+}
 
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionHeader("Paradas por País", "Veja o Top 50 ao vivo em qualquer região")
-                HRow(spacing = 8.dp) { items(ChartCountry.all, key = { it.code }) { c -> PrismChip("${c.flag} ${c.name}", c.code == country.code) { country = c } } }
-            }
-        }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SectionHeader("Top 50 · ${country.name}", null, "Ver Top 50", onAction = { AppModel.push(LumeRoute.Country(country)) })
-                val c = chart
-                if (c == null) Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { repeat(4) { Skeleton(Modifier.fillMaxWidth().height(56.dp)) } }
-                else c.topSongs.take(6).forEachIndexed { i, t -> TrackRow(t, rank = i + 1, queue = c.topSongs) }
-            }
-        }
-        if (AppModel.artistReleases.isNotEmpty()) item {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SectionHeader("Dos seus artistas", "Lançamentos de quem você ouve", onAction = { AppModel.push(LumeRoute.Releases) })
-                HRow { items(AppModel.artistReleases.take(15), key = { it.id }) { a -> AlbumTile(a, subtitle = a.artist) { AppModel.push(LumeRoute.Album(a)) } } }
-            }
-        }
-        feed?.let { f ->
-            if (f.topGlobal.isNotEmpty()) item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader("Mais tocadas", "Parada global", onAction = { AppModel.push(LumeRoute.Tracks("Parada global", f.topGlobal)) })
-                    HRow { rankedRow(f.topGlobal.take(15), f.topGlobal) }
+// ============================================================ Explorar
+
+private enum class ArtistScope(val title: String) { BRAZIL("Brasil"), WORLD("Mundo") }
+private val browseGroups = listOf("Gêneros BR", "Internacional", "Climas", "Décadas")
+
+/**
+ * Explorar — paradas por país e Global (seletor), cantores mais ouvidos (Brasil/Mundo),
+ * gêneros reais, climas, décadas e lançamentos (igual ao ExploreView do iOS).
+ */
+@Composable
+fun ExploreScreen(bottomInset: Dp) {
+    val scope = rememberCoroutineScope()
+    var refreshing by remember { mutableStateOf(false) }
+    var place by remember { mutableStateOf(HomeStore.place) }
+    var list by remember { mutableStateOf<ChartList?>(null) }
+    var loadingChart by remember { mutableStateOf(false) }
+    var artistScope by remember { mutableStateOf(ArtistScope.BRAZIL) }
+    var group by remember { mutableStateOf(browseGroups[0]) }
+    var reloadToken by remember { mutableStateOf(0) }
+    val feed = AppModel.feed
+
+    // Mostra o cache na hora e atualiza em seguida.
+    LaunchedEffect(place.id, reloadToken) {
+        list = ChartsService.cached(place)
+        loadingChart = true
+        val fresh = ChartsService.load(place, force = reloadToken > 0)
+        if (fresh != null) list = fresh
+        loadingChart = false
+    }
+
+    PullToRefreshBox(
+        refreshing,
+        onRefresh = { scope.launch { refreshing = true; HomeStore.refresh(); AppModel.refreshArtistReleases(); reloadToken++; refreshing = false } },
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(30.dp)) {
+            // Cabeçalho
+            item {
+                Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("Explorar", style = Theme.font(34f, FontWeight.Bold, Theme.text))
+                    Text(list?.caption ?: "Paradas do mundo inteiro", style = Theme.font(14f, color = Theme.secondary))
                 }
             }
-            val gta = f.globalTopArtists
-            if (!gta.isNullOrEmpty()) item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader("Cantores mais ouvidos", "Mundo", onAction = { AppModel.push(LumeRoute.Artists("Cantores mais ouvidos · Mundo", gta)) })
-                    HRow { items(gta, key = { it.id }) { a -> ArtistBubble(a) { AppModel.openArtist(a.name, a.deezerId) } } }
+
+            // Paradas (país / Global)
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    SectionHeader("Paradas", "Top 10 de cada país e do mundo", "Top 50", onAction = { AppModel.push(LumeRoute.Country(place.chartCountry)) })
+                    PlaceChipsBar(place.id) { place = it }
+                    androidx.compose.runtime.key(place.id) {
+                        ChartTrackList(list, loadingChart, 10) { reloadToken++ }
+                    }
+                    val albums = list?.albums ?: emptyList()
+                    if (albums.isNotEmpty()) Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SectionHeader(
+                            if (place.isGlobal) "Álbuns em alta no mundo" else "Álbuns mais ouvidos · ${place.name}",
+                            actionLabel = "Ver tudo", onAction = { AppModel.push(LumeRoute.Albums("Álbuns · ${place.name}", albums)) },
+                        )
+                        HRow { items(albums.take(16), key = { it.id }) { a -> DatedAlbumTile(a) } }
+                    }
                 }
             }
-            val alb = f.topAlbumsGlobal
-            if (!alb.isNullOrEmpty()) item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader("Álbuns em alta", null, onAction = { AppModel.push(LumeRoute.Albums("Álbuns em alta", alb)) })
-                    HRow { items(alb.take(15), key = { it.id }) { a -> AlbumTile(a, subtitle = a.artist) { AppModel.push(LumeRoute.Album(a)) } } }
+
+            if (feed == null) {
+                item {
+                    Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Skeleton(Modifier.size(width = 200.dp, height = 22.dp), RoundedCornerShape(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Skeleton(Modifier.size(width = 206.dp, height = 276.dp), RoundedCornerShape(26.dp))
+                            Skeleton(Modifier.size(width = 206.dp, height = 276.dp), RoundedCornerShape(26.dp))
+                        }
+                    }
                 }
-            }
-        }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SectionHeader("Gêneros, Climas & Décadas")
-                var group by remember { mutableStateOf("Gêneros BR") }
-                HRow(spacing = 8.dp) { items(listOf("Gêneros BR", "Internacional", "Climas", "Décadas")) { g -> PrismChip(g, group == g) { group = g } } }
-                val cards: List<Triple<String, Pair<Long, Long>, () -> Unit>> = when (group) {
-                    "Gêneros BR" -> MusicGenre.all.filter { it.group == MusicGenre.Group.BRASIL }.map { g -> Triple(g.title, g.hexA to g.hexB) { AppModel.push(LumeRoute.Genre(g)) } }
-                    "Internacional" -> MusicGenre.all.filter { it.group == MusicGenre.Group.INTERNACIONAL }.map { g -> Triple(g.title, g.hexA to g.hexB) { AppModel.push(LumeRoute.Genre(g)) } }
-                    "Climas" -> (MoodCategory.presets + MoodCategory.activities).map { m -> Triple(m.title, m.hexA to m.hexB) { AppModel.push(LumeRoute.Mood(m)) } }
-                    else -> MoodCategory.decades.map { m -> Triple(m.title, m.hexA to m.hexB) { AppModel.push(LumeRoute.Mood(m)) } }
+            } else {
+                // Música brasileira de verdade (playlist "Top Brasil" do Deezer) — a parada da Apple traz muitos hits gringos.
+                val hits = feed.brazilianHits ?: emptyList()
+                if (hits.isNotEmpty()) item {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SectionHeader("Música brasileira", "Só o que é nacional e está tocando agora", "Tocar",
+                            onAction = { AudioPlayer.play(hits.first(), hits, "Música brasileira") })
+                        HRow(spacing = 14.dp) { itemsIndexed(hits.take(15), key = { i, t -> "$i${t.id}" }) { i, t -> TallTrackCard(t, rank = i + 1, queue = hits) } }
+                    }
                 }
-                Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    cards.chunked(2).forEach { pair ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            pair.forEach { (title, cols, click) -> GradientCard(title, null, null, cols.first, cols.second, Modifier.weight(1f).height(84.dp), onClick = click) }
-                            if (pair.size == 1) Column(Modifier.weight(1f)) {}
+
+                // Cantores mais ouvidos (Brasil | Mundo)
+                item {
+                    val world = feed.globalTopArtists ?: emptyList()
+                    val artists: List<ArtistInfo> = if (artistScope == ArtistScope.WORLD && world.isNotEmpty()) world else feed.topArtists
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Cantores mais ouvidos", style = Theme.font(21f, FontWeight.Bold, Theme.text))
+                                Text(if (artistScope == ArtistScope.BRAZIL) "Os mais tocados na parada brasileira" else "Os mais tocados na parada mundial",
+                                    style = Theme.font(13f, color = Theme.secondary))
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                ArtistScope.entries.forEach { sc ->
+                                    val on = artistScope == sc
+                                    Box(Modifier.height(44.dp).pressable(0.95f) { com.adriano.lumemusic.platform.Haptics.selection(); artistScope = sc }, contentAlignment = Alignment.Center) {
+                                        Text(sc.title, style = Theme.font(12f, FontWeight.SemiBold, if (on) Theme.onPrism else Theme.secondary),
+                                            modifier = Modifier.height(32.dp).clip(RoundedCornerShape(50))
+                                                .then(if (on) Modifier.background(Theme.prismHorizontal) else Modifier.background(Theme.fill))
+                                                .padding(horizontal = 12.dp, vertical = 7.dp))
+                                    }
+                                }
+                            }
+                        }
+                        HRow(spacing = 16.dp) { items(artists.take(20), key = { it.id }) { a -> ArtistBubble(a) { AppModel.openArtist(a.name, a.deezerId) } } }
+                    }
+                }
+
+                // Em alta no YouTube Music Brasil
+                if (feed.trending.isNotEmpty()) item {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SectionHeader("Em alta no YouTube Music", "Vídeos de música em alta no Brasil", "Ver tudo",
+                            onAction = { AppModel.push(LumeRoute.Tracks("Em alta · YouTube Music Brasil", feed.trending)) })
+                        HRow(spacing = 12.dp) { items(feed.trending.take(12), key = { it.id }) { t -> TallTrackCard(t, queue = feed.trending, width = 128.dp) } }
+                    }
+                }
+
+                // Gêneros, Climas e Décadas
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        SectionHeader("Gêneros, Climas & Décadas")
+                        HRow(spacing = 8.dp) { items(browseGroups) { g -> PrismChip(g, group == g) { group = g } } }
+                        val cards: List<Triple<String, Pair<Long, Long>, () -> Unit>> = when (group) {
+                            "Gêneros BR" -> MusicGenre.all.filter { it.group == MusicGenre.Group.BRASIL }.map { g -> Triple(g.title, g.hexA to g.hexB) { AppModel.push(LumeRoute.Genre(g)) } }
+                            "Internacional" -> MusicGenre.all.filter { it.group == MusicGenre.Group.INTERNACIONAL }.map { g -> Triple(g.title, g.hexA to g.hexB) { AppModel.push(LumeRoute.Genre(g)) } }
+                            "Climas" -> MoodCategory.activities.map { m -> Triple(m.title, m.hexA to m.hexB) { AppModel.push(LumeRoute.Mood(m)) } }
+                            else -> MoodCategory.decades.map { m -> Triple(m.title, m.hexA to m.hexB) { AppModel.push(LumeRoute.Mood(m)) } }
+                        }
+                        Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            cards.chunked(2).forEach { pair ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    pair.forEach { (title, cols, click) -> GradientCard(title, null, null, cols.first, cols.second, Modifier.weight(1f).height(100.dp), onClick = click) }
+                                    if (pair.size == 1) Column(Modifier.weight(1f)) {}
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Lançamentos
+                if (AppModel.artistReleases.isNotEmpty()) item {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SectionHeader("Dos seus artistas", "Lançamentos de quem você ouve", "Ver tudo", onAction = { AppModel.push(LumeRoute.Releases) })
+                        HRow { items(AppModel.artistReleases.take(12), key = { it.id }) { a -> DatedAlbumTile(a, showDate = true) } }
+                    }
+                }
+                val week = feed.newReleases.ifEmpty { feed.brazilReleases }
+                if (week.isNotEmpty()) item {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        SectionHeader("Lançamentos da semana", actionLabel = "Ver tudo", onAction = { AppModel.push(LumeRoute.Albums("Lançamentos da semana", week)) })
+                        Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                            week.take(6).chunked(2).forEach { pair ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    pair.forEach { a -> Box(Modifier.weight(1f)) { BoxWithAlbum(a) } }
+                                    if (pair.size == 1) Column(Modifier.weight(1f)) {}
+                                }
+                            }
                         }
                     }
                 }
@@ -136,37 +255,102 @@ fun ExploreScreen(bottomInset: Dp) {
     }
 }
 
-private fun LazyListScope.rankedRow(list: List<Track>, queue: List<Track>) {
-    itemsIndexed(list, key = { i, t -> "$i${t.id}" }) { i, t -> TallTrackCard(t, rank = i + 1, queue = queue) }
+@Composable
+private fun BoxWithAlbum(a: com.adriano.lumemusic.data.AlbumShowcase) {
+    androidx.compose.foundation.layout.BoxWithConstraints {
+        DatedAlbumTile(a, maxWidth, showDate = true)
+    }
 }
+
+// ============================================================ Parada de País
+
+private enum class CountryScope(val title: String) { SONGS("Top 50"), ALBUMS("Álbuns"), ARTISTS("Artistas"), TRENDING("Em Alta") }
 
 @Composable
 fun CountryChartScreen(country: ChartCountry, bottomInset: Dp) {
-    val chart by produceState<CountryChartBundle?>(null, country) { value = CatalogExplorerService.countryChart(country) }
+    var selected by remember { mutableStateOf(country) }
+    var bundle by remember { mutableStateOf<CountryChartBundle?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var caption by remember { mutableStateOf("") }
+    var scope by remember { mutableStateOf(CountryScope.SONGS) }
+
+    // Stale-while-revalidate: mostra o que já existe NA HORA, atualiza as músicas e só então completa artistas/em alta.
+    LaunchedEffect(selected.code) {
+        val c = selected
+        val cached = CatalogExplorerService.cachedCountryChart(c)
+        if (cached != null) { bundle = cached; loading = false } else { bundle = null; loading = true }
+        val place = ChartPlace.place(c.code)
+        if (place != null) ChartsService.cached(place)?.let { caption = it.caption }
+        val fast = CatalogExplorerService.countryChartFast(c)
+        if (fast != null && fast.topSongs.isNotEmpty()) { bundle = fast; loading = false }
+        val full = CatalogExplorerService.countryChart(c)
+        if (full.topSongs.isNotEmpty()) bundle = full
+        if (place != null) ChartsService.cached(place)?.let { caption = it.caption }
+        ArtworkStore.register(full.topArtists)
+        loading = false
+    }
+
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar("${country.flag} Top 50 · ${country.name}")
-        val c = chart
+        DetailTopBar("${selected.flag} ${if (selected.code == "world") "Top 50 Global" else "Top 50 · ${selected.name}"}")
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            if (c == null) item { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { repeat(8) { Skeleton(Modifier.fillMaxWidth().height(56.dp)) } } }
-            else {
-                item { PlayShuffleRow(c.topSongs, "Top 50 · ${country.name}") }
-                item { Column { c.topSongs.forEachIndexed { i, t -> TrackRow(t, rank = i + 1, queue = c.topSongs) } } }
-                if (c.topAlbums.isNotEmpty()) item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionHeader("Álbuns mais ouvidos")
-                        HRow { items(c.topAlbums, key = { it.id }) { a -> AlbumTile(a, subtitle = a.artist) { AppModel.push(LumeRoute.Album(a)) } } }
+            // Hero
+            item {
+                Box(Modifier.fillMaxWidth().height(190.dp).background(Brush.linearGradient(listOf(hex(selected.hexA), hex(selected.hexB))))) {
+                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(0.2f), Color.Black.copy(0.45f)))))
+                    Text(selected.flag, style = Theme.font(130f), modifier = Modifier.align(Alignment.BottomEnd).padding(end = 6.dp).alpha(0.25f))
+                    Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(selected.region.uppercase(), style = Theme.font(11f, FontWeight.Bold, Color.White.copy(0.85f), letterSpacing = androidx.compose.ui.unit.TextUnit(1.1f, androidx.compose.ui.unit.TextUnitType.Sp)))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(selected.flag, style = Theme.font(36f))
+                            Text(if (selected.code == "world") "Top 50 Global" else "Top 50 ${selected.name}", style = Theme.font(30f, FontWeight.ExtraBold, Color.White), maxLines = 2)
+                        }
+                        Text(if (selected.code == "world") "As músicas mais ouvidas no mundo inteiro" else "As músicas, álbuns e cantores mais ouvidos no país",
+                            style = Theme.font(13.5f, FontWeight.Medium, Color.White.copy(0.86f)))
+                        if (caption.isNotEmpty()) Text(caption, style = Theme.font(11.5f, FontWeight.SemiBold, Color.White.copy(0.7f)))
                     }
                 }
-                if (c.topArtists.isNotEmpty()) item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionHeader("Artistas em alta")
-                        HRow { items(c.topArtists, key = { it.id }) { a -> ArtistBubble(a) { AppModel.openArtist(a.name, a.deezerId) } } }
+            }
+            item { PlaceChipsBar(selected.code) { selected = it.chartCountry } }
+            item { HRow(spacing = 8.dp) { items(CountryScope.entries.toList()) { s -> PrismChip(s.title, scope == s) { scope = s } } } }
+
+            val b = bundle
+            if (loading && b == null) item { ExploreSkeleton() }
+            else if (b == null) item { EmptyState("wifi.exclamationmark", "Parada indisponível", "Não foi possível carregar os rankings deste país agora.") }
+            else when (scope) {
+                CountryScope.SONGS -> {
+                    item {
+                        Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Box(Modifier.weight(1f)) { PlayShuffleRow(b.topSongs, "Top 50 ${b.country.name}", horizontalPadding = 0.dp) }
+                            GlassIconButton("arrow.down.circle", size = 50.dp, desc = "Baixar Top 10") {
+                                DownloadManager.downloadBatch(b.topSongs.take(10))
+                                AppModel.showToast("Baixando Top 10 de ${b.country.name}")
+                            }
+                        }
+                    }
+                    itemsIndexed(b.topSongs, key = { i, t -> "$i${t.id}" }) { i, t -> TrackRow(t, rank = i + 1, queue = b.topSongs) }
+                }
+                CountryScope.ALBUMS -> {
+                    if (b.topAlbums.isEmpty()) item { EmptyState("square.stack", "Sem álbuns", "Nenhum álbum ranqueado disponível agora.") }
+                    else items(b.topAlbums.chunked(2)) { pair ->
+                        Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            pair.forEach { a -> Box(Modifier.weight(1f)) { BoxWithAlbum(a) } }
+                            if (pair.size == 1) Column(Modifier.weight(1f)) {}
+                        }
                     }
                 }
-                if (c.trending.isNotEmpty()) item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionHeader("Em alta no YouTube Music", "Vídeos e músicas em ascensão")
-                        c.trending.take(20).forEach { TrackRow(it, queue = c.trending) }
+                CountryScope.ARTISTS -> {
+                    if (b.topArtists.isEmpty()) item { EmptyState("music.mic", "Sem artistas", "Nenhum artista ranqueado disponível agora.") }
+                    else items(b.topArtists.chunked(3)) { trio ->
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            trio.forEach { a -> ArtistBubble(a, size = 96.dp) { AppModel.openArtist(a.name, a.deezerId) } }
+                        }
+                    }
+                }
+                CountryScope.TRENDING -> {
+                    if (b.trending.isEmpty()) item { EmptyState("play.rectangle", "Sem vídeos em alta", "O YouTube Music não trouxe vídeos em alta para este lugar agora.") }
+                    else {
+                        item { PlayShuffleRow(b.trending, "Em alta · ${b.country.name}") }
+                        itemsIndexed(b.trending, key = { i, t -> "$i${t.id}" }) { i, t -> TrackRow(t, rank = i + 1, queue = b.trending) }
                     }
                 }
             }
@@ -174,45 +358,114 @@ fun CountryChartScreen(country: ChartCountry, bottomInset: Dp) {
     }
 }
 
+// ============================================================ Hub de Gênero
+
 @Composable
 fun GenreHubScreen(genre: MusicGenre, bottomInset: Dp) {
-    val hub by produceState<GenreHubBundle?>(null, genre) { value = CatalogExplorerService.genreHub(genre) }
+    var hub by remember { mutableStateOf<GenreHubBundle?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    LaunchedEffect(genre.id) {
+        val cached = CatalogExplorerService.cachedGenreHub(genre)
+        if (cached != null) { hub = cached; loading = false } else loading = true
+        val fresh = CatalogExplorerService.genreHub(genre)
+        if (fresh.topSongs.isNotEmpty()) hub = fresh
+        hub?.topArtists?.let { ArtworkStore.register(it) }
+        loading = false
+    }
     Column(Modifier.fillMaxSize()) {
         DetailTopBar(genre.title)
         val h = hub
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(26.dp)) {
             item {
-                GradientCard(genre.title, genre.subtitle, genre.icon, genre.hexA, genre.hexB, Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(120.dp)) {}
+                Box(Modifier.fillMaxWidth().height(190.dp).background(Brush.linearGradient(listOf(hex(genre.hexA), hex(genre.hexB))))) {
+                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(0.22f), Color.Black.copy(0.42f)))))
+                    Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(genre.group.raw.uppercase(), style = Theme.font(11f, FontWeight.Bold, Color.White.copy(0.84f), letterSpacing = androidx.compose.ui.unit.TextUnit(1.1f, androidx.compose.ui.unit.TextUnitType.Sp)))
+                        Text(genre.title, style = Theme.font(34f, FontWeight.ExtraBold, Color.White), maxLines = 2)
+                        Text(genre.subtitle, style = Theme.font(14f, FontWeight.Medium, Color.White.copy(0.85f)))
+                    }
+                }
             }
-            if (h == null) item { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { repeat(8) { Skeleton(Modifier.fillMaxWidth().height(56.dp)) } } }
-            else {
-                item { PlayShuffleRow(h.topSongs, genre.title) }
-                item { Column { h.topSongs.forEachIndexed { i, t -> TrackRow(t, rank = i + 1, queue = h.topSongs) } } }
-                if (h.topAlbums.isNotEmpty()) item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionHeader("Álbuns em alta")
-                        HRow { items(h.topAlbums, key = { it.id }) { a -> AlbumTile(a, subtitle = a.artist) { AppModel.push(LumeRoute.Album(a)) } } }
+            if (h == null) {
+                if (loading) item { ExploreSkeleton() }
+            } else {
+                if (h.topSongs.isNotEmpty()) item {
+                    Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.weight(1f)) { PlayShuffleRow(h.topSongs, genre.title, horizontalPadding = 0.dp) }
+                        GlassIconButton("dot.radiowaves.left.and.right", size = 50.dp, desc = "Rádio do estilo") { h.topSongs.firstOrNull()?.let { AudioPlayer.startRadio(it) } }
                     }
                 }
                 if (h.topArtists.isNotEmpty()) item {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionHeader("Artistas")
-                        HRow { items(h.topArtists, key = { it.id }) { a -> ArtistBubble(a) { AppModel.openArtist(a.name, a.deezerId) } } }
+                        SectionHeader("Principais artistas", actionLabel = "Ver todos", onAction = { AppModel.push(LumeRoute.Artists("Artistas · ${genre.title}", h.topArtists)) })
+                        HRow(spacing = 16.dp) { items(h.topArtists.take(16), key = { it.id }) { a -> ArtistBubble(a) { AppModel.openArtist(a.name, a.deezerId) } } }
+                    }
+                }
+                if (h.topSongs.isNotEmpty()) item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SectionHeader("Mais tocadas em ${genre.title}", actionLabel = if (h.topSongs.size > 10) "Ver tudo" else null,
+                            onAction = if (h.topSongs.size > 10) { { AppModel.push(LumeRoute.Tracks("Top ${genre.title}", h.topSongs)) } } else null)
+                        h.topSongs.take(12).forEachIndexed { i, t -> TrackRow(t, rank = i + 1, queue = h.topSongs) }
+                    }
+                }
+                if (h.topAlbums.isNotEmpty()) item {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SectionHeader("Álbuns em destaque", actionLabel = "Ver tudo", onAction = { AppModel.push(LumeRoute.Albums("Álbuns · ${genre.title}", h.topAlbums)) })
+                        HRow { items(h.topAlbums.take(16), key = { it.id }) { a -> DatedAlbumTile(a, showDate = true) } }
                     }
                 }
                 if (h.playlists.isNotEmpty()) item {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionHeader("Playlists")
+                        SectionHeader("Playlists selecionadas")
                         HRow { items(h.playlists, key = { it.id }) { p ->
-                            Column(Modifier.size(width = 150.dp, height = 210.dp).pressable(0.96f) { AppModel.push(LumeRoute.RemotePlaylistRoute(p)) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                com.adriano.lumemusic.ui.ArtworkImage(p.artworkURL, Modifier.size(150.dp), 16.dp, icon = "music.note.list")
-                                Text(p.title, style = Theme.font(14.5f, FontWeight.SemiBold, Theme.text), maxLines = 1)
-                                Text(p.subtitle, style = Theme.font(12.5f, color = Theme.secondary), maxLines = 1)
+                            Column(Modifier.size(width = 152.dp, height = 210.dp).pressable(0.97f) { AppModel.push(LumeRoute.RemotePlaylistRoute(p)) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                com.adriano.lumemusic.ui.ArtworkImage(p.artworkURL, Modifier.size(152.dp), 14.dp, icon = "music.note.list")
+                                Text(p.title, style = Theme.font(14f, FontWeight.Medium, Theme.text), maxLines = 1)
+                                Text(p.subtitle, style = Theme.font(12f, color = Theme.secondary), maxLines = 1)
                             }
                         } }
                     }
                 }
             }
+        }
+    }
+}
+
+// ============================================================ Gêneros (hub)
+
+/** Estilos do Brasil, internacionais, climas e décadas (GenresHubView do iOS). */
+@Composable
+fun GenresHubScreen(bottomInset: Dp) {
+    Column(Modifier.fillMaxSize()) {
+        DetailTopBar("Gêneros")
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
+            item {
+                Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Gêneros", style = Theme.font(34f, FontWeight.Bold, Theme.text))
+                    Text("Toque num estilo para ver as mais tocadas, artistas e álbuns", style = Theme.font(14f, color = Theme.secondary))
+                }
+            }
+            fun group(title: String, cards: List<Triple<String, Pair<Long, Long>, () -> Unit>>, subtitles: List<String?>) {
+                item(key = title) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SectionHeader(title)
+                        Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            cards.withIndex().toList().chunked(2).forEach { pair ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    pair.forEach { (i, c) -> GradientCard(c.first, subtitles[i], null, c.second.first, c.second.second, Modifier.weight(1f).height(98.dp), onClick = c.third) }
+                                    if (pair.size == 1) Column(Modifier.weight(1f)) {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            val br = MusicGenre.all.filter { it.group == MusicGenre.Group.BRASIL }
+            val intl = MusicGenre.all.filter { it.group == MusicGenre.Group.INTERNACIONAL }
+            group("Estilos do Brasil", br.map { g -> Triple(g.title, g.hexA to g.hexB) { AppModel.push(LumeRoute.Genre(g)) } }, br.map { it.subtitle })
+            group("Internacionais", intl.map { g -> Triple(g.title, g.hexA to g.hexB) { AppModel.push(LumeRoute.Genre(g)) } }, intl.map { it.subtitle })
+            group("Climas e momentos", MoodCategory.activities.map { m -> Triple(m.title, m.hexA to m.hexB) { AppModel.push(LumeRoute.Mood(m)) } }, MoodCategory.activities.map { null })
+            group("Décadas", MoodCategory.decades.map { m -> Triple(m.title, m.hexA to m.hexB) { AppModel.push(LumeRoute.Mood(m)) } }, MoodCategory.decades.map { null })
         }
     }
 }
@@ -233,4 +486,3 @@ fun MoodScreen(mood: MoodCategory, bottomInset: Dp) {
         }
     }
 }
-
