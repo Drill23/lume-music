@@ -551,6 +551,11 @@ final class AudioPlayer: ObservableObject {
     }
 
     statusObs = item.observe(\.status, options: [.new]) { [weak self] it, _ in
+      if it.status == .readyToPlay {
+        // O stream progressivo (MP4 itag 18) traz vídeo 360p: desligamos a faixa de vídeo para o
+        // iPhone não decodificar imagem que ninguém vê (menos CPU/GPU, menos calor e bateria).
+        for t in it.tracks where t.assetTrack?.mediaType == .video && t.isEnabled { t.isEnabled = false }
+      }
       if it.status == .failed {
         let msg = it.error?.localizedDescription ?? "Falha ao reproduzir esta faixa."
         Task { @MainActor [weak self] in

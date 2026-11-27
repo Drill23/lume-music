@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import SwiftUI
 
@@ -233,6 +234,8 @@ final class DownloadManager: ObservableObject {
           }
           return
         }
+        // Player de música: o arquivo salvo fica só com o áudio (sem a faixa de vídeo do MP4 de origem).
+        await Self.stripVideoTrack(at: dest)
 
         // Prefetch capa e letra para uso 100% offline
         let artURL = await MainActor.run { ArtworkStore.shared.url(for: working) }
@@ -347,5 +350,28 @@ private final class NativeFileDownloader: NSObject, URLSessionDownloadDelegate {
     finished = true
     continuation?.resume(throwing: error)
     continuation = nil
+  }
+}
+
+// MARK: - Só áudio
+extension DownloadManager {
+  /// Regrava o arquivo baixado só com a faixa de áudio (AAC em .m4a), sem a faixa de vídeo.
+  /// Se algo falhar, mantém o original (que continua tocando normalmente).
+  static func stripVideoTrack(at url: URL) async {
+    let asset = AVURLAsset(url: url)
+    guard let videoTracks = try? await asset.loadTracks(withMediaType: .video), !videoTracks.isEmpty,
+          let audioTracks = try? await asset.loadTracks(withMediaType: .audio), !audioTracks.isEmpty,
+          let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else { return }
+    let tmp = url.deletingLastPathComponent().appendingPathComponent(UUID().uuidString + ".m4a")
+    export.outputURL = tmp
+    export.outputFileType = .m4a
+    await export.export()
+    guard export.status == .completed,
+          let size = (try? FileManager.default.attributesOfItem(atPath: tmp.path)[.size] as? Int64) ?? nil,
+          size > 32768 else {
+      try? FileManager.default.removeItem(at: tmp)
+      return
+    }
+    _ = try? FileManager.default.replaceItemAt(url, withItemAt: tmp)
   }
 }

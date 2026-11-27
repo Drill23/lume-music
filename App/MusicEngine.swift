@@ -389,11 +389,13 @@ actor MusicEngine {
       let preferredProgressive = combined.first(where: { ($0["itag"] as? Int) == 18 && ($0["url"] as? String) != nil })
         ?? combined.first(where: { (($0["mimeType"] as? String) ?? "").contains("mp4") && ($0["url"] as? String) != nil })
       let progressiveURL = (preferredProgressive?["url"] as? String).flatMap(URL.init(string:))
-      let audioFmt = adaptive.first(where: { ($0["itag"] as? Int) == 140 && ($0["url"] as? String) != nil })
+      // 27/11/2026: testado com curl — sem PO token o itag 140 responde 403 depois de ~1 MB (a música pararia
+      // por volta de 1 min). Só usamos áudio puro se não houver MP4 progressivo (que toca a faixa inteira).
+      let audioFmt: [String: Any]? = progressiveURL != nil ? nil : (adaptive.first(where: { ($0["itag"] as? Int) == 140 && ($0["url"] as? String) != nil })
         ?? adaptive.first(where: {
           let mime = ($0["mimeType"] as? String) ?? ""
           return mime.hasPrefix("audio/mp4") && mime.contains("mp4a.40.2") && ($0["url"] as? String) != nil
-        })
+        }))
       if let fmt = audioFmt, let urlStr = fmt["url"] as? String, let streamURL = URL(string: urlStr) {
         let br = max(96000, (fmt["bitrate"] as? Int) ?? 128000)
         return ResolvedStream(url: streamURL, headers: [:], bitrate: br, expiresAt: Date().addingTimeInterval(40 * 60),

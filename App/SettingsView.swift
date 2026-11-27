@@ -10,7 +10,15 @@ struct SettingsView: View {
 
   var body: some View {
     List {
-      // TODO AccessStatusCard — cartão "Seu acesso" (código de acesso), encaixado na junção das frentes.
+      if AccessService.shared.gateEnabled {
+        Section {
+          AccessStatusCard()
+            .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+            .listRowBackground(Color.clear)
+        } header: {
+          Text("Seu acesso")
+        }
+      }
 
       Section {
         PlayerStylePicker()
@@ -35,8 +43,7 @@ struct SettingsView: View {
         }
         Button {
           Haptics.success()
-          UserDefaults.standard.set(false, forKey: "lume.onboarding.done")
-          app.showToast("A apresentação aparece na próxima vez que você abrir o Lume")
+          Onboarding.reset()
         } label: {
           Label("Rever apresentação", systemImage: "play.rectangle.on.rectangle")
             .foregroundStyle(Theme.text)
