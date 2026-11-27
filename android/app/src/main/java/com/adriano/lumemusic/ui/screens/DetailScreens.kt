@@ -1,5 +1,6 @@
 package com.adriano.lumemusic.ui.screens
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +15,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,7 +43,7 @@ import com.adriano.lumemusic.ui.AlbumTile
 import com.adriano.lumemusic.ui.AppModel
 import com.adriano.lumemusic.ui.ArtistBubble
 import com.adriano.lumemusic.ui.ArtworkImage
-import com.adriano.lumemusic.ui.DetailTopBar
+import com.adriano.lumemusic.ui.DetailHeader
 import com.adriano.lumemusic.ui.EmptyState
 import com.adriano.lumemusic.ui.GlassButton
 import com.adriano.lumemusic.ui.GlassIconButton
@@ -60,11 +62,12 @@ fun AlbumScreen(album: AlbumShowcase, bottomInset: Dp) {
         if (album.tracks.isEmpty()) value = DiscoveryService.albumTracks(album).ifEmpty { com.adriano.lumemusic.engine.MusicEngine.fetchAlbumTracks(album.title, album.artist, album.artworkURL) }
     }
     val saved = LibraryStore.isAlbumSaved(album.id)
+    val listState = rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar(album.title) {
+        DetailHeader(album.title, listState, 240.dp) {
             GlassIconButton(if (saved) "heart.fill" else "heart", foreground = if (saved) Theme.rose else Theme.text, desc = "Salvar álbum") { LibraryStore.toggleSaveAlbum(album, tracks) }
         }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     ArtworkImage(album.artworkURL, Modifier.size(220.dp), 26.dp, icon = "square.stack.fill")
@@ -87,10 +90,11 @@ fun AlbumScreen(album: AlbumShowcase, bottomInset: Dp) {
 fun ArtistScreen(name: String, deezerId: Long?, bottomInset: Dp) {
     val detail by produceState<ArtistDetail?>(null, name, deezerId) { value = DiscoveryService.artistDetail(name, deezerId) }
     val following = LibraryStore.isFollowing(name)
+    val listState = rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar(name)
+        DetailHeader(name, listState, 215.dp)
         val d = detail
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             item {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val pic = d?.artist?.pictureURL ?: ""
@@ -129,9 +133,10 @@ fun ArtistScreen(name: String, deezerId: Long?, bottomInset: Dp) {
 @Composable
 fun RemotePlaylistScreen(pl: RemotePlaylist, bottomInset: Dp) {
     val tracks by produceState<List<Track>?>(null, pl.deezerId) { value = CatalogExplorerService.playlistTracks(pl.deezerId) }
+    val listState = rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar(pl.title)
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        DetailHeader(pl.title, listState, 235.dp)
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     ArtworkImage(pl.artworkURL, Modifier.size(200.dp), 24.dp, icon = "music.note.list")
@@ -158,9 +163,10 @@ fun RemotePlaylistScreen(pl: RemotePlaylist, bottomInset: Dp) {
 
 @Composable
 fun MixScreen(mix: PersonalizedMix, bottomInset: Dp) {
+    val listState = rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar(mix.title)
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        DetailHeader(mix.title, listState, 100.dp)
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item { GradientCard(mix.title, mix.subtitle, mix.icon, mix.hexA, mix.hexB, Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(130.dp)) {} }
             item { PlayShuffleRow(mix.tracks, mix.title) }
             items(mix.tracks.size) { TrackRow(mix.tracks[it], queue = mix.tracks) }
@@ -175,8 +181,8 @@ fun ReleasesScreen(bottomInset: Dp) {
     val world = AppModel.feed?.newReleases ?: emptyList()
     val br = AppModel.feed?.brazilReleases ?: emptyList()
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar("Lançamentos")
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        DetailHeader("Lançamentos")
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             if (mine.isNotEmpty()) item { ReleaseSection("De quem você ouve", mine) }
             if (br.isNotEmpty()) item { ReleaseSection("Novidades do Brasil", br) }
             if (world.isNotEmpty()) item { ReleaseSection("Lançamentos no mundo", world) }
@@ -190,7 +196,7 @@ private fun ReleaseSection(title: String, albums: List<AlbumShowcase>) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         SectionHeader(title)
         albums.take(30).forEach { a ->
-            Row(Modifier.fillMaxWidth().height(68.dp).pressable(0.98f) { AppModel.push(LumeRoute.Album(a)) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).pressable(0.98f) { AppModel.push(LumeRoute.Album(a)) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 ArtworkImage(a.artworkURL, Modifier.size(56.dp), 12.dp, icon = "square.stack.fill")
                 Column(Modifier.weight(1f)) {
                     Text(a.title, style = Theme.font(16f, FontWeight.Medium, Theme.text), maxLines = 1)
@@ -205,8 +211,8 @@ private fun ReleaseSection(title: String, albums: List<AlbumShowcase>) {
 @Composable
 fun TrackListScreen(title: String, tracks: List<Track>, bottomInset: Dp) {
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar(title)
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        DetailHeader(title)
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (tracks.isEmpty()) item { EmptyState("music.note", "Nada por aqui ainda", "As músicas aparecem aqui assim que você ouvir ou curtir.") }
             else {
                 item { PlayShuffleRow(tracks, title) }
@@ -219,8 +225,8 @@ fun TrackListScreen(title: String, tracks: List<Track>, bottomInset: Dp) {
 @Composable
 fun AlbumGridScreen(title: String, albums: List<AlbumShowcase>, bottomInset: Dp) {
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar(title)
-        LazyVerticalGrid(GridCells.Fixed(2), Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = bottomInset + 16.dp, top = 8.dp),
+        DetailHeader(title)
+        LazyVerticalGrid(GridCells.Fixed(2), Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = bottomInset, top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             items(albums, key = { it.id }) { a -> AlbumTile(a, width = 160.dp) { AppModel.push(LumeRoute.Album(a)) } }
         }
@@ -231,8 +237,8 @@ fun AlbumGridScreen(title: String, albums: List<AlbumShowcase>, bottomInset: Dp)
 fun ArtistGridScreen(title: String, artists: List<ArtistInfo>, bottomInset: Dp) {
     LaunchedEffect(artists) { ArtworkStore.register(artists) }
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar(title)
-        LazyVerticalGrid(GridCells.Fixed(3), Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = bottomInset + 16.dp, top = 8.dp),
+        DetailHeader(title)
+        LazyVerticalGrid(GridCells.Fixed(3), Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = bottomInset, top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             items(artists, key = { it.id }) { a -> ArtistBubble(a, size = 92.dp) { AppModel.openArtist(a.name, a.deezerId) } }
         }

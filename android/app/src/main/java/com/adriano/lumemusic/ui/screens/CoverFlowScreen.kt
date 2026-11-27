@@ -1,5 +1,7 @@
 package com.adriano.lumemusic.ui.screens
 
+import com.adriano.lumemusic.ui.blockTouchesBehind
+import com.adriano.lumemusic.ui.Chrome
 import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
@@ -223,7 +225,7 @@ fun CoverFlowScreen() {
     }
 
     CompositionLocalProvider(LocalDark provides true) {
-        Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().blockTouchesBehind()) {
             CoverFlowBackdrop()
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val landscape = maxWidth > maxHeight
@@ -326,7 +328,8 @@ private fun PortraitLayout(
     val captionH = 60f
     val sliderY = captionY + captionH + 4f
     val panelY = sliderY + 40f
-    val panelH = max(120f, h - panelY - 8f)
+    val navBottomDp = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp().value }
+    val panelH = max(120f, h - panelY - 8f - navBottomDp)
     val flipA by animateFloatAsState(if (flippedId == null) 1f else 0f, tween(200), label = "chrome")
     val scope = rememberCoroutineScope()
     Box(Modifier.fillMaxSize()) {
@@ -364,7 +367,8 @@ private fun PortraitLayout(
                 CoverFlowTrackPanel(items, sel, tracks)
             }
         }
-        CoverFlowStage(items, m, pos, sel, setSel, flippedId, setFlipped, tracks)
+        // Estágio acima de tudo só enquanto uma capa está virada; fora disso ele não pode engolir toques dos botões, do scrubber e da lista.
+        Box(Modifier.fillMaxSize().zIndex(if (flippedId != null) 10f else -1f)) { CoverFlowStage(items, m, pos, sel, setSel, flippedId, setFlipped, tracks) }
     }
 }
 
@@ -372,11 +376,11 @@ private fun PortraitLayout(
 
 @Composable
 private fun CoverFlowSourcePicker(source: FlowSource, onSource: (FlowSource) -> Unit) {
-    Row(Modifier.height(44.dp).glass(RoundedCornerShape(50)).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+    Row(Modifier.height(Chrome.minTouch).glass(RoundedCornerShape(50)).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         for (s in FlowSource.entries) {
             val active = source == s
             Box(
-                Modifier.height(44.dp).pressable(0.97f) { if (!active) { Haptics.selection(); onSource(s) } },
+                Modifier.height(Chrome.minTouch).pressable(0.97f) { if (!active) { Haptics.selection(); onSource(s) } },
                 contentAlignment = Alignment.Center,
             ) {
                 Box(Modifier.height(36.dp).clip(RoundedCornerShape(50)).then(if (active) Modifier.background(Theme.prismDiagonal) else Modifier).padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
@@ -646,14 +650,14 @@ private fun CoverFlowBack(item: CoverFlowItem, size: Float, aspect: Float, store
 
 @Composable
 private fun BackPlayButton(onClick: () -> Unit) {
-    Box(Modifier.size(44.dp).pressable(0.92f) { onClick() }, contentAlignment = Alignment.Center) {
+    Box(Modifier.size(Chrome.minTouch).pressable(0.92f) { onClick() }, contentAlignment = Alignment.Center) {
         Box(Modifier.size(36.dp).background(Theme.prismDiagonal, CircleShape), contentAlignment = Alignment.Center) { Icon(sf("play.fill"), "Tocar", tint = Theme.onPrism, modifier = Modifier.size(15.dp)) }
     }
 }
 
 @Composable
 private fun BackCloseButton(onClick: () -> Unit) {
-    Box(Modifier.size(44.dp).pressable(0.92f) { onClick() }, contentAlignment = Alignment.Center) {
+    Box(Modifier.size(Chrome.minTouch).pressable(0.92f) { onClick() }, contentAlignment = Alignment.Center) {
         Box(Modifier.size(36.dp).background(Color.White.copy(0.16f), CircleShape), contentAlignment = Alignment.Center) { Icon(sf("chevron.left"), "Voltar", tint = Color.White, modifier = Modifier.size(14.dp)) }
     }
 }
@@ -687,7 +691,7 @@ private fun totalDuration(tracks: List<Track>): String {
 private fun BackRow(i: Int, t: Track, tracks: List<Track>) {
     val playing = AudioPlayer.currentTrack?.id == t.id
     Row(
-        Modifier.fillMaxWidth().height(40.dp).pressable(0.99f) { Haptics.light(); AudioPlayer.play(t, tracks) }.padding(horizontal = 10.dp),
+        Modifier.fillMaxWidth().height(Chrome.minTouch).pressable(0.99f) { Haptics.light(); AudioPlayer.play(t, tracks) }.padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(Modifier.width(18.dp), contentAlignment = Alignment.CenterEnd) {
@@ -741,7 +745,7 @@ private fun CoverFlowTrackPanel(items: List<CoverFlowItem>, sel: Int, store: Cov
 @Composable
 private fun PanelRow(number: Int, title: String, subtitle: String?, duration: String, active: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(if (subtitle == null) 44.dp else 52.dp).pressable(0.99f) { Haptics.light(); onClick() }.padding(horizontal = 16.dp),
+        Modifier.fillMaxWidth().height(if (subtitle == null) Chrome.minTouch else 52.dp).pressable(0.99f) { Haptics.light(); onClick() }.padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.width(24.dp), contentAlignment = Alignment.CenterEnd) { Text("$number", style = Theme.font(13f, FontWeight.Medium, Color.White.copy(0.45f))) }

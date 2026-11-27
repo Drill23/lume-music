@@ -534,6 +534,7 @@ struct ServiceLinkSheet: View {
         }
         .padding(.horizontal, 22)
       }
+      .lumeSheetScroll()
     }
     .presentationDetents([.large])
     .presentationDragIndicator(.visible)

@@ -114,10 +114,9 @@ struct AlbumView: View {
         footer
       }
     }
+    .lumeTabScroll()
     .background { backdrop }
-    .navigationTitle("")
-    .navigationBarTitleDisplayMode(.inline)
-    .toolbarBackground(.hidden, for: .navigationBar)
+    .lumeDetailChrome(title: album.title, threshold: 290)
     .task {
       let found = await DiscoveryService.shared.albumTracks(album)
       if !found.isEmpty { tracks = found }
@@ -295,10 +294,9 @@ struct ArtistView: View {
       }
     }
     .ignoresSafeArea(edges: .top)
+    .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())
-    .navigationTitle("")
-    .navigationBarTitleDisplayMode(.inline)
-    .toolbarBackground(.hidden, for: .navigationBar)
+    .lumeDetailChrome(title: detail?.artist.name ?? name, threshold: 300, veilAfter: 110)
     .task(id: name) { await load() }
   }
 
@@ -541,8 +539,8 @@ struct ArtistView: View {
             Text("Ouvir").font(Theme.font(14, .semibold))
           }
           .foregroundStyle(Theme.onPrism)
-          .padding(.horizontal, 16)
-          .frame(height: 34)
+          .padding(.horizontal, 18)
+          .frame(height: 44)
           .background(Capsule().fill(Theme.prismDiagonal))
           .overlay(Capsule().stroke(.white.opacity(0.5), lineWidth: 0.8))
         }
@@ -586,26 +584,27 @@ struct PlaylistView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(background)
-    .navigationBarTitleDisplayMode(.inline)
-    .navigationTitle(playlist?.name ?? "")
-    .toolbar {
+    .lumeDetailChrome(title: playlist?.name ?? "", threshold: 250) {
       if playlist != nil {
-        ToolbarItem(placement: .topBarTrailing) {
-          Menu {
-            Button {
-              renameText = playlist?.name ?? ""
-              showRename = true
-            } label: { Label("Renomear", systemImage: "pencil") }
-            Button {
-              withAnimation(.snappy) { editing.toggle() }
-            } label: { Label(editing ? "Concluir edição" : "Editar ordem e faixas", systemImage: editing ? "checkmark" : "arrow.up.arrow.down") }
-            Divider()
-            Button(role: .destructive) { confirmDelete = true } label: { Label("Excluir playlist", systemImage: "trash") }
-          } label: {
-            Image(systemName: "ellipsis")
-              .font(.system(size: 16, weight: .semibold))
-          }
+        Menu {
+          Button {
+            renameText = playlist?.name ?? ""
+            showRename = true
+          } label: { Label("Renomear", systemImage: "pencil") }
+          Button {
+            withAnimation(.snappy) { editing.toggle() }
+          } label: { Label(editing ? "Concluir edição" : "Editar ordem e faixas", systemImage: editing ? "checkmark" : "arrow.up.arrow.down") }
+          Divider()
+          Button(role: .destructive) { confirmDelete = true } label: { Label("Excluir playlist", systemImage: "trash") }
+        } label: {
+          Image(systemName: "ellipsis")
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(Theme.text)
+            .frame(width: 44, height: 44)
+            .glassCircle(interactive: true)
+            .contentShape(Circle())
         }
+        .accessibilityLabel("Mais opções da playlist")
       }
     }
     .alert("Renomear playlist", isPresented: $showRename) {
@@ -694,7 +693,8 @@ struct PlaylistView: View {
                     Image(systemName: "minus.circle.fill")
                       .font(.system(size: 22))
                       .foregroundStyle(Theme.danger)
-                      .frame(width: 34, height: 44)
+                      .frame(width: 44, height: 44)
+                      .contentShape(Rectangle())
                   }
                   .accessibilityLabel("Remover da playlist")
                   .transition(.move(edge: .leading).combined(with: .opacity))
@@ -708,8 +708,10 @@ struct PlaylistView: View {
                       Image(systemName: "chevron.up")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(idx > 0 ? Theme.text : Theme.tertiary)
-                        .frame(width: 24, height: 18)
+                        .frame(width: 44, height: 26)
+                        .contentShape(Rectangle())
                     }
+                    .accessibilityLabel("Subir na playlist")
                     .disabled(idx == 0)
                     Button {
                       guard idx + 1 < tracks.count else { return }
@@ -719,15 +721,17 @@ struct PlaylistView: View {
                       Image(systemName: "chevron.down")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(idx + 1 < tracks.count ? Theme.text : Theme.tertiary)
-                        .frame(width: 24, height: 18)
+                        .frame(width: 44, height: 26)
+                        .contentShape(Rectangle())
                     }
+                    .accessibilityLabel("Descer na playlist")
                     .disabled(idx + 1 >= tracks.count)
                   }
                 }
                 TrackRow(track: tr, queue: tracks)
               }
               if idx < tracks.count - 1 {
-                Divider().overlay(Theme.hairline).padding(.leading, editing ? 90 : 62)
+                Divider().overlay(Theme.hairline).padding(.leading, editing ? 112 : 62)
               }
             }
           }
@@ -736,6 +740,7 @@ struct PlaylistView: View {
         }
       }
     }
+    .lumeTabScroll()
   }
 
   private func subtitle(_ pl: MusicPlaylist, _ tracks: [Track]) -> String {
@@ -756,6 +761,7 @@ struct TrackListView: View {
 
   var body: some View {
     ScrollView(showsIndicators: false) {
+      LumeLargeTitle(title)
       if tracks.isEmpty {
         EmptyStateView(icon: "music.note.list", title: "Nada por aqui ainda", message: "Quando houver músicas nesta lista, elas aparecem aqui.")
           .padding(.top, 60)
@@ -778,9 +784,9 @@ struct TrackListView: View {
         .padding(.top, 6)
       }
     }
+    .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())
-    .navigationTitle(title)
-    .navigationBarTitleDisplayMode(.large)
+    .lumeDetailChrome(title: title)
   }
 }
 
@@ -792,6 +798,7 @@ struct AlbumGridView: View {
 
   var body: some View {
     ScrollView(showsIndicators: false) {
+      LumeLargeTitle(title)
       if albums.isEmpty {
         EmptyStateView(icon: "square.stack", title: "Nenhum lançamento", message: "Não encontramos álbuns para mostrar agora.")
           .padding(.top, 60)
@@ -808,9 +815,9 @@ struct AlbumGridView: View {
         .padding(.top, 6)
       }
     }
+    .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())
-    .navigationTitle(title)
-    .navigationBarTitleDisplayMode(.large)
+    .lumeDetailChrome(title: title)
   }
 }
 
@@ -822,6 +829,7 @@ struct ArtistGridView: View {
 
   var body: some View {
     ScrollView(showsIndicators: false) {
+      LumeLargeTitle(title)
       if artists.isEmpty {
         EmptyStateView(icon: "music.mic", title: "Nenhum artista ainda", message: "Ouça algumas músicas ou siga artistas para vê-los aqui.")
           .padding(.top, 60)
@@ -835,9 +843,9 @@ struct ArtistGridView: View {
         .padding(.top, 6)
       }
     }
+    .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())
-    .navigationTitle(title)
-    .navigationBarTitleDisplayMode(.large)
+    .lumeDetailChrome(title: title)
     .onAppear { ArtworkStore.shared.register(artists) }
   }
 }
@@ -874,10 +882,9 @@ struct MoodView: View {
       }
     }
     .ignoresSafeArea(edges: .top)
+    .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())
-    .navigationTitle("")
-    .navigationBarTitleDisplayMode(.inline)
-    .toolbarBackground(.hidden, for: .navigationBar)
+    .lumeDetailChrome(title: mood.title, threshold: 150, veilAfter: 90)
     .task {
       let found = await MusicEngine.shared.searchSongs(query: mood.query, limit: 30)
       tracks = found
@@ -903,7 +910,7 @@ struct MoodView: View {
         .padding(.horizontal, 20)
         .padding(.bottom, 20)
     }
-    .frame(height: 220)
+    .frame(height: 262)
     .clipped()
   }
 }
@@ -917,6 +924,7 @@ struct ReleasesView: View {
   var body: some View {
     ScrollView(showsIndicators: false) {
       LazyVStack(alignment: .leading, spacing: 24) {
+        LumeLargeTitle("Novidades dos seus artistas")
         if app.artistReleases.isEmpty {
           EmptyStateView(
             icon: "bell.slash",
@@ -945,30 +953,33 @@ struct ReleasesView: View {
           }
         }
       }
-      .padding(.top, 10)
+      .padding(.top, 2)
     }
+    .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())
-    .navigationTitle("Novidades dos seus artistas")
-    .navigationBarTitleDisplayMode(.inline)
-    .toolbar {
-      ToolbarItem(placement: .topBarTrailing) {
-        Button {
-          Haptics.light()
-          Task {
-            refreshing = true
-            await app.refreshArtistReleases()
-            refreshing = false
-          }
-        } label: {
+    .lumeDetailChrome(title: "Novidades dos seus artistas") {
+      Button {
+        Haptics.light()
+        Task {
+          refreshing = true
+          await app.refreshArtistReleases()
+          refreshing = false
+        }
+      } label: {
+        Group {
           if refreshing {
             ProgressView().controlSize(.small)
           } else {
-            Image(systemName: "arrow.clockwise").font(.system(size: 15, weight: .semibold))
+            Image(systemName: "arrow.clockwise").font(.system(size: 16, weight: .semibold))
           }
         }
-        .disabled(refreshing)
-        .accessibilityLabel("Atualizar")
+        .foregroundStyle(Theme.text)
+        .frame(width: 44, height: 44)
+        .glassCircle(interactive: true)
+        .contentShape(Circle())
       }
+      .disabled(refreshing)
+      .accessibilityLabel("Atualizar")
     }
     .onAppear { app.markReleasesSeen() }
   }

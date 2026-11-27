@@ -1,5 +1,9 @@
 package com.adriano.lumemusic.ui.screens
 
+import com.adriano.lumemusic.ui.rememberImeVisible
+import com.adriano.lumemusic.ui.rememberKeyboardCloser
+import com.adriano.lumemusic.ui.keyboardDismissing
+import com.adriano.lumemusic.ui.KeyboardOkButton
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -128,8 +132,13 @@ fun GlassOverlay(onDismiss: (() -> Unit)?, sheet: Boolean = false, content: @Com
     val appear = remember { MutableTransitionState(false).apply { targetState = true } }
     val scrim by animateFloatAsState(if (appear.targetState) 0.58f else 0f, tween(260), label = "scrim")
     BackHandler { onDismiss?.invoke() }
+    val closeKeyboard = rememberKeyboardCloser()
+    val imeOpen = rememberImeVisible()
+    val scroll = rememberScrollState()
+    // Com o teclado aberto o painel encolhe: rola até o fim para o campo e o botão principal continuarem visíveis.
+    LaunchedEffect(imeOpen) { if (imeOpen) { delay(320); scroll.animateScrollTo(scroll.maxValue) } }
     Box(
-        Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrim)).clickable(remember { MutableInteractionSource() }, null) { onDismiss?.invoke() },
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrim)).clickable(remember { MutableInteractionSource() }, null) { if (imeOpen) closeKeyboard() else onDismiss?.invoke() },
         contentAlignment = if (sheet) Alignment.BottomCenter else Alignment.Center,
     ) {
         AnimatedVisibility(
@@ -142,8 +151,8 @@ fun GlassOverlay(onDismiss: (() -> Unit)?, sheet: Boolean = false, content: @Com
                     .widthIn(max = 440.dp).fillMaxWidth()
                     .shadow(24.dp, shape, ambientColor = Color.Black.copy(0.35f), spotColor = Color.Black.copy(0.35f))
                     .glass(shape, blur = true).background(Theme.canvasRaised.copy(alpha = 0.40f))
-                    .clickable(remember { MutableInteractionSource() }, null) {}
-                    .verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 22.dp),
+                    .keyboardDismissing()
+                    .verticalScroll(scroll).padding(horizontal = 22.dp, vertical = 22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp),
                 content = content,
             )
@@ -200,7 +209,9 @@ fun CodeBoxes(
     autoFocus: Boolean = false, onDone: () -> Unit = {}, boxHeight: Dp = 56.dp, stripPrefix: String? = null,
 ) {
     val focus = remember { FocusRequester() }
+    val closeKeyboard = rememberKeyboardCloser()
     LaunchedEffect(autoFocus) { if (autoFocus) { delay(350); try { focus.requestFocus() } catch (_: Exception) {} } }
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Box(Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, null) { focus.requestFocus() }) {
         BasicTextField(
             value, { v ->
@@ -219,7 +230,7 @@ fun CodeBoxes(
                 capitalization = if (numeric) KeyboardCapitalization.None else KeyboardCapitalization.Characters,
                 keyboardType = if (numeric) KeyboardType.NumberPassword else KeyboardType.Ascii, imeAction = ImeAction.Done,
             ),
-            keyboardActions = KeyboardActions(onDone = { onDone() }),
+            keyboardActions = KeyboardActions(onDone = { onDone(); closeKeyboard() }),
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(if (count > 6) 5.dp else 8.dp)) {
             for (i in 0 until count) {
@@ -232,6 +243,9 @@ fun CodeBoxes(
                 ) { Text(if (ch == null) "" else if (hidden) "●" else ch.toString(), style = Theme.rounded(if (count > 6) 22f else 26f, FontWeight.Bold, Theme.text)) }
             }
         }
+    }
+    // Botão OK sempre visível enquanto o teclado está aberto: envia se o código está completo, senão só fecha o teclado.
+    KeyboardOkButton { if (value.length >= count) onDone() }
     }
 }
 
@@ -543,7 +557,7 @@ fun RecoverSheet() {
                     val active = mode == i
                     val shape = RoundedCornerShape(50)
                     Box(
-                        Modifier.weight(1f).height(52.dp).pressable(0.96f) { mode = i; error = null }
+                        Modifier.weight(1f).heightIn(min = 52.dp).pressable(0.96f) { mode = i; error = null }
                             .then(if (active) Modifier.clip(shape).background(Theme.prismDiagonal) else Modifier.glass(shape)),
                         contentAlignment = Alignment.Center,
                     ) { Text(label, style = Theme.font(12f, FontWeight.SemiBold, if (active) Theme.onPrism else Theme.text), maxLines = 2, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 6.dp)) }
@@ -633,6 +647,7 @@ fun RestoreDialog() {
     var error by remember { mutableStateOf<String?>(null) }
     var ok by remember { mutableStateOf<com.adriano.lumemusic.access.AccessInfo?>(null) }
     val scope = rememberCoroutineScope()
+    val closeKeyboard = rememberKeyboardCloser()
     fun submit() {
         if (busy) return
         busy = true; error = null
@@ -659,10 +674,11 @@ fun RestoreDialog() {
                 text, { text = it.uppercase().take(12); error = null }, singleLine = true,
                 textStyle = Theme.rounded(20f, FontWeight.Bold, Theme.text), cursorBrush = SolidColor(Theme.rose),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { submit() }),
-                modifier = Modifier.fillMaxWidth().height(56.dp).glass(RoundedCornerShape(16.dp)).padding(horizontal = 16.dp, vertical = 14.dp),
+                keyboardActions = KeyboardActions(onDone = { closeKeyboard(); submit() }),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).glass(RoundedCornerShape(16.dp)).padding(horizontal = 16.dp, vertical = 14.dp),
             )
             ErrorText(error)
+            KeyboardOkButton { if (text.isNotBlank()) submit() }
             if (busy) Busy() else PrismButton("Restaurar") { submit() }
             GlassButton("Já sou vitalício em outro aparelho") { close(); UpgradeModel.showRecover = true }
         }

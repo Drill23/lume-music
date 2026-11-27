@@ -71,6 +71,8 @@ object AppModel {
     var searchFocusToken by mutableIntStateOf(0)
     var searchLyricsToken by mutableIntStateOf(0)
     var tabletSheet by mutableStateOf<String?>(null)
+    var searchPrefill by mutableStateOf("")
+    var searchPrefillToken by mutableIntStateOf(0)
 
     private var lastFeedLoad = 0L
 
@@ -116,6 +118,19 @@ object AppModel {
     }
 
     fun openLyricsSearch() { tab = AppTab.SEARCH; stacks.getValue(AppTab.SEARCH).clear(); searchLyricsToken++; searchFocusToken++ }
+
+    /** Depuração (lm_debug_route): "artist:Nome", "search:texto", "library", "settings" ou "queue". */
+    fun debugRoute(spec: String) {
+        val kind = spec.substringBefore(':').trim().lowercase()
+        val arg = if (spec.contains(':')) spec.substringAfter(':').trim() else ""
+        when (kind) {
+            "artist" -> if (arg.isNotEmpty()) { showPlayer = false; openArtist(arg) }
+            "search" -> { showPlayer = false; tab = AppTab.SEARCH; stacks.getValue(AppTab.SEARCH).clear(); searchPrefill = arg; searchPrefillToken++ }
+            "library" -> { showPlayer = false; tab = AppTab.LIBRARY; stacks.getValue(AppTab.LIBRARY).clear() }
+            "settings" -> { showPlayer = false; push(LumeRoute.Settings) }
+            "queue" -> showQueue = true
+        }
+    }
 
     fun navigateFromPlayer(route: LumeRoute) {
         showPlayer = false

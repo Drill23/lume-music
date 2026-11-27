@@ -471,8 +471,11 @@ struct LyricsStage: View {
             .padding(.horizontal, 10)
             .frame(height: 30)
             .glassCapsule(interactive: true)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
+          .accessibilityLabel("Criar cartão com a letra")
         }
         if let lyr = player.lyrics, !LyricsLanguage.isPortuguese(lyr) {
           Button { player.toggleTranslation() } label: {
@@ -788,6 +791,7 @@ private struct LyricShareSheet: View {
 
   var body: some View {
     NavigationStack {
+      ScrollView {
       VStack(spacing: 20) {
         cardView
           .shadow(color: .black.opacity(0.35), radius: 22, y: 12)
@@ -814,6 +818,9 @@ private struct LyricShareSheet: View {
         }
       }
       .padding()
+      .frame(maxWidth: .infinity)
+      }
+      .lumeSheetScroll()
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(Theme.canvas.ignoresSafeArea())
       .navigationTitle("Cartão de letra")

@@ -19,7 +19,7 @@ struct PurchaseOrder: Codable, Equatable {
   var pollSeconds: Int
   var expiresAt: Double?
 
-  /// "R$ 10,00" → "R$ 10"
+  /// "R$ 5,00" → "R$ 5"
   var shortPrice: String { PurchaseService.shortPrice(amountText) }
 }
 
@@ -37,7 +37,7 @@ final class PurchaseService: ObservableObject {
   @Published private(set) var loading = false
   @Published private(set) var claiming = false
   @Published var errorText: String?
-  /// Último preço conhecido do painel ("R$ 10"). Antes de saber, os botões ficam sem preço.
+  /// Último preço conhecido do painel ("R$ 5"). Antes de saber, os botões ficam sem preço.
   @Published private(set) var priceText: String?
 
   private let access: AccessService
@@ -133,7 +133,7 @@ final class PurchaseService: ObservableObject {
     guard !copia.isEmpty || url != nil else { return nil }
     return PurchaseOrder(
       orderId: id,
-      amountText: (j["amountText"] as? String) ?? "R$ 10,00",
+      amountText: (j["amountText"] as? String) ?? "R$ 5,00",
       plan: (j["plan"] as? String) ?? "Vitalício",
       checkoutUrl: url,
       pixKey: (pix?["key"] as? String).flatMap { $0.isEmpty ? nil : $0 },
@@ -306,9 +306,9 @@ final class PurchaseService: ObservableObject {
   private func loadDebugOrder() {
     let id = "LM-7K3Q9X"
     let key = "d0a9a4ea-96dd-4125-b161-1d7fc83ffd1d"
-    let copia = BRCode.make(key: key, name: "ADRIANO ALMEIDA", city: "BRASIL", amount: "10.00", txid: "LM7K3Q9X")
+    let copia = BRCode.make(key: key, name: "ADRIANO ALMEIDA", city: "BRASIL", amount: "5.00", txid: "LM7K3Q9X")
     let manual = debugManual
-    var o = PurchaseOrder(orderId: id, amountText: "R$ 10,00", plan: "Vitalício",
+    var o = PurchaseOrder(orderId: id, amountText: "R$ 5,00", plan: "Vitalício",
                           checkoutUrl: manual ? "https://example.com/checkout" : nil,
                           pixKey: manual ? key : nil, pixName: manual ? "ADRIANO ALMEIDA" : "Lume Music",
                           copiaECola: copia, automatic: !manual, pollSeconds: 5, expiresAt: nil)

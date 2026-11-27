@@ -189,9 +189,10 @@ struct TrackRow: View {
         Image(systemName: "ellipsis")
           .font(.system(size: 16, weight: .semibold))
           .foregroundStyle(Theme.secondary)
-          .frame(width: 36, height: 44)
+          .frame(width: 44, height: 44)
           .contentShape(Rectangle())
       }
+      .accessibilityLabel("Mais opções")
     }
     .padding(.vertical, 5)
     .contentShape(Rectangle())

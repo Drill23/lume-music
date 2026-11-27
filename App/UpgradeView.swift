@@ -74,13 +74,25 @@ final class Popups: ObservableObject {
 
 struct GlassPopup<Content: View>: View {
   @ViewBuilder let content: () -> Content
+  @State private var contentHeight: CGFloat = 0
+
+  /// Rolável quando não cabe (iPhone SE, fonte grande, teclado): os botões do pop-up nunca ficam escondidos.
   var body: some View {
-    VStack(spacing: 16) { content() }
-      .padding(22)
-      .frame(maxWidth: 340)
-      .glass(34)
-      .shadow(color: .black.opacity(0.35), radius: 30, y: 14)
-      .padding(.horizontal, 24)
+    ScrollView {
+      VStack(spacing: 16) { content() }
+        .padding(22)
+        .frame(maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+    }
+    .scrollBounceBehavior(.basedOnSize)
+    .scrollIndicators(.hidden)
+    .scrollClipDisabled()
+    .frame(maxWidth: 340)
+    .frame(maxHeight: contentHeight > 0 ? contentHeight : .infinity)
+    .glass(34)
+    .shadow(color: .black.opacity(0.35), radius: 30, y: 14)
+    .padding(.horizontal, 24)
+    .padding(.vertical, 28)
   }
 }
 
@@ -119,6 +131,8 @@ struct PopupHost: View {
           }
         }
         .transition(.scale(scale: 0.86).combined(with: .opacity))
+        // O pop-up fica por cima de tudo: fecha o teclado que estava aberto atrás dele.
+        .onAppear { LumeKeyboard.dismiss() }
       }
     }
     .animation(.spring(response: 0.42, dampingFraction: 0.78), value: popups.current)
@@ -407,6 +421,7 @@ struct UpgradeView: View {
         .frame(maxWidth: .infinity)
       }
       .scrollIndicators(.hidden)
+      .lumeSheetScroll()
     }
     .presentationDetents([.large])
     .presentationDragIndicator(.visible)

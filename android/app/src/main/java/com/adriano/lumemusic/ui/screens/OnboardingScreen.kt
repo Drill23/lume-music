@@ -1,5 +1,12 @@
 package com.adriano.lumemusic.ui.screens
 
+import com.adriano.lumemusic.ui.Chrome
+import com.adriano.lumemusic.ui.rememberKeyboardCloser
+import com.adriano.lumemusic.ui.keyboardDismissing
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.layout.imePadding
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -303,7 +310,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
     }
 
     BoxWithConstraints(
-        Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+        Modifier.fillMaxSize().keyboardDismissing().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
             drawContent()
             if (revealing) drawCircle(Color.Black, reveal.value * density.density, center, blendMode = BlendMode.Clear)
         }.background(Theme.canvas),
@@ -315,7 +322,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
         if (loading) {
             LoadingMusicView(if (chosenGenres.isEmpty()) Onboarding.genres(ctx).mapNotNull { id -> MusicGenre.all.firstOrNull { it.id == id } } else chosenGenres, running) { doReveal() }
         } else {
-            Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+            Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
                 // Marca única que viaja entre as telas (centro <-> cabeçalho).
                 val big = step == Step.WELCOME || step == Step.DONE
                 val sc by animateFloatAsState(if (big) 1f else 0.2f, spring(0.82f, 80f), label = "markS")
@@ -328,7 +335,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
                     Box(Modifier.fillMaxWidth().height(headerH.dp).padding(horizontal = 20.dp).padding(top = 8.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                             AnimatedVisibility(canGoBack, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
-                                Box(Modifier.size(44.dp).glass(CircleShape).pressable(0.92f) { go(-1) }, contentAlignment = Alignment.Center) {
+                                Box(Modifier.size(Chrome.minTouch).glass(CircleShape).pressable(0.92f) { go(-1) }, contentAlignment = Alignment.Center) {
                                     Icon(sf("chevron.left"), "Voltar", tint = Theme.text, modifier = Modifier.size(20.dp))
                                 }
                             }
@@ -430,11 +437,11 @@ private fun WelcomeStep(centerY: Float, onStart: () -> Unit) {
             PrismCta("Começar", "arrow.right", 54, modifier = Modifier.padding(horizontal = 28.dp).padding(top = 28.dp).graphicsLayer { val s = 0.9f + 0.1f * btn; scaleX = s; scaleY = s; alpha = btn }) { onStart() }
             // Links discretos para quem recebeu um código ou já comprou.
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.height(48.dp).pressable(0.95f) { com_UpgradeModel.showCodeEntry = true }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.heightIn(min = 48.dp).pressable(0.95f) { com_UpgradeModel.showCodeEntry = true }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
                     Text("Tenho um código", style = Theme.font(13.5f, FontWeight.Medium, Theme.secondary))
                 }
                 Text("·", style = Theme.font(13.5f, color = Theme.tertiary))
-                Box(Modifier.height(48.dp).pressable(0.95f) { com_UpgradeModel.showRecover = true }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.heightIn(min = 48.dp).pressable(0.95f) { com_UpgradeModel.showRecover = true }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
                     Text("Já sou vitalício", style = Theme.font(13.5f, FontWeight.Medium, Theme.secondary))
                 }
             }
@@ -560,6 +567,7 @@ private fun ArtistsStep(genres: List<MusicGenre>, selected: MutableList<String>,
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<ArtistInfo>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
+    val closeKeyboard = rememberKeyboardCloser()
     val names = results.map { it.name }.filter { it !in suggestions } + suggestions
 
     LaunchedEffect(suggestions) {
@@ -594,10 +602,12 @@ private fun ArtistsStep(genres: List<MusicGenre>, selected: MutableList<String>,
             Icon(sf("magnifyingglass"), null, tint = Theme.secondary, modifier = Modifier.size(17.dp))
             Box(Modifier.weight(1f)) {
                 if (query.isEmpty()) Text("Buscar outro artista", style = Theme.font(15.5f, color = Theme.tertiary))
-                BasicTextField(query, { query = it }, singleLine = true, textStyle = Theme.font(15.5f, color = Theme.text), cursorBrush = SolidColor(Theme.rose), modifier = Modifier.fillMaxWidth())
+                BasicTextField(query, { query = it }, singleLine = true, textStyle = Theme.font(15.5f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { closeKeyboard() }),
+                    modifier = Modifier.fillMaxWidth())
             }
             if (searching) CircularProgressIndicator(Modifier.size(18.dp), color = Theme.secondary, strokeWidth = 2.dp)
-            else if (query.isNotEmpty()) Box(Modifier.size(44.dp).pressable(0.9f) { query = "" }, contentAlignment = Alignment.Center) { Icon(sf("xmark.circle.fill"), "Limpar", tint = Theme.tertiary, modifier = Modifier.size(20.dp)) }
+            else if (query.isNotEmpty()) Box(Modifier.size(Chrome.minTouch).pressable(0.9f) { query = "" }, contentAlignment = Alignment.Center) { Icon(sf("xmark.circle.fill"), "Limpar", tint = Theme.tertiary, modifier = Modifier.size(20.dp)) }
             else Spacer(Modifier.width(12.dp))
         }
         LazyVerticalGrid(

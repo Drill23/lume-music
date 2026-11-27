@@ -1,5 +1,10 @@
 package com.adriano.lumemusic.ui.screens
 
+import androidx.compose.foundation.layout.heightIn
+import com.adriano.lumemusic.ui.rememberImeVisible
+import com.adriano.lumemusic.ui.keyboardDismissing
+import com.adriano.lumemusic.ui.rememberKeyboardCloser
+import com.adriano.lumemusic.ui.KeyboardOkButton
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -71,6 +76,7 @@ fun AccessCodeEntry(
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
+    val closeKeyboard = rememberKeyboardCloser()
     val code = AccessService.normalizeCode(raw).take(6)
 
     fun submit() {
@@ -95,7 +101,7 @@ fun AccessCodeEntry(
                 modifier = Modifier.focusRequester(focus).size(1.dp), singleLine = true, cursorBrush = SolidColor(Color.Transparent),
                 textStyle = Theme.font(1f, color = Color.Transparent),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = androidx.compose.ui.text.input.ImeAction.Done),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { submit() }),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { closeKeyboard(); submit() }),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (i in 0 until 6) {
@@ -109,6 +115,8 @@ fun AccessCodeEntry(
                 }
             }
         }
+        // Botão OK sempre visível enquanto o teclado está aberto: envia se o código está completo, senão só fecha o teclado.
+        KeyboardOkButton { if (code.length == 6) submit() }
         error?.let { Text(it, style = Theme.font(14f, FontWeight.Medium, Theme.danger), textAlign = TextAlign.Center) }
         if (busy) CircularProgressIndicator(Modifier.size(26.dp), color = Theme.rose, strokeWidth = 2.5.dp)
         else PrismButton(buttonTitle) { submit() }
@@ -136,7 +144,7 @@ fun AccessGateExtras(prefill: String?) {
             error?.let { Text(it, style = Theme.font(13.5f, FontWeight.Medium, Theme.danger), textAlign = TextAlign.Center) }
         }
         GlassButton("Comprar vitalício · ${UpgradeModel.shortPrice}", "sparkles") { UpgradeModel.openUpgrade() }
-        Box(Modifier.height(48.dp).pressable(0.96f) { UpgradeModel.showRecover = true }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.heightIn(min = 48.dp).pressable(0.96f) { UpgradeModel.showRecover = true }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
             Text("Já sou vitalício", style = Theme.font(15f, FontWeight.SemiBold, Theme.accent))
         }
     }
@@ -162,9 +170,14 @@ fun AccessGateScreen() {
     val locked = (state as? AccessState.Locked)
         ?: if (UpgradeModel.debugTrialUsed) AccessState.Locked("Seu teste grátis já terminou neste aparelho. Garanta a Lume para sempre com o Vitalício.") else null
     if (locked == null && justActivated == null) return
-    Box(Modifier.fillMaxSize().background(Theme.canvas).statusBarsPadding().navigationBarsPadding().imePadding(), contentAlignment = Alignment.Center) {
+    val scroll = androidx.compose.foundation.rememberScrollState()
+    val imeOpen = rememberImeVisible()
+    // Com o teclado aberto, rola até o fim: caixinhas, OK e Ativar continuam à vista.
+    androidx.compose.runtime.LaunchedEffect(imeOpen) { if (imeOpen) { kotlinx.coroutines.delay(320); scroll.animateScrollTo(scroll.maxValue) } }
+    // keyboardDismissing também impede que toques atravessem o portão para o app que está atrás.
+    Box(Modifier.fillMaxSize().background(Theme.canvas).keyboardDismissing().statusBarsPadding().navigationBarsPadding().imePadding(), contentAlignment = Alignment.Center) {
         Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(Theme.lavender.copy(0.25f), Color.Transparent), radius = 1200f)))
-        Column(Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(scroll).padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(24.dp)) {
             LumeWordmark(34f)
             AnimatedContent(justActivated, transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) }, label = "gate") { ja ->
                 if (ja != null) AccessSuccessView(ja, "Entrar na Lume") { justActivated = null; UpgradeModel.onActivated(ja) }
@@ -219,7 +232,7 @@ fun AccessStatusCard() {
                 GlassButton("Ver meu código", "lock.fill") { UpgradeModel.showReveal = true }
             } else {
                 Row(
-                    Modifier.fillMaxWidth().height(52.dp).pressable(0.98f) { com.adriano.lumemusic.ui.screens.copyToClipboard(ctx, rev.first, sensitive = true); copied = true }.glass(RoundedCornerShape(16.dp)).padding(horizontal = 16.dp),
+                    Modifier.fillMaxWidth().heightIn(min = 52.dp).pressable(0.98f) { com.adriano.lumemusic.ui.screens.copyToClipboard(ctx, rev.first, sensitive = true); copied = true }.glass(RoundedCornerShape(16.dp)).padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Text(rev.first, style = Theme.rounded(22f, FontWeight.Bold, Theme.text), modifier = Modifier.weight(1f))

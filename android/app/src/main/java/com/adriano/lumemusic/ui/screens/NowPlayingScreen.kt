@@ -1,5 +1,9 @@
 package com.adriano.lumemusic.ui.screens
 
+import com.adriano.lumemusic.ui.Chrome
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -106,7 +110,10 @@ fun NowPlayingScreen() {
         Box(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(c3.copy(0.6f), Color.Transparent), center = Offset(1200f, 2300f), radius = 1500f)))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(0.10f), Color.Black.copy(0.30f), Color.Black.copy(0.66f)))))
 
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        // Telas baixas (360×640, fonte grande): a tela inteira rola e o palco ganha altura fixa, para nenhum controle ficar escondido.
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        val compact = maxHeight < 700.dp
+        Column(Modifier.fillMaxSize().then(if (compact) Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()) else Modifier)) {
             // Barra superior (alça + fechar / "TOCANDO AGORA" / opções)
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(40.dp, 5.dp).clip(CircleShape).background(Color.White.copy(0.28f)))
@@ -124,7 +131,7 @@ fun NowPlayingScreen() {
             StageSwitcher(mode, { t -> if (t != PlayerSurfaceTab.LYRICS) AppModel.playerStyle = t; AppModel.playerTab = t }, Modifier.padding(top = 6.dp, bottom = 4.dp))
 
             // Palco
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box((if (compact) Modifier.height(if (lyrics) 330.dp else 290.dp) else Modifier.weight(1f)).fillMaxWidth()) {
                 Crossfade(AppModel.playerTab, animationSpec = tween(260), label = "stage") { tab ->
                     PlayerStages.forTab(tab).Content(track, art, Modifier)
                 }
@@ -138,6 +145,7 @@ fun NowPlayingScreen() {
                 if (!lyrics) VolumeRow()
                 BottomRow()
             }
+        }
         }
     }
 }
@@ -155,7 +163,7 @@ private fun Metadata(track: Track, lyrics: Boolean) {
         // baixar
         val downloaded = track.id in LibraryStore.downloadedIds
         val p = DownloadManager.progressById[track.id]
-        Box(Modifier.size(44.dp).pressable(0.88f) {
+        Box(Modifier.size(Chrome.minTouch).pressable(0.88f) {
             if (downloaded) { Haptics.selection(); AppModel.showToast("Esta música já está salva no celular") }
             else if (DownloadManager.isDownloading(track.id)) DownloadManager.cancel(track.id)
             else { Haptics.light(); DownloadManager.download(track) }
@@ -171,7 +179,7 @@ private fun Metadata(track: Track, lyrics: Boolean) {
             }
         }
         // curtir
-        Box(Modifier.size(44.dp).pressable(0.88f) { LibraryStore.toggleFavorite(track) }, contentAlignment = Alignment.Center) {
+        Box(Modifier.size(Chrome.minTouch).pressable(0.88f) { LibraryStore.toggleFavorite(track) }, contentAlignment = Alignment.Center) {
             Box(Modifier.size(40.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
                 Icon(sf(if (fav) "heart.fill" else "heart"), if (fav) "Remover das curtidas" else "Curtir", tint = if (fav) Theme.rose else Color.White, modifier = Modifier.size(20.dp))
             }
@@ -183,14 +191,14 @@ private fun Metadata(track: Track, lyrics: Boolean) {
 private fun Transport(lyrics: Boolean) {
     val playSize = if (lyrics) 70.dp else 84.dp
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        TransportIcon("shuffle", "Aleatório", 44.dp, 20.dp, if (AudioPlayer.shuffleEnabled) Theme.rose else Color.White.copy(0.62f)) { Haptics.selection(); AudioPlayer.shuffleEnabled = !AudioPlayer.shuffleEnabled }
+        TransportIcon("shuffle", "Aleatório", 48.dp, 20.dp, if (AudioPlayer.shuffleEnabled) Theme.rose else Color.White.copy(0.62f)) { Haptics.selection(); AudioPlayer.shuffleEnabled = !AudioPlayer.shuffleEnabled }
         TransportIcon("backward.fill", "Anterior", 60.dp, 34.dp, Color.White, 0.82f) { AudioPlayer.previousTrack() }
         Box(Modifier.size(playSize).pressable(0.9f) { AudioPlayer.togglePlayPause() }.glass(CircleShape), contentAlignment = Alignment.Center) {
             if (AudioPlayer.isLoading) CircularProgressIndicator(Modifier.size(32.dp), color = Color.White, strokeWidth = 3.dp)
             else Icon(sf(if (AudioPlayer.isPlaying) "pause.fill" else "play.fill"), if (AudioPlayer.isPlaying) "Pausar" else "Tocar", tint = Color.White, modifier = Modifier.size(40.dp))
         }
         TransportIcon("forward.fill", "Próxima", 60.dp, 34.dp, Color.White, 0.82f) { AudioPlayer.nextTrack() }
-        TransportIcon(if (AudioPlayer.repeatMode == RepeatMode.ONE) "repeat.1" else "repeat", "Repetir", 44.dp, 20.dp, if (AudioPlayer.repeatMode != RepeatMode.OFF) Theme.rose else Color.White.copy(0.62f)) { Haptics.selection(); AudioPlayer.repeatMode = AudioPlayer.repeatMode.next }
+        TransportIcon(if (AudioPlayer.repeatMode == RepeatMode.ONE) "repeat.1" else "repeat", "Repetir", 48.dp, 20.dp, if (AudioPlayer.repeatMode != RepeatMode.OFF) Theme.rose else Color.White.copy(0.62f)) { Haptics.selection(); AudioPlayer.repeatMode = AudioPlayer.repeatMode.next }
     }
 }
 
@@ -208,7 +216,7 @@ private fun BottomRow() {
             Haptics.selection(); AppModel.playerTab = if (lyricsOn) AppModel.playerStyle else PlayerSurfaceTab.LYRICS
         }
         if (lyricsOn && AudioPlayer.lyrics != null) BottomIcon("translate", "Traduzir", if (AudioPlayer.showTranslation) Theme.rose else Color.White.copy(0.62f)) { AudioPlayer.toggleTranslation() }
-        Row(Modifier.height(40.dp).pressable(0.9f) { Haptics.light(); AppModel.tabletSheet = "sleep" }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.height(Chrome.minTouch).widthIn(min = 48.dp).pressable(0.9f) { Haptics.light(); AppModel.tabletSheet = "sleep" }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             val on = AudioPlayer.sleepTimerOption != SleepTimerOption.OFF
             Icon(sf("moon.zzz"), "Timer de dormir", tint = if (on) Theme.rose else Color.White.copy(0.62f), modifier = Modifier.size(22.dp))
             if (AudioPlayer.sleepRemainingSeconds > 0) Text(Theme.formatTime(AudioPlayer.sleepRemainingSeconds.toDouble()), style = Theme.font(12.5f, FontWeight.SemiBold, Color.White.copy(0.62f)))
@@ -221,14 +229,14 @@ private fun BottomRow() {
 
 @Composable
 private fun BottomIcon(name: String, desc: String, tint: Color, onClick: () -> Unit) {
-    Box(Modifier.size(48.dp, 40.dp).pressable(0.9f) { onClick() }, contentAlignment = Alignment.Center) { Icon(sf(name), desc, tint = tint, modifier = Modifier.size(22.dp)) }
+    Box(Modifier.size(48.dp, 48.dp).pressable(0.9f) { onClick() }, contentAlignment = Alignment.Center) { Icon(sf(name), desc, tint = tint, modifier = Modifier.size(22.dp)) }
 }
 
 @Composable
 private fun SpeedButton() {
     val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
     val r = AudioPlayer.playbackRate
-    Box(Modifier.size(48.dp, 40.dp).pressable(0.9f) {
+    Box(Modifier.size(48.dp, 48.dp).pressable(0.9f) {
         Haptics.selection()
         val i = speeds.indexOfFirst { abs(it - r) < 0.01f }
         AudioPlayer.setRate(speeds[(if (i < 0) 1 else i + 1) % speeds.size])

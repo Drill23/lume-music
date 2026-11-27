@@ -66,12 +66,13 @@ struct PinSetupView: View {
   @State private var errorText: String?
   @State private var shakes: CGFloat = 0
   @State private var appear = false
+  @ObservedObject private var keyboard = KeyboardState.shared
 
   var body: some View {
     ZStack {
       Theme.canvas.ignoresSafeArea()
-      OnboardingBackdrop(phase: 1, running: true).ignoresSafeArea()
-      VStack(spacing: 24) {
+      OnboardingBackdrop(phase: 1, running: true).ignoresSafeArea().allowsHitTesting(false)
+      VStack(spacing: 12) {
         HStack {
           Spacer()
           if !mandatory && stage != .done {
@@ -83,11 +84,20 @@ struct PinSetupView: View {
           }
         }
         .frame(height: 44)
-        Spacer(minLength: 0)
-        if stage == .done { doneView } else { formView }
-        Spacer(minLength: 0)
-        Text("Seu PIN fica guardado só no painel, de forma protegida.")
-          .font(Theme.font(12.5)).foregroundStyle(Theme.tertiary)
+        // Conteúdo rolável: com o teclado aberto (ou fonte grande / iPhone SE) os botões continuam alcançáveis.
+        ScrollView {
+          VStack(spacing: 24) {
+            if stage == .done { doneView } else { formView }
+            if !keyboard.visible {
+              Text("Seu PIN fica guardado só no painel, de forma protegida.")
+                .font(Theme.font(12.5)).foregroundStyle(Theme.tertiary)
+            }
+          }
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 8)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .lumeSheetScroll()
       }
       .padding(.horizontal, 24)
       .padding(.vertical, 12)
@@ -95,11 +105,13 @@ struct PinSetupView: View {
   }
 
   private var formView: some View {
-    VStack(spacing: 22) {
+    VStack(spacing: keyboard.visible ? 14 : 22) {
       ZStack {
         Circle().fill(Color.clear).frame(width: 76, height: 76).glassCircle(tint: Theme.lavender.opacity(0.35))
         Image(systemName: "lock.shield.fill").font(.system(size: 30, weight: .bold)).foregroundStyle(Theme.prismDiagonal)
       }
+      .scaleEffect(keyboard.visible ? 0.7 : 1)
+      .frame(height: keyboard.visible ? 54 : 76)
       VStack(spacing: 8) {
         Text(stage == .enter ? "Crie seu PIN de recuperação" : "Confirme seu PIN")
           .font(.system(size: 26, weight: .bold, design: .rounded)).foregroundStyle(Theme.text).multilineTextAlignment(.center)
@@ -121,7 +133,10 @@ struct PinSetupView: View {
           Text(" ").font(Theme.font(14))
         }
       }
-      .frame(minHeight: 40)
+      .frame(minHeight: 32)
+      if keyboard.visible && stage != .saving {
+        GlassButton(title: "OK", systemImage: "keyboard.chevron.compact.down", height: 46) { LumeKeyboard.dismiss() }
+      }
       if stage == .confirm {
         GlassButton(title: "Voltar", systemImage: "chevron.left", height: 46) { pin = ""; first = ""; stage = .enter; errorText = nil }
       }
@@ -275,6 +290,7 @@ struct TransferSheet: View {
           .padding(.horizontal, 24).padding(.top, 36).padding(.bottom, 30)
           .frame(maxWidth: 480).frame(maxWidth: .infinity)
       }
+      .lumeSheetScroll()
     }
     .presentationDetents([.large])
     .presentationDragIndicator(.visible)
@@ -305,6 +321,8 @@ private struct GlassCodeField: View {
     .font(.system(size: 22, weight: .bold, design: .monospaced))
     .multilineTextAlignment(.center)
     .foregroundStyle(Theme.text)
+    .submitLabel(.done)
+    .onSubmit { LumeKeyboard.dismiss() }
     .frame(height: 56)
     .glass(18, tint: text.isEmpty ? nil : Theme.lavender.opacity(0.3))
     .onChange(of: text) { _, new in
@@ -354,7 +372,7 @@ struct ClaimLifetimeSheet: View {
         .padding(.horizontal, 24).padding(.vertical, 30)
         .frame(maxWidth: 480).frame(maxWidth: .infinity)
       }
-      .scrollDismissesKeyboard(.interactively)
+      .lumeSheetScroll()
     }
     .presentationDetents([.large])
     .presentationDragIndicator(.visible)
@@ -515,7 +533,7 @@ struct RestorePurchaseSheet: View {
         .padding(.horizontal, 24).padding(.vertical, 30)
         .frame(maxWidth: 480).frame(maxWidth: .infinity)
       }
-      .scrollDismissesKeyboard(.interactively)
+      .lumeSheetScroll()
     }
     .presentationDetents([.large])
     .presentationDragIndicator(.visible)
@@ -567,6 +585,7 @@ struct RevealCodeSheet: View {
             .padding(.horizontal, 24).padding(.vertical, 36)
             .frame(maxWidth: 480).frame(maxWidth: .infinity)
         }
+        .lumeSheetScroll()
       }
     }
     .presentationDetents([.large])

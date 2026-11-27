@@ -30,6 +30,7 @@ struct HomeView: View {
       .padding(.top, 6)
       .padding(.bottom, 8)
     }
+    .lumeTabScroll()
     .background(homeBackdrop)
     .refreshable {
       await home.refresh()

@@ -60,6 +60,9 @@ struct NowPlayingView: View {
         .presentationBackground(.ultraThinMaterial)
     }
     .statusBarHidden(false)
+    .onAppear {
+      if app.debugOpenQueue { app.debugOpenQueue = false; showQueue = true }
+    }
   }
 
   private var dismissDrag: some Gesture {
@@ -81,7 +84,7 @@ struct NowPlayingView: View {
     VStack(spacing: 12) {
       Capsule().fill(Theme.text.opacity(0.28)).frame(width: 40, height: 5)
       HStack {
-        GlassIconButton(systemName: "chevron.down", size: 40) { dismiss() }
+        GlassIconButton(systemName: "chevron.down", size: 44) { dismiss() }
         Spacer()
         VStack(spacing: 1) {
           Text("TOCANDO AGORA")
@@ -94,7 +97,7 @@ struct NowPlayingView: View {
             .lineLimit(1)
         }
         Spacer()
-        GlassIconButton(systemName: "ellipsis", size: 40) { showOptions = true }
+        GlassIconButton(systemName: "ellipsis", size: 44) { showOptions = true }
       }
     }
   }
@@ -172,7 +175,7 @@ struct NowPlayingView: View {
           .font(.system(size: 18, weight: .semibold))
           .foregroundStyle(fav ? Theme.rose : Theme.text)
           .symbolEffect(.bounce, value: fav)
-          .frame(width: 40, height: 40)
+          .frame(width: 44, height: 44)
           .glassCircle(interactive: true)
       }
       .buttonStyle(PressableStyle(scale: 0.88))
@@ -204,7 +207,7 @@ struct NowPlayingView: View {
             .foregroundStyle(Theme.text)
         }
       }
-      .frame(width: 40, height: 40)
+      .frame(width: 44, height: 44)
       .glassCircle(interactive: true)
     }
     .buttonStyle(PressableStyle(scale: 0.88))
@@ -755,6 +758,7 @@ private struct TrackShareCardSheet: View {
 
   var body: some View {
     NavigationStack {
+      ScrollView {
       VStack(spacing: 20) {
         cardView
           .shadow(color: .black.opacity(0.4), radius: 24, y: 12)
@@ -771,6 +775,9 @@ private struct TrackShareCardSheet: View {
         }
       }
       .padding()
+      .frame(maxWidth: .infinity)
+      }
+      .lumeSheetScroll()
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(Theme.canvas.ignoresSafeArea())
       .navigationTitle("Cartão da música")
@@ -866,6 +873,7 @@ struct AddToPlaylistSheet: View {
           }
         }
       }
+      .lumeSheetScroll()
       .navigationTitle("Adicionar à playlist")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } } }

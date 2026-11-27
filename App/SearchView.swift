@@ -66,7 +66,7 @@ struct SearchView: View {
       .padding(.top, 6)
       .padding(.bottom, 16)
     }
-    .scrollDismissesKeyboard(.interactively)
+    .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())
     .task(id: query) { await runSearch() }
     .onChange(of: app.searchFocusToken) { _, _ in focused = true }
@@ -75,6 +75,9 @@ struct SearchView: View {
       focused = true
     }
     .onAppear { if app.tab == .search { focused = true } }
+    .onChange(of: app.debugSearchText) { _, text in
+      if let text { query = text; focused = true; app.debugSearchText = nil }
+    }
   }
 
   // MARK: Campo de busca
@@ -229,7 +232,7 @@ struct SearchView: View {
                 Image(systemName: "xmark")
                   .font(.system(size: 12, weight: .semibold))
                   .foregroundStyle(Theme.tertiary)
-                  .frame(width: 40, height: 44)
+                  .frame(width: 44, height: 44)
                   .contentShape(Rectangle())
               }
               .accessibilityLabel("Remover \(term)")

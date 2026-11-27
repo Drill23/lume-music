@@ -217,8 +217,8 @@ struct SettingsView: View {
     .scrollContentBackground(.hidden)
     .background(Theme.canvas.ignoresSafeArea())
     .tint(Theme.accent)
-    .navigationTitle("Ajustes")
-    .navigationBarTitleDisplayMode(.large)
+    .lumeTabScroll()
+    .lumeDetailChrome(title: "Ajustes", alwaysShowTitle: true)
     .confirmationDialog("Limpar cache?", isPresented: $confirmClear, titleVisibility: .visible) {
       Button("Limpar cache", role: .destructive) { clearCache() }
       Button("Cancelar", role: .cancel) {}

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
@@ -94,7 +95,10 @@ fun RootScreen() {
     val visited = remember { mutableSetOf(AppTab.HOME) }
     visited.add(AppModel.tab)
     val hasTrack = AudioPlayer.currentTrack != null
-    val bottomInset = if (hasTrack) 150.dp else 92.dp
+    // Espaço inferior central (barra de abas + mini player + navigationBars + folga); com o teclado aberto só sobra a folga,
+    // porque o conteúdo já sobe acima do teclado (imePadding) e a barra de abas fica atrás dele.
+    val imeOpen = rememberImeVisible()
+    val bottomInset = if (imeOpen) Chrome.breathing else Chrome.bottomInset(navigationBarBottomDp(), hasTrack)
     val appCtx = androidx.compose.ui.platform.LocalContext.current
     var onboarding by remember { androidx.compose.runtime.mutableStateOf(LibraryStore.introEnabled && !com.adriano.lumemusic.ui.screens.Onboarding.isDone(appCtx)) }
 
@@ -109,6 +113,10 @@ fun RootScreen() {
             notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
     }
+
+    // Trocar de aba ou abrir/fechar uma tela de detalhe nunca deixa o teclado aberto para trás.
+    val closeKeyboard = rememberKeyboardCloser()
+    LaunchedEffect(AppModel.tab, AppModel.currentStack.size) { if (AppModel.tab != AppTab.SEARCH || AppModel.currentStack.isNotEmpty()) closeKeyboard() }
 
     LaunchedEffect(Unit) {
         AppModel.loadFeed()
@@ -128,8 +136,8 @@ fun RootScreen() {
     }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalHaze provides haze) {
-        Box(Modifier.fillMaxSize().background(Theme.canvas)) {
-            Box(Modifier.fillMaxSize().hazeSource(haze)) {
+        Box(Modifier.fillMaxSize().background(Theme.canvas).keyboardDismissing()) {
+            Box(Modifier.fillMaxSize().imePadding().hazeSource(haze)) {
                 for (t in AppTab.entries) {
                     if (t !in visited) continue
                     val active = AppModel.tab == t
@@ -189,7 +197,7 @@ private fun TabHost(tab: AppTab, bottomInset: androidx.compose.ui.unit.Dp) {
                     enter = slideInHorizontally(spring(0.92f, 420f)) { (it * 0.28f).toInt() } + fadeIn(tween(200)),
                     exit = fadeOut(tween(120)),
                 ) {
-                    Box(Modifier.fillMaxSize().background(Theme.canvas).statusBarsPadding()) { RouteHost(route, bottomInset) }
+                    Box(Modifier.fillMaxSize().background(Theme.canvas).keyboardDismissing().statusBarsPadding()) { RouteHost(route, bottomInset) }
                 }
             }
         }
@@ -226,14 +234,14 @@ private fun RouteHost(route: LumeRoute, bottomInset: androidx.compose.ui.unit.Dp
 fun BottomBar() {
     val track = AudioPlayer.currentTrack
     Column(
-        Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).padding(horizontal = 16.dp).padding(bottom = 6.dp),
+        Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).padding(horizontal = 16.dp).padding(bottom = Chrome.tabBarBottomPad),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         AnimatedVisibility(track != null, enter = slideInVertically(spring(0.86f, 420f)) { it / 2 } + fadeIn(), exit = fadeOut(tween(150))) {
             if (track != null) MiniPlayer(track)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.weight(1f).height(62.dp).glass(RoundedCornerShape(50), blur = true, elevation = 10.dp).padding(4.dp)) {
+            Row(Modifier.weight(1f).height(Chrome.tabBarHeight).glass(RoundedCornerShape(50), blur = true, elevation = 10.dp).padding(4.dp)) {
                 for (t in AppTab.bar) {
                     val active = AppModel.tab == t
                     val iconColor = if (active) Theme.accent else Theme.text.copy(0.92f)
@@ -250,7 +258,7 @@ fun BottomBar() {
             }
             val searchActive = AppModel.tab == AppTab.SEARCH
             Box(
-                Modifier.size(62.dp).pressable(0.9f) { AppModel.select(AppTab.SEARCH) }.glass(CircleShape, blur = true, elevation = 10.dp),
+                Modifier.size(Chrome.tabBarHeight).pressable(0.9f) { AppModel.select(AppTab.SEARCH) }.glass(CircleShape, blur = true, elevation = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 if (searchActive) Box(Modifier.size(54.dp).background(Theme.fillStrong, CircleShape))
@@ -279,8 +287,8 @@ fun MiniPlayer(track: com.adriano.lumemusic.data.Track) {
             .pressable(0.99f) { Haptics.light(); AppModel.openPlayer() },
     ) {
         Row(
-            Modifier.fillMaxSize().padding(start = 8.dp, end = 6.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.fillMaxSize().padding(start = 8.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             ArtworkImage(AudioPlayer.currentArtwork.ifEmpty { track.artworkURL }, Modifier.size(42.dp), 10.dp)
             Column(
@@ -290,15 +298,15 @@ fun MiniPlayer(track: com.adriano.lumemusic.data.Track) {
                 Text(track.artist, style = Theme.font(13f, color = Theme.secondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             val fav = track.id in LibraryStore.favoriteIds
-            Box(Modifier.size(44.dp).pressable(0.85f) { LibraryStore.toggleFavorite(track) }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { LibraryStore.toggleFavorite(track) }, contentAlignment = Alignment.Center) {
                 Icon(sf(if (fav) "heart.fill" else "heart"), if (fav) "Remover das curtidas" else "Curtir", tint = if (fav) Theme.rose else Theme.secondary,
                     modifier = Modifier.size(22.dp), )
             }
-            Box(Modifier.size(44.dp).pressable(0.85f) { AudioPlayer.togglePlayPause() }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { AudioPlayer.togglePlayPause() }, contentAlignment = Alignment.Center) {
                 if (AudioPlayer.isLoading) CircularProgressIndicator(Modifier.size(20.dp), color = Theme.text, strokeWidth = 2.dp)
                 else Icon(sf(if (AudioPlayer.isPlaying) "pause.fill" else "play.fill"), "Tocar/Pausar", tint = Theme.text, modifier = Modifier.size(26.dp))
             }
-            Box(Modifier.size(44.dp).pressable(0.85f) { AudioPlayer.nextTrack() }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { AudioPlayer.nextTrack() }, contentAlignment = Alignment.Center) {
                 Icon(sf("forward.fill"), "Próxima", tint = Theme.text, modifier = Modifier.size(24.dp))
             }
         }

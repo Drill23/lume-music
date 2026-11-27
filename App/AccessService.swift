@@ -886,11 +886,22 @@ struct AccessCodeView: View {
             .font(Theme.font(14, .medium))
             .foregroundStyle(Theme.secondary)
             .transition(.opacity)
+        } else if focused {
+          // Teclado aberto: botão visível para fechá-lo (o campo de código é invisível, sem barra própria).
+          Button { focused = false } label: {
+            Label("Fechar teclado", systemImage: "keyboard.chevron.compact.down")
+              .font(Theme.font(14, .semibold))
+              .foregroundStyle(Theme.secondary)
+              .padding(.horizontal, 16)
+              .frame(minHeight: 44)
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(PressableStyle())
         } else {
           Text(" ").font(Theme.font(14))
         }
       }
-      .frame(minHeight: 40)
+      .frame(minHeight: 44)
 
       HStack(spacing: 12) {
         PasteButton(payloadType: String.self) { strings in
@@ -1136,8 +1147,7 @@ struct AccessGateView: View {
         .frame(maxWidth: 480)
         .frame(maxWidth: .infinity)
       }
-      .scrollBounceBehavior(.basedOnSize)
-      .scrollDismissesKeyboard(.interactively)
+      .lumeSheetScroll()
     }
     .onAppear {
       access.gateHold = true
@@ -1327,18 +1337,23 @@ struct ChangeCodeSheet: View {
   var body: some View {
     ZStack {
       Theme.canvas.ignoresSafeArea()
-      VStack {
-        Spacer()
-        if let done {
-          AccessSuccessView(info: done, buttonTitle: "Pronto") { dismiss() }
-        } else {
-          AccessCodeView(title: "Trocar código", subtitle: "Digite o novo código. O código atual só é substituído se o novo for válido.") { info in
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) { done = info }
+      ScrollView {
+        VStack {
+          if let done {
+            AccessSuccessView(info: done, buttonTitle: "Pronto") { dismiss() }
+          } else {
+            AccessCodeView(title: "Trocar código", subtitle: "Digite o novo código. O código atual só é substituído se o novo for válido.") { info in
+              withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) { done = info }
+            }
           }
         }
-        Spacer()
+        .padding(.horizontal, 24)
+        .padding(.top, 56)
+        .padding(.bottom, 24)
+        .frame(maxWidth: 480)
+        .frame(maxWidth: .infinity)
       }
-      .padding(.horizontal, 24)
+      .lumeSheetScroll()
     }
     .presentationDetents([.large])
     .presentationDragIndicator(.visible)

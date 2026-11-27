@@ -1,5 +1,10 @@
 package com.adriano.lumemusic.ui
 
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -59,13 +65,13 @@ private fun LumeSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
         onDismissRequest = onDismiss, sheetState = state,
         containerColor = Theme.canvasRaised, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         contentColor = Theme.text,
-    ) { Column(Modifier.navigationBarsPadding()) { content() } }
+    ) { Column(Modifier.navigationBarsPadding().imePadding().keyboardDismissing()) { content() } }
 }
 
 @Composable
 private fun MenuRow(icon: String, label: String, danger: Boolean = false, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(52.dp).pressable(0.99f) { Haptics.light(); onClick() }.padding(horizontal = 24.dp),
+        Modifier.fillMaxWidth().heightIn(min = 52.dp).pressable(0.99f) { Haptics.light(); onClick() }.padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Icon(sf(icon), null, tint = if (danger) Theme.danger else Theme.text, modifier = Modifier.size(22.dp))
@@ -109,12 +115,15 @@ fun AddToPlaylistSheet(track: Track, onDismiss: () -> Unit) {
     var creating by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
     LumeSheet(onDismiss) {
+        val closeKeyboard = rememberKeyboardCloser()
         Text("Adicionar a uma playlist", style = Theme.font(19f, FontWeight.Bold, Theme.text), modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         if (creating) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f).height(48.dp).glass(RoundedCornerShape(24.dp)).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
                     if (name.isEmpty()) Text("Nome da playlist", style = Theme.font(16f, color = Theme.tertiary))
-                    BasicTextField(name, { name = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose), modifier = Modifier.fillMaxWidth())
+                    BasicTextField(name, { name = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { closeKeyboard() }),
+                        modifier = Modifier.fillMaxWidth())
                 }
                 PrismButton("Criar", modifier = Modifier.width(96.dp), height = 48.dp) {
                     if (name.isNotBlank()) {
@@ -124,9 +133,9 @@ fun AddToPlaylistSheet(track: Track, onDismiss: () -> Unit) {
                 }
             }
         } else MenuRow("plus", "Nova playlist") { creating = true }
-        LazyColumn(Modifier.height(320.dp)) {
+        LazyColumn(Modifier.heightIn(max = 320.dp)) {
             itemsIndexed(LibraryStore.playlists, key = { _, p -> p.id }) { _, pl ->
-                Row(Modifier.fillMaxWidth().height(60.dp).pressable(0.99f) { LibraryStore.addTrack(track, pl.id); AppModel.showToast("Adicionada a “${pl.name}”"); onDismiss() }.padding(horizontal = 24.dp),
+                Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).pressable(0.99f) { LibraryStore.addTrack(track, pl.id); AppModel.showToast("Adicionada a “${pl.name}”"); onDismiss() }.padding(horizontal = 24.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     ArtworkImage(pl.artworkURL, Modifier.size(44.dp), 10.dp, icon = "music.note.list")
                     Column(Modifier.weight(1f)) {
@@ -150,7 +159,7 @@ fun QueueSheet(onDismiss: () -> Unit) {
                 Text("Fila", style = Theme.font(21f, FontWeight.Bold, Theme.text))
                 Text(if (AudioPlayer.contextTitle.isNotEmpty()) AudioPlayer.contextTitle else "${q.size} músicas", style = Theme.font(13f, color = Theme.secondary), maxLines = 1)
             }
-            Box(Modifier.height(44.dp).pressable(0.95f) { AudioPlayer.clearUpcoming() }.padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.height(Chrome.minTouch).pressable(0.95f) { AudioPlayer.clearUpcoming() }.padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
                 Text("Limpar a seguir", style = Theme.font(14f, FontWeight.Medium, Theme.accent))
             }
         }
@@ -159,10 +168,10 @@ fun QueueSheet(onDismiss: () -> Unit) {
             PrismChip(when (AudioPlayer.repeatMode.raw) { "one" -> "Repetir 1" else -> "Repetir" }, AudioPlayer.repeatMode.raw != "off", AudioPlayer.repeatMode.let { if (it.raw == "one") "repeat.1" else "repeat" }) { AudioPlayer.repeatMode = AudioPlayer.repeatMode.next }
             PrismChip("Rádio", AudioPlayer.autoplayRadio, "infinity") { AudioPlayer.autoplayRadio = !AudioPlayer.autoplayRadio }
         }
-        LazyColumn(Modifier.height(420.dp)) {
+        LazyColumn(Modifier.heightIn(max = 420.dp)) {
             itemsIndexed(q, key = { i, t -> "${t.id}#$i" }) { i, t ->
                 val active = i == cur
-                Row(Modifier.fillMaxWidth().height(60.dp).pressable(0.99f) { AudioPlayer.jumpToQueueIndex(i) }
+                Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).pressable(0.99f) { AudioPlayer.jumpToQueueIndex(i) }
                     .background(if (active) Theme.fill else Color.Transparent).padding(start = 24.dp, end = 8.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     TrackArtwork(t, Modifier.size(44.dp), 8.dp)
@@ -171,9 +180,9 @@ fun QueueSheet(onDismiss: () -> Unit) {
                         Text(t.artist, style = Theme.font(13f, color = Theme.secondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     if (!active) {
-                        Box(Modifier.size(44.dp).pressable(0.85f) { AudioPlayer.moveQueue(i, i - 1) }, contentAlignment = Alignment.Center) { Icon(sf("chevron.up"), "Subir", tint = Theme.secondary, modifier = Modifier.size(22.dp)) }
-                        Box(Modifier.size(44.dp).pressable(0.85f) { AudioPlayer.moveQueue(i, i + 1) }, contentAlignment = Alignment.Center) { Icon(sf("chevron.down"), "Descer", tint = Theme.secondary, modifier = Modifier.size(22.dp)) }
-                        Box(Modifier.size(44.dp).pressable(0.85f) { AudioPlayer.removeFromQueue(i) }, contentAlignment = Alignment.Center) { Icon(sf("xmark"), "Remover", tint = Theme.secondary, modifier = Modifier.size(20.dp)) }
+                        Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { AudioPlayer.moveQueue(i, i - 1) }, contentAlignment = Alignment.Center) { Icon(sf("chevron.up"), "Subir", tint = Theme.secondary, modifier = Modifier.size(22.dp)) }
+                        Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { AudioPlayer.moveQueue(i, i + 1) }, contentAlignment = Alignment.Center) { Icon(sf("chevron.down"), "Descer", tint = Theme.secondary, modifier = Modifier.size(22.dp)) }
+                        Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { AudioPlayer.removeFromQueue(i) }, contentAlignment = Alignment.Center) { Icon(sf("xmark"), "Remover", tint = Theme.secondary, modifier = Modifier.size(20.dp)) }
                     } else Icon(sf("waveform"), null, tint = Theme.accent, modifier = Modifier.padding(end = 12.dp).size(20.dp))
                 }
             }
@@ -187,7 +196,7 @@ fun SleepTimerSheet(onDismiss: () -> Unit) {
         Text("Timer de dormir", style = Theme.font(19f, FontWeight.Bold, Theme.text), modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         for (o in SleepTimerOption.entries) {
             val sel = AudioPlayer.sleepTimerOption == o
-            Row(Modifier.fillMaxWidth().height(52.dp).pressable(0.99f) { AudioPlayer.setSleepTimer(o); onDismiss() }.padding(horizontal = 24.dp),
+            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).pressable(0.99f) { AudioPlayer.setSleepTimer(o); onDismiss() }.padding(horizontal = 24.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Text(o.label, style = Theme.font(16f, color = if (sel) Theme.accent else Theme.text), modifier = Modifier.weight(1f))
                 if (sel) Icon(sf("checkmark"), null, tint = Theme.accent, modifier = Modifier.size(20.dp))

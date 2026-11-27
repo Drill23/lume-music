@@ -1,5 +1,6 @@
 package com.adriano.lumemusic.ui.screens
 
+import com.adriano.lumemusic.ui.Chrome
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,7 +53,7 @@ import com.adriano.lumemusic.engine.GenreHubBundle
 import com.adriano.lumemusic.engine.MusicEngine
 import com.adriano.lumemusic.ui.AppModel
 import com.adriano.lumemusic.ui.ArtistBubble
-import com.adriano.lumemusic.ui.DetailTopBar
+import com.adriano.lumemusic.ui.DetailHeader
 import com.adriano.lumemusic.ui.EmptyState
 import com.adriano.lumemusic.ui.GlassIconButton
 import com.adriano.lumemusic.ui.GradientCard
@@ -122,7 +123,7 @@ fun ExploreScreen(bottomInset: Dp) {
         onRefresh = { scope.launch { refreshing = true; HomeStore.refresh(); AppModel.refreshArtistReleases(); reloadToken++; refreshing = false } },
         modifier = Modifier.fillMaxSize(),
     ) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(30.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(30.dp)) {
             // Cabeçalho
             item {
                 Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -185,7 +186,7 @@ fun ExploreScreen(bottomInset: Dp) {
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 ArtistScope.entries.forEach { sc ->
                                     val on = artistScope == sc
-                                    Box(Modifier.height(44.dp).pressable(0.95f) { com.adriano.lumemusic.platform.Haptics.selection(); artistScope = sc }, contentAlignment = Alignment.Center) {
+                                    Box(Modifier.height(Chrome.minTouch).pressable(0.95f) { com.adriano.lumemusic.platform.Haptics.selection(); artistScope = sc }, contentAlignment = Alignment.Center) {
                                         Text(sc.title, style = Theme.font(12f, FontWeight.SemiBold, if (on) Theme.onPrism else Theme.secondary),
                                             modifier = Modifier.height(32.dp).clip(RoundedCornerShape(50))
                                                 .then(if (on) Modifier.background(Theme.prismHorizontal) else Modifier.background(Theme.fill))
@@ -290,9 +291,10 @@ fun CountryChartScreen(country: ChartCountry, bottomInset: Dp) {
         loading = false
     }
 
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar("${selected.flag} ${if (selected.code == "world") "Top 50 Global" else "Top 50 · ${selected.name}"}")
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        DetailHeader("${selected.flag} ${if (selected.code == "world") "Top 50 Global" else "Top 50 · ${selected.name}"}", listState, 140.dp)
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             // Hero
             item {
                 Box(Modifier.fillMaxWidth().height(190.dp).background(Brush.linearGradient(listOf(hex(selected.hexA), hex(selected.hexB))))) {
@@ -372,10 +374,11 @@ fun GenreHubScreen(genre: MusicGenre, bottomInset: Dp) {
         hub?.topArtists?.let { ArtworkStore.register(it) }
         loading = false
     }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar(genre.title)
+        DetailHeader(genre.title, listState, 140.dp)
         val h = hub
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(26.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(26.dp)) {
             item {
                 Box(Modifier.fillMaxWidth().height(190.dp).background(Brush.linearGradient(listOf(hex(genre.hexA), hex(genre.hexB))))) {
                     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(0.22f), Color.Black.copy(0.42f)))))
@@ -437,8 +440,8 @@ fun GenreHubScreen(genre: MusicGenre, bottomInset: Dp) {
 @Composable
 fun GenresHubScreen(bottomInset: Dp) {
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar("Gêneros")
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
+        DetailHeader("Gêneros")
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(28.dp)) {
             item {
                 Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Gêneros", style = Theme.font(34f, FontWeight.Bold, Theme.text))
@@ -473,9 +476,10 @@ fun GenresHubScreen(bottomInset: Dp) {
 @Composable
 fun MoodScreen(mood: MoodCategory, bottomInset: Dp) {
     val tracks by produceState<List<Track>?>(null, mood) { value = MusicEngine.searchSongs(mood.query, 30) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar(mood.title)
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        DetailHeader(mood.title, listState, 90.dp)
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item { GradientCard(mood.title, null, mood.icon, mood.hexA, mood.hexB, Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(110.dp)) {} }
             val t = tracks
             if (t == null) item { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { repeat(8) { Skeleton(Modifier.fillMaxWidth().height(56.dp)) } } }

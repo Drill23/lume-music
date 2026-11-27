@@ -309,7 +309,7 @@
         qrDyn.firstChild.setAttribute('aria-label', 'QR Code do Pix copia e cola do pedido ' + orderId);
         qrDyn.hidden = false; qrImg.hidden = true;
         btnCopy.dataset.payload = payload;
-        note.textContent = 'Pedido ' + orderId + ' · R$ 10,00. Abra o app do seu banco, escolha Pix e leia o QR Code ou use o copia e cola. Depois de pagar, toque em “Já paguei”.';
+        note.textContent = 'Pedido ' + orderId + ' · ' + ((order && order.amountText) || 'R$ 5,00') + '. Abra o app do seu banco, escolha Pix e leia o QR Code ou use o copia e cola. Depois de pagar, toque em “Já paguei”.';
       } catch (_) { /* mantém o QR estático */ }
     };
 
@@ -358,7 +358,7 @@
         }
         if (r.status === 'review' && order.status !== 'review') { order.status = 'review'; saveOrder(); }
         if (order.status === 'review') say(msgPix, 'Recebemos seu aviso. Seu código vitalício aparece aqui assim que o pagamento for confirmado.');
-        if (r.status === 'underpaid') say(msgPix, (r && r.message) || 'O valor recebido é menor que R$ 10,00. Fale com o suporte.', true);
+        if (r.status === 'underpaid') say(msgPix, (r && r.message) || 'O valor recebido é menor que o preço do Vitalício. Fale com o suporte.', true);
       } catch (_) { /* tenta de novo no próximo ciclo; nada trava */ }
       schedulePoll();
     };
@@ -379,7 +379,7 @@
     /* criar pedido */
     const createOrder = async (method) => {
       const r = await post('/api/purchase/create', { device: deviceId(), platform: 'web', app: 'site', method });
-      order = { orderId: r.orderId, device: deviceId(), status: r.status || 'pending', poll: r.pollSeconds || 5, copia: r.pix && r.pix.copiaECola || '', checkoutUrl: r.checkoutUrl || null, automatic: !!(r.pix && r.pix.automatic) };
+      order = { orderId: r.orderId, device: deviceId(), status: r.status || 'pending', poll: r.pollSeconds || 5, copia: r.pix && r.pix.copiaECola || '', checkoutUrl: r.checkoutUrl || null, automatic: !!(r.pix && r.pix.automatic), amountText: r.amountText || '' };
       setManual(!order.automatic);
       saveOrder();
       showQr(order.copia, order.orderId);
@@ -399,7 +399,7 @@
           return;
         }
         say(msgBuy, order.automatic
-          ? 'Pix de R$ 10,00 gerado (pedido ' + r.orderId + '). Pague pelo QR ou pelo copia e cola abaixo: assim que o Pix cair, seu código vitalício aparece aqui sozinho.'
+          ? 'Pix de ' + (r.amountText || 'R$ 5,00') + ' gerado (pedido ' + r.orderId + '). Pague pelo QR ou pelo copia e cola abaixo: assim que o Pix cair, seu código vitalício aparece aqui sozinho.'
           : 'Pedido ' + r.orderId + ' criado. Pague pela chave Pix logo abaixo e toque em “Já paguei”.');
         schedulePoll();
         $('pixbox').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });

@@ -1,5 +1,6 @@
 package com.adriano.lumemusic.ui.screens
 
+import com.adriano.lumemusic.ui.Chrome
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -114,7 +115,7 @@ object LyricsStage : PlayerStage {
                     Icon(sf("quote.bubble"), null, tint = Color.White.copy(0.6f), modifier = Modifier.size(40.dp))
                     Text("Letra não encontrada", style = Theme.font(17f, FontWeight.SemiBold, Color.White))
                     Text("Não achamos a letra desta faixa.", style = Theme.font(14f, color = Color.White.copy(0.7f)), textAlign = TextAlign.Center)
-                    Box(Modifier.padding(top = 6.dp).height(44.dp).clip(RoundedCornerShape(50)).glass(RoundedCornerShape(50)).clickable { AudioPlayer.reloadLyrics() }.padding(horizontal = 22.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.padding(top = 6.dp).height(Chrome.minTouch).clip(RoundedCornerShape(50)).glass(RoundedCornerShape(50)).clickable { AudioPlayer.reloadLyrics() }.padding(horizontal = 22.dp), contentAlignment = Alignment.Center) {
                         Text("Tentar de novo", style = Theme.font(15f, FontWeight.SemiBold, Color.White))
                     }
                 }

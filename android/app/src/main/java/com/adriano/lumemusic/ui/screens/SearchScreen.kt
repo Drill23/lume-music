@@ -1,5 +1,6 @@
 package com.adriano.lumemusic.ui.screens
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,6 +53,8 @@ import com.adriano.lumemusic.engine.MusicEngine
 import com.adriano.lumemusic.engine.SearchService
 import com.adriano.lumemusic.ui.AlbumTile
 import com.adriano.lumemusic.ui.AppModel
+import com.adriano.lumemusic.ui.Chrome
+import com.adriano.lumemusic.ui.rememberKeyboardCloser
 import com.adriano.lumemusic.ui.ArtistBubble
 import com.adriano.lumemusic.ui.ArtworkImage
 import com.adriano.lumemusic.ui.EmptyState
@@ -110,7 +113,9 @@ fun SearchScreen(bottomInset: Dp) {
         }
         loading = false
     }
-    fun submit(q: String) { query = q; submitted = q.trim(); suggestions = emptyList(); LibraryStore.addSearchTerm(q); fm.clearFocus() }
+    val closeKeyboard = rememberKeyboardCloser()
+    fun submit(q: String) { query = q; submitted = q.trim(); suggestions = emptyList(); LibraryStore.addSearchTerm(q); closeKeyboard() }
+    LaunchedEffect(AppModel.searchPrefillToken) { if (AppModel.searchPrefillToken > 0 && AppModel.searchPrefill.isNotBlank()) submit(AppModel.searchPrefill) }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Text("Buscar", style = Theme.font(32f, FontWeight.Bold, Theme.text), modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
@@ -119,19 +124,19 @@ fun SearchScreen(bottomInset: Dp) {
             Box(Modifier.weight(1f)) {
                 if (query.isEmpty()) Text("Músicas, artistas, álbuns e trechos", style = Theme.font(16f, color = Theme.tertiary))
                 BasicTextField(query, { query = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { submit(query) }),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { if (query.isBlank()) closeKeyboard() else submit(query) }),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus))
             }
-            if (query.isNotEmpty()) Box(Modifier.size(44.dp).pressable(0.85f) { query = ""; submitted = ""; results = null }, contentAlignment = Alignment.Center) {
+            if (query.isNotEmpty()) Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { query = ""; submitted = ""; results = null }, contentAlignment = Alignment.Center) {
                 Icon(sf("xmark.circle.fill"), "Limpar", tint = Theme.tertiary, modifier = Modifier.size(20.dp))
             }
         }
         HRow(spacing = 8.dp, contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp)) { items(scopes) { s -> PrismChip(s, scope == s) { scope = s } } }
 
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             if (suggestions.isNotEmpty() && submitted != query.trim()) {
                 items(suggestions, key = { it }) { s ->
-                    Row(Modifier.fillMaxWidth().height(48.dp).pressable(0.99f) { submit(s) }.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).pressable(0.99f) { submit(s) }.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Icon(sf("magnifyingglass"), null, tint = Theme.tertiary, modifier = Modifier.size(18.dp))
                         Text(s, style = Theme.font(16f, color = Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         Icon(sf("arrow.up.left"), null, tint = Theme.tertiary, modifier = Modifier.size(18.dp))
@@ -142,7 +147,7 @@ fun SearchScreen(bottomInset: Dp) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         SectionHeader("Buscas recentes", actionLabel = "Limpar", onAction = { LibraryStore.clearSearchHistory() })
                         LibraryStore.searchHistory.take(6).forEach { h ->
-                            Row(Modifier.fillMaxWidth().height(46.dp).pressable(0.99f) { submit(h) }.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Row(Modifier.fillMaxWidth().height(Chrome.minTouch).pressable(0.99f) { submit(h) }.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                                 Icon(sf("clock"), null, tint = Theme.tertiary, modifier = Modifier.size(18.dp))
                                 Text(h, style = Theme.font(16f, color = Theme.text), maxLines = 1)
                             }

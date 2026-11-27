@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
     /**
      * Intents de depuração para o orquestrador (só em build debug OU com lm_debug_token == "lume-orq-2026"):
      * lm_debug_welcome (Int dias), lm_debug_upgrade (Boolean) [+ lm_debug_manual], lm_debug_paid (String código),
-     * lm_debug_update (Boolean), lm_debug_transfer (Boolean), lm_debug_pin (Boolean), lm_debug_trial (Int dias), lm_debug_trial_used (Boolean). Dados sempre falsos e locais.
+     * lm_debug_update (Boolean), lm_debug_transfer (Boolean), lm_debug_pin (Boolean), lm_debug_trial (Int dias), lm_debug_trial_used (Boolean), lm_debug_route (String: "artist:Anitta", "search:texto", "library", "settings", "queue"). Dados sempre falsos e locais.
      */
     private fun handleDebug(i: Intent?) {
         if (i == null) return
@@ -57,5 +57,6 @@ class MainActivity : ComponentActivity() {
         if (i.getBooleanExtra("lm_debug_pin", false)) UpgradeModel.debugPin()
         if (i.hasExtra("lm_debug_trial")) UpgradeModel.debugTrial(i.getIntExtra("lm_debug_trial", 7))
         if (i.getBooleanExtra("lm_debug_trial_used", false)) UpgradeModel.debugTrialUsed()
+        i.getStringExtra("lm_debug_route")?.let { com.adriano.lumemusic.ui.AppModel.debugRoute(it) }
     }
 }

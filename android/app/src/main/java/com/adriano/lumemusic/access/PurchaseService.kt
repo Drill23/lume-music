@@ -92,8 +92,8 @@ class PurchaseService(
             else TransferCode(AccessService.normalizeCode(c), o.l("expiresAt") ?: o.l("expires") ?: (now + 15 * 60_000L))
         } catch (_: Exception) { null }
 
-        /** "R$ 10,00" -> "R$ 10" (rótulos curtos dos botões). */
-        fun shortPrice(text: String): String = text.replace(Regex(",00$"), "").ifBlank { "R$ 10" }
+        /** "R$ 5,00" -> "R$ 5" (rótulos curtos dos botões). */
+        fun shortPrice(text: String): String = text.replace(Regex(",00$"), "").ifBlank { "R$ 5" }
     }
 
     private fun err(code: Int, body: String?, fallback: String): PurchaseResult.Err {
@@ -118,7 +118,7 @@ class PurchaseService(
         return o
     }
     fun clearPending() = store.put(K_PENDING, null)
-    fun priceText(): String = store.get(K_PRICE) ?: "R$ 10,00"
+    fun priceText(): String = store.get(K_PRICE) ?: "R$ 5,00"
     fun paidCode(): String? = store.get(K_PAID_CODE)
     fun paidOrder(): String? = store.get(K_PAID_ORDER)
     fun setPaidCode(c: String?, order: String? = null) { store.put(K_PAID_CODE, c); store.put(K_PAID_ORDER, if (c == null) null else order) }

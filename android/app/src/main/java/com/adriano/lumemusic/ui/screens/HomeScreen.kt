@@ -1,5 +1,6 @@
 package com.adriano.lumemusic.ui.screens
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -77,7 +78,7 @@ fun HomeScreen(bottomInset: Dp) {
         onRefresh = { scope.launch { refreshing = true; HomeStore.refresh(); AppModel.refreshArtistReleases(); refreshing = false } },
         modifier = Modifier.fillMaxSize(),
     ) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset + 8.dp), verticalArrangement = Arrangement.spacedBy(32.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(32.dp)) {
             item { Header() }
             item { SearchPill() }
             item { ContinueSection() }
@@ -203,7 +204,7 @@ private fun Shortcuts() {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 row.forEach { (title, icon, click) ->
                     Column(
-                        Modifier.weight(1f).height(80.dp).pressable(0.96f) { Haptics.light(); click() }.glass(RoundedCornerShape(22.dp)),
+                        Modifier.weight(1f).heightIn(min = 80.dp).pressable(0.96f) { Haptics.light(); click() }.glass(RoundedCornerShape(22.dp)),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
                     ) {
                         com.adriano.lumemusic.ui.PrismIcon(icon, 24.dp)

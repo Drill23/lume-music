@@ -1,5 +1,6 @@
 package com.adriano.lumemusic.ui.screens
 
+import com.adriano.lumemusic.ui.Chrome
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -85,7 +86,7 @@ fun ChartTrackList(list: ChartList?, loading: Boolean, limit: Int = 10, retry: (
             Icon(sf("wifi.exclamationmark"), null, tint = Theme.tertiary, modifier = Modifier.size(26.dp))
             Text("Parada indisponível agora", style = Theme.font(15f, FontWeight.SemiBold, Theme.text))
             Text("Tentar de novo", style = Theme.font(14f, FontWeight.SemiBold, Theme.text),
-                modifier = Modifier.height(44.dp).pressable(0.95f) { Haptics.light(); retry() }
+                modifier = Modifier.height(Chrome.minTouch).pressable(0.95f) { Haptics.light(); retry() }
                     .clip(RoundedCornerShape(50)).background(Theme.fillStrong).padding(horizontal = 18.dp, vertical = 12.dp))
         }
     }

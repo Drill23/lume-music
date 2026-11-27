@@ -1,5 +1,6 @@
 package com.adriano.lumemusic.ui.screens
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,7 +47,7 @@ import com.adriano.lumemusic.data.VinylEdition
 import com.adriano.lumemusic.data.VisualizerStyle
 import com.adriano.lumemusic.engine.DiscNet
 import com.adriano.lumemusic.ui.AppModel
-import com.adriano.lumemusic.ui.DetailTopBar
+import com.adriano.lumemusic.ui.DetailHeader
 import com.adriano.lumemusic.ui.GlassButton
 import com.adriano.lumemusic.ui.HRow
 import com.adriano.lumemusic.ui.LumeRoute
@@ -77,11 +78,11 @@ private fun ToggleRow(icon: String, title: String, subtitle: String? = null, val
     }
 }
 
-private fun Modifier.heightIn56() = this.then(Modifier.height(56.dp))
+private fun Modifier.heightIn56() = this.then(Modifier.heightIn(min = 56.dp))
 
 @Composable
 private fun LinkRow(icon: String, title: String, detail: String? = null, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().height(56.dp).pressable(0.995f) { onClick() }.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).pressable(0.995f) { onClick() }.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Icon(sf(icon), null, tint = Theme.rose, modifier = Modifier.size(22.dp))
         Text(title, style = Theme.font(16f, color = Theme.text), modifier = Modifier.weight(1f))
         if (detail != null) Text(detail, style = Theme.font(14f, color = Theme.secondary))
@@ -109,8 +110,8 @@ fun SettingsScreen(bottomInset: Dp) {
     val ctx = LocalContext.current
     var confirmCache by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar("Ajustes")
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 24.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+        DetailHeader("Ajustes")
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(22.dp)) {
             item { AccessStatusCard() }
             item {
                 Card("Tocando agora") {
@@ -204,8 +205,8 @@ fun EqualizerScreen(bottomInset: Dp) {
     val s = LibraryStore
     val gains = s.effectiveEQGains
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar("Equalizador")
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        DetailHeader("Equalizador")
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Perfil de som", style = Theme.font(21f, FontWeight.Bold, Theme.text), modifier = Modifier.padding(horizontal = 20.dp))

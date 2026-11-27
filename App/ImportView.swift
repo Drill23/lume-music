@@ -14,6 +14,8 @@ struct ImportView: View {
   var body: some View {
     ScrollView(showsIndicators: false) {
       LazyVStack(alignment: .leading, spacing: 18) {
+        LumeLargeTitle("Importar músicas")
+          .padding(.horizontal, -20)
         Text("Traga suas playlists e músicas de outros serviços para a Lume.")
           .font(Theme.font(15))
           .foregroundStyle(Theme.secondary)
@@ -27,10 +29,9 @@ struct ImportView: View {
       .padding(.top, 4)
       .padding(.bottom, 24)
     }
-    .scrollDismissesKeyboard(.interactively)
+    .lumeTabScroll()
     .background(Theme.canvas.ignoresSafeArea())
-    .navigationTitle("Importar músicas")
-    .navigationBarTitleDisplayMode(.large)
+    .lumeDetailChrome(title: "Importar músicas")
     .onChange(of: coordinator.importedTracks) { _, new in
       if new > 0 { AppModel.shared.showToast("\(new) músicas importadas para a sua biblioteca") }
     }
@@ -70,6 +71,8 @@ struct ImportView: View {
 
       if showList {
         TextField("Nome da playlist", text: $rawListName)
+          .submitLabel(.done)
+          .onSubmit { LumeKeyboard.dismiss() }
           .font(Theme.font(15))
           .foregroundStyle(Theme.text)
           .padding(.horizontal, 16)

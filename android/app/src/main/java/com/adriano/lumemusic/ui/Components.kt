@@ -20,7 +20,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -126,7 +131,7 @@ fun GlassIconButton(
     foreground: Color = Theme.text, badge: Boolean = false, desc: String = "", onClick: () -> Unit,
 ) {
     Box(
-        Modifier.size(maxOf(size, 44.dp)).pressable(0.9f) { Haptics.light(); onClick() }.semantics { contentDescription = desc },
+        Modifier.size(maxOf(size, Chrome.minTouch)).pressable(0.9f) { Haptics.light(); onClick() }.semantics { contentDescription = desc },
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.size(size).glass(CircleShape, tint), contentAlignment = Alignment.Center) {
@@ -140,7 +145,7 @@ fun GlassIconButton(
 fun PrismChip(title: String, active: Boolean, icon: String? = null, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
     Row(
-        Modifier.height(44.dp).padding(vertical = 3.dp).pressable(0.94f) { Haptics.selection(); onClick() }
+        Modifier.height(Chrome.minTouch).padding(vertical = 3.dp).pressable(0.94f) { Haptics.selection(); onClick() }
             .then(if (active) Modifier.shadow(8.dp, shape, spotColor = Theme.rose.copy(0.4f)).clip(shape).background(Theme.prismDiagonal).border(0.8.dp, Color.White.copy(0.55f), shape)
             else Modifier.glass(shape))
             .padding(horizontal = 16.dp),
@@ -183,7 +188,7 @@ fun SectionHeader(title: String, subtitle: String? = null, actionLabel: String? 
             if (subtitle != null) Text(subtitle, style = Theme.font(13f, color = Theme.secondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (onAction != null) {
-            Row(Modifier.height(44.dp).pressable(0.95f) { Haptics.light(); onAction() }, verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.height(Chrome.minTouch).pressable(0.95f) { Haptics.light(); onAction() }, verticalAlignment = Alignment.CenterVertically) {
                 Text(actionLabel ?: "Ver tudo", style = Theme.font(14f, FontWeight.Medium, Theme.secondary))
                 Icon(sf("chevron.right"), null, tint = Theme.secondary, modifier = Modifier.size(16.dp))
             }
@@ -286,13 +291,13 @@ fun TrackRow(track: Track, rank: Int? = null, queue: List<Track>? = null, showAr
         if (progress != null) Box(Modifier.size(18.dp).drawBehind {
             drawArc(Theme.accentStatic, -90f, (360f * progress.toFloat()), false, style = Stroke(2.2.dp.toPx(), cap = StrokeCap.Round))
         })
-        Box(Modifier.size(width = 40.dp, height = 44.dp).pressable(0.85f) { AppModel.showTrackMenu(track, queue) }.semantics { contentDescription = "Mais opções" }, contentAlignment = Alignment.Center) {
+        Box(Modifier.size(width = 44.dp, height = Chrome.minTouch).pressable(0.85f) { AppModel.showTrackMenu(track, queue) }.semantics { contentDescription = "Mais opções" }, contentAlignment = Alignment.Center) {
             Icon(sf("ellipsis"), null, tint = Theme.secondary, modifier = Modifier.size(20.dp))
         }
     }
 }
 
-private fun Modifier.defaultMinHeight() = this.height(60.dp)
+private fun Modifier.defaultMinHeight() = this.heightIn(min = 60.dp)
 private val Theme.accentStatic: Color get() = Theme.rose
 
 // ============================================================ Tiles
@@ -359,16 +364,35 @@ fun HRow(contentPadding: PaddingValues = PaddingValues(horizontal = 20.dp), spac
     LazyRow(contentPadding = contentPadding, horizontalArrangement = Arrangement.spacedBy(spacing), content = content)
 }
 
-/** Barra de topo das telas de detalhe (voltar + título). */
+/**
+ * Cabeçalho padrão das telas de detalhe (igual ao iOS): linha com voltar de vidro, título compacto e ações à direita.
+ * Fica NO FLUXO (a lista começa abaixo dele), então nada flutua cobrindo títulos. Com [scroll], o título compacto só aparece
+ * quando o título grande do conteúdo sai da tela ([titleOffset] = quanto a lista precisa rolar para isso); sem [scroll], fica sempre visível.
+ */
 @Composable
-fun DetailTopBar(title: String, trailing: @Composable (() -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        GlassIconButton("chevron.left", desc = "Voltar") { AppModel.pop() }
-        Text(title, style = Theme.font(17f, FontWeight.SemiBold, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        trailing?.invoke()
+fun DetailHeader(
+    title: String, scroll: LazyListState? = null, titleOffset: Dp = 220.dp, trailing: @Composable (() -> Unit)? = null,
+) {
+    val density = LocalDensity.current
+    val compact by remember(scroll, density) {
+        derivedStateOf { scroll == null || scroll.firstVisibleItemIndex > 0 || scroll.firstVisibleItemScrollOffset > with(density) { titleOffset.toPx() } }
+    }
+    val titleAlpha by animateFloatAsState(if (compact) 1f else 0f, tween(160), label = "hdrTitle")
+    Column(Modifier.fillMaxWidth().background(Theme.canvas)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = Chrome.detailHeaderMin).padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            GlassIconButton("chevron.left", size = 44.dp, desc = "Voltar") { AppModel.pop() }
+            Text(
+                title, style = Theme.font(17f, FontWeight.SemiBold, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).graphicsLayer { alpha = titleAlpha },
+            )
+            trailing?.invoke()
+        }
+        Box(Modifier.fillMaxWidth().height(0.5.dp).graphicsLayer { alpha = titleAlpha }.background(Theme.hairline))
     }
 }
-
 
 /** Preenche o glifo com o gradiente prisma horizontal (Theme.prism do iOS: pêssego → rosa → lavanda → céu). */
 @Composable

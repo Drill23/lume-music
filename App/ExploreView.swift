@@ -44,6 +44,7 @@ struct ExploreView: View {
       .animation(.spring(response: 0.3, dampingFraction: 0.88), value: browseGroup)
       .animation(.easeInOut(duration: 0.25), value: app.feed == nil)
     }
+    .lumeTabScroll()
     .background(backdrop)
     .refreshable {
       await home.refresh()

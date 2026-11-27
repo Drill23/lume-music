@@ -53,6 +53,10 @@ final class AppModel: ObservableObject {
   @Published var toast: String?
   @Published var searchFocusToken = 0
   @Published var searchLyricsToken = 0
+  /// Depuração (`-LMDebugRoute search:<texto>`): texto que a busca deve preencher ao abrir.
+  @Published var debugSearchText: String?
+  /// Depuração (`-LMDebugRoute queue`): o Tocando agora abre já com a fila.
+  @Published var debugOpenQueue = false
 
   func openLyricsSearch() {
     tab = .search
@@ -62,6 +66,62 @@ final class AppModel: ObservableObject {
   }
 
   private var lastFeedLoad: Date?
+
+  /// `-LMDebugRoute <rota>` abre direto uma tela, para conferir no simulador:
+  ///   artist:<nome> · album:<busca> · search:<texto> (teclado aberto) · library · settings · queue
+  /// Também aceitos: home, explore, downloads, replay, releases, import, equalizer, genres, charts:<país>.
+  func runDebugRouteIfNeeded() {
+    let args = ProcessInfo.processInfo.arguments
+    guard let i = args.firstIndex(of: "-LMDebugRoute"), i + 1 < args.count else { return }
+    let raw = args[i + 1]
+    let parts = raw.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+    let kind = String(parts.first ?? "").lowercased()
+    let value = parts.count > 1 ? String(parts[1]) : ""
+    Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(900))
+      switch kind {
+      case "home": tab = .home
+      case "explore": tab = .explore
+      case "artist":
+        tab = .home
+        push(.artist(value.isEmpty ? "Anitta" : value, nil))
+      case "album":
+        tab = .home
+        let found = await SearchService.shared.albums(value.isEmpty ? "Anitta" : value)
+        if let a = found.first { push(.album(a)) } else { showToast("Álbum não encontrado: \(value)") }
+      case "search":
+        debugSearchText = value
+        tab = .search
+        searchFocusToken += 1
+      case "library": tab = .library
+      case "settings":
+        tab = .library
+        push(.settings)
+      case "downloads":
+        tab = .library
+        push(.downloads)
+      case "replay":
+        tab = .library
+        push(.replay)
+      case "releases":
+        tab = .home
+        push(.releases)
+      case "import":
+        tab = .library
+        push(.importHub)
+      case "equalizer":
+        tab = .library
+        push(.equalizer)
+      case "queue":
+        debugOpenQueue = true
+        for _ in 0..<30 where AudioPlayer.shared.currentTrack == nil && feed == nil {
+          try? await Task.sleep(for: .milliseconds(300))
+        }
+        openPlayer()
+      default: break
+      }
+    }
+  }
 
   var hasUnseenReleases: Bool {
     let seen = LibraryStore.shared.seenReleaseIds
@@ -96,6 +156,16 @@ final class AppModel: ObservableObject {
         }
       }
     )
+  }
+
+  /// Quantas telas de detalhe estão empilhadas na aba atual (0 = tela-raiz da aba).
+  var currentDepth: Int {
+    switch tab {
+    case .home: return homePath.count
+    case .explore: return explorePath.count
+    case .library: return libraryPath.count
+    case .search: return searchPath.count
+    }
   }
 
   func push(_ route: LumeRoute) {
@@ -230,6 +300,8 @@ struct RootView: View {
       // (antes os textos passavam por baixo e se misturavam com a hora).
       VStack(spacing: 0) {
         GeometryReader { g in
+          // Só nas telas-raiz das abas: nas telas de detalhe o véu é do cabeçalho (LumeChrome), que não pode
+          // cobrir o botão de voltar.
           LinearGradient(
             stops: [
               .init(color: Theme.canvas, location: 0),
@@ -239,6 +311,8 @@ struct RootView: View {
             startPoint: .top, endPoint: .bottom)
             .frame(height: g.safeAreaInsets.top + 14)
             .offset(y: -g.safeAreaInsets.top)
+            .opacity(app.currentDepth == 0 ? 1 : 0)
+            .animation(.easeOut(duration: 0.2), value: app.currentDepth)
         }
         .frame(height: 0)
         Spacer()
@@ -246,7 +320,25 @@ struct RootView: View {
       .allowsHitTesting(false)
       .accessibilityHidden(true)
 
+      // Véu da base: o conteúdo rolado some suavemente atrás da barra flutuante (não captura toques).
+      LinearGradient(
+        stops: [
+          .init(color: Theme.canvas.opacity(0), location: 0),
+          .init(color: Theme.canvas.opacity(0.85), location: 0.55),
+          .init(color: Theme.canvas.opacity(0.96), location: 1),
+        ],
+        startPoint: .top, endPoint: .bottom)
+        .frame(height: LumeLayout.bottomInset(hasMiniPlayer: hasTrack) - 6)
+        .frame(maxWidth: .infinity)
+        .frame(maxHeight: .infinity, alignment: .bottom)
+        .ignoresSafeArea(edges: .bottom)
+        .ignoresSafeArea(.keyboard)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+
+      // A barra fica no pé da tela e o teclado passa por cima (antes ela "subia" junto, cobrindo a lista).
       BottomBar()
+        .ignoresSafeArea(.keyboard)
 
       if let msg = app.toast {
         VStack {
@@ -263,6 +355,7 @@ struct RootView: View {
           Spacer()
         }
         .transition(.move(edge: .top).combined(with: .opacity))
+        .allowsHitTesting(false)   // o aviso nunca rouba toque do botão que está embaixo dele
         .zIndex(50)
       }
     }
@@ -278,7 +371,9 @@ struct RootView: View {
         .presentationDragIndicator(.visible)
     }
     .task {
+      LumeKeyboard.install()
       player.runDebugHooksIfNeeded()
+      app.runDebugRouteIfNeeded()
       await app.loadFeed()
       await app.refreshArtistReleases()
     }
@@ -289,8 +384,6 @@ struct RootView: View {
     .onReceive(player.$errorToast.removeDuplicates()) { msg in if let msg { app.showToast(msg) } }
     .onReceive(player.$currentTrack.map { $0 != nil }.removeDuplicates()) { hasTrack = $0 }
   }
-
-  private var bottomInset: CGFloat { hasTrack ? 150 : 92 }
 
   private func tabOrder(_ t: AppTab) -> Int {
     switch t {
@@ -317,7 +410,8 @@ struct RootView: View {
         RouteView(route: route)
       }
     }
-    .safeAreaInset(edge: .bottom, spacing: 0) { Color.clear.frame(height: bottomInset).allowsHitTesting(false) }
+    // O espaço no fim de cada rolagem vem de `.lumeTabScroll()` (LumeChrome.swift), aplicado em cada tela.
+    .environment(\.lumeHasMiniPlayer, hasTrack)
     .tint(Theme.text)
   }
 }
@@ -454,7 +548,7 @@ struct MiniPlayer: View {
           .font(.system(size: 16, weight: .semibold))
           .foregroundStyle(fav ? Theme.rose : Theme.secondary)
           .symbolEffect(.bounce, value: fav)
-          .frame(width: 32, height: 38)
+          .frame(width: 40, height: 44)
           .contentShape(Rectangle())
       }
       .buttonStyle(PressableStyle(scale: 0.85))
@@ -471,7 +565,7 @@ struct MiniPlayer: View {
               .contentTransition(.symbolEffect(.replace))
           }
         }
-        .frame(width: 36, height: 40)
+        .frame(width: 44, height: 44)
         .contentShape(Rectangle())
       }
       .buttonStyle(PressableStyle(scale: 0.85))
@@ -480,7 +574,7 @@ struct MiniPlayer: View {
         Image(systemName: "forward.fill")
           .font(.system(size: 18, weight: .semibold))
           .foregroundStyle(Theme.text)
-          .frame(width: 34, height: 40)
+          .frame(width: 44, height: 44)
           .contentShape(Rectangle())
       }
       .buttonStyle(PressableStyle(scale: 0.85))
@@ -492,6 +586,7 @@ struct MiniPlayer: View {
       MiniPlayerProgressBar()
         .padding(.horizontal, 26)
         .padding(.bottom, 3)
+        .allowsHitTesting(false)
     }
     .glassCapsule(interactive: true)
     .contentShape(Capsule())

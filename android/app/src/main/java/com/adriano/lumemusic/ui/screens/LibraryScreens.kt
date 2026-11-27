@@ -1,5 +1,16 @@
 package com.adriano.lumemusic.ui.screens
 
+import androidx.compose.foundation.layout.heightIn
+import com.adriano.lumemusic.ui.Chrome
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import com.adriano.lumemusic.ui.KeyboardOkButton
+import com.adriano.lumemusic.ui.keyboardDismissing
+import com.adriano.lumemusic.ui.rememberKeyboardCloser
 import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -56,7 +67,7 @@ import com.adriano.lumemusic.ui.AlbumTile
 import com.adriano.lumemusic.ui.AppModel
 import com.adriano.lumemusic.ui.ArtistAvatar
 import com.adriano.lumemusic.ui.ArtworkImage
-import com.adriano.lumemusic.ui.DetailTopBar
+import com.adriano.lumemusic.ui.DetailHeader
 import com.adriano.lumemusic.ui.EmptyState
 import com.adriano.lumemusic.ui.GlassButton
 import com.adriano.lumemusic.ui.GlassIconButton
@@ -80,7 +91,7 @@ fun LibraryScreen(bottomInset: Dp) {
     var showNew by remember { mutableStateOf(false) }
     val store = LibraryStore
     val failed = DownloadManager.failedItems
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(22.dp)) {
         item {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Biblioteca", style = Theme.font(32f, FontWeight.Bold, Theme.text), modifier = Modifier.weight(1f))
@@ -104,7 +115,7 @@ fun LibraryScreen(bottomInset: Dp) {
                 quick.chunked(2).forEach { pair ->
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         pair.forEach { (t, icon, list) ->
-                            Row(Modifier.weight(1f).height(64.dp).pressable(0.96f) { AppModel.push(LumeRoute.Tracks(t, list)) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp),
+                            Row(Modifier.weight(1f).heightIn(min = 64.dp).pressable(0.96f) { AppModel.push(LumeRoute.Tracks(t, list)) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Icon(sf(icon), null, tint = Theme.rose, modifier = Modifier.size(22.dp))
                                 Column { Text(t, style = Theme.font(15f, FontWeight.SemiBold, Theme.text), maxLines = 1); Text("${list.size}", style = Theme.font(12.5f, color = Theme.secondary)) }
@@ -112,10 +123,10 @@ fun LibraryScreen(bottomInset: Dp) {
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth().height(64.dp).pressable(0.97f) { AppModel.push(LumeRoute.Replay) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).pressable(0.97f) { AppModel.push(LumeRoute.Replay) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Icon(sf("sparkles"), null, tint = Theme.lavender, modifier = Modifier.size(22.dp)); Text("Lume Replay · Seu Resumo", style = Theme.font(15f, FontWeight.SemiBold, Theme.text), modifier = Modifier.weight(1f)); Icon(sf("chevron.right"), null, tint = Theme.tertiary)
                 }
-                Row(Modifier.fillMaxWidth().height(64.dp).pressable(0.97f) { AppModel.push(LumeRoute.ImportHub) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).pressable(0.97f) { AppModel.push(LumeRoute.ImportHub) }.glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Icon(sf("square.and.arrow.down"), null, tint = Theme.sky, modifier = Modifier.size(22.dp)); Text("Importar", style = Theme.font(15f, FontWeight.SemiBold, Theme.text), modifier = Modifier.weight(1f)); Icon(sf("chevron.right"), null, tint = Theme.tertiary)
                 }
             }
@@ -139,7 +150,7 @@ fun LibraryScreen(bottomInset: Dp) {
                 SectionHeader("Artistas")
                 if (store.followedArtists.isEmpty()) EmptyState("person.fill", "Nenhum artista encontrado", "Siga artistas pela página deles.")
                 else store.followedArtists.forEach { a ->
-                    Row(Modifier.fillMaxWidth().height(60.dp).pressable(0.98f) { AppModel.openArtist(a) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).pressable(0.98f) { AppModel.openArtist(a) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         ArtistAvatar(a, 48.dp); Text(a, style = Theme.font(16f, color = Theme.text), maxLines = 1, modifier = Modifier.weight(1f)); Icon(sf("chevron.right"), null, tint = Theme.tertiary)
                     }
                 }
@@ -162,15 +173,18 @@ fun LibraryScreen(bottomInset: Dp) {
 @Composable
 fun NewPlaylistDialog(onDismiss: () -> Unit) {
     var name by remember { mutableStateOf("") }
+    val closeKeyboard = rememberKeyboardCloser()
     AlertDialog(
         onDismissRequest = onDismiss, containerColor = Theme.canvasRaised,
         title = { Text("Nova playlist", color = Theme.text) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.keyboardDismissing(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Dê um nome para a sua nova playlist.", style = Theme.font(14f, color = Theme.secondary))
                 Box(Modifier.fillMaxWidth().height(48.dp).glass(RoundedCornerShape(24.dp)).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
                     if (name.isEmpty()) Text("Nome", style = Theme.font(16f, color = Theme.tertiary))
-                    BasicTextField(name, { name = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose), modifier = Modifier.fillMaxWidth())
+                    BasicTextField(name, { name = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { closeKeyboard() }),
+                        modifier = Modifier.fillMaxWidth())
                 }
             }
         },
@@ -181,7 +195,7 @@ fun NewPlaylistDialog(onDismiss: () -> Unit) {
 
 @Composable
 private fun PlaylistRow(pl: MusicPlaylist) {
-    Row(Modifier.fillMaxWidth().height(64.dp).pressable(0.98f) { AppModel.push(LumeRoute.Playlist(pl.id)) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).pressable(0.98f) { AppModel.push(LumeRoute.Playlist(pl.id)) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         ArtworkImage(pl.artworkURL, Modifier.size(54.dp), 12.dp, icon = "music.note.list")
         Column(Modifier.weight(1f)) {
             Text(pl.name, style = Theme.font(16f, FontWeight.Medium, Theme.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -195,13 +209,14 @@ private fun PlaylistRow(pl: MusicPlaylist) {
 fun PlaylistScreen(id: String, bottomInset: Dp) {
     val pl = LibraryStore.playlists.firstOrNull { it.id == id }
     var confirm by remember { mutableStateOf(false) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar(pl?.name ?: "Playlist") {
+        DetailHeader(pl?.name ?: "Playlist", listState, 230.dp) {
             GlassIconButton("trash", desc = "Excluir") { confirm = true }
         }
         if (pl == null) { EmptyState("music.note.list", "Playlist não encontrada", ""); return@Column }
         val tracks = LibraryStore.tracks(pl)
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ArtworkImage(pl.artworkURL, Modifier.size(190.dp), 24.dp, icon = "music.note.list")
@@ -219,7 +234,7 @@ fun PlaylistScreen(id: String, bottomInset: Dp) {
             items(tracks, key = { "pl${it.id}" }) { t ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { TrackRow(t, queue = tracks) }
-                    Box(Modifier.size(44.dp).pressable(0.85f) { LibraryStore.removeTrack(t.id, pl.id) }, contentAlignment = Alignment.Center) { Icon(sf("minus.circle.fill"), "Remover da playlist", tint = Theme.tertiary, modifier = Modifier.size(22.dp)) }
+                    Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { LibraryStore.removeTrack(t.id, pl.id) }, contentAlignment = Alignment.Center) { Icon(sf("minus.circle.fill"), "Remover da playlist", tint = Theme.tertiary, modifier = Modifier.size(22.dp)) }
                 }
             }
         }
@@ -238,8 +253,8 @@ fun DownloadsScreen(bottomInset: Dp) {
     val states = DownloadManager.statesById
     val active = states.filter { it.value.isActive }
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar("Central de Downloads")
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        DetailHeader("Central de Downloads")
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).glass(RoundedCornerShape(22.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Armazenamento offline", style = Theme.font(13f, color = Theme.secondary))
@@ -264,7 +279,7 @@ fun DownloadsScreen(bottomInset: Dp) {
                             LinearProgressIndicator(progress = { (st?.fraction ?: 0.0).toFloat() }, modifier = Modifier.fillMaxWidth().clip(CircleShape), color = Theme.rose, trackColor = Theme.fill)
                             Text(when (st) { is DownloadState.Queued -> "Na fila"; is DownloadState.Resolving -> "Preparando…"; else -> "Baixando…" }, style = Theme.font(12f, color = Theme.secondary))
                         }
-                        Box(Modifier.size(44.dp).pressable(0.85f) { DownloadManager.cancel(id) }, contentAlignment = Alignment.Center) { Icon(sf("xmark.circle.fill"), "Cancelar", tint = Theme.tertiary) }
+                        Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { DownloadManager.cancel(id) }, contentAlignment = Alignment.Center) { Icon(sf("xmark.circle.fill"), "Cancelar", tint = Theme.tertiary) }
                     }
                 }
             }
@@ -274,7 +289,7 @@ fun DownloadsScreen(bottomInset: Dp) {
                 items(failed, key = { "f${it.first.id}" }) { (t, reason) ->
                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(56.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) { Text(t.title, style = Theme.font(15f, color = Theme.text), maxLines = 1); Text(reason, style = Theme.font(12.5f, color = Theme.danger)) }
-                        Box(Modifier.size(44.dp).pressable(0.85f) { DownloadManager.retry(t.id) }, contentAlignment = Alignment.Center) { Icon(sf("arrow.clockwise"), "Tentar de novo", tint = Theme.accent) }
+                        Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { DownloadManager.retry(t.id) }, contentAlignment = Alignment.Center) { Icon(sf("arrow.clockwise"), "Tentar de novo", tint = Theme.accent) }
                     }
                 }
             }
@@ -295,8 +310,8 @@ fun DownloadsScreen(bottomInset: Dp) {
 fun ReplayScreen(bottomInset: Dp) {
     val s = LibraryStore.replaySummary
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar("Lume Replay")
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        DetailHeader("Lume Replay")
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             item {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).clip(RoundedCornerShape(28.dp)).background(Theme.prismDiagonal).padding(22.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Seu resumo", style = Theme.font(14f, FontWeight.SemiBold, Theme.onPrism.copy(0.7f)))
@@ -319,7 +334,7 @@ fun ReplayScreen(bottomInset: Dp) {
                 }
                 item { SectionHeader("Seus artistas") }
                 items(s.topArtists.size) { i -> val (name, n) = s.topArtists[i]
-                    Row(Modifier.fillMaxWidth().height(60.dp).pressable(0.98f) { AppModel.openArtist(name) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).pressable(0.98f) { AppModel.openArtist(name) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Text("${i + 1}", style = Theme.font(14.5f, FontWeight.Bold, Theme.secondary), modifier = Modifier.width(26.dp))
                         ArtistAvatar(name, 46.dp); Text(name, style = Theme.font(16f, color = Theme.text), maxLines = 1, modifier = Modifier.weight(1f)); Text("$n×", style = Theme.font(13f, color = Theme.secondary))
                     }
@@ -352,9 +367,11 @@ fun ImportScreen(bottomInset: Dp) {
         if (ok) runImport { ImportService.importFromDevice(ctx) } else error = "Permita o acesso às músicas do aparelho para importar."
     }
 
+    val closeKeyboard = rememberKeyboardCloser()
+    var textFocused by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar("Importar músicas")
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        DetailHeader("Importar músicas")
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item { HRow(spacing = 8.dp) { items(listOf("Link", "Lista de texto", "Aparelho")) { t -> PrismChip(t, tab == t) { tab = t; error = null } } } }
             item {
                 Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -363,7 +380,10 @@ fun ImportScreen(bottomInset: Dp) {
                             Text("Cole o link de uma playlist ou álbum do Spotify, YouTube Music, Apple Music ou Amazon Music.", style = Theme.font(14f, color = Theme.secondary))
                             Box(Modifier.fillMaxWidth().height(52.dp).glass(RoundedCornerShape(26.dp)).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
                                 if (link.isEmpty()) Text("https://…", style = Theme.font(16f, color = Theme.tertiary))
-                                BasicTextField(link, { link = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose), modifier = Modifier.fillMaxWidth())
+                                BasicTextField(link, { link = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+                                    keyboardActions = KeyboardActions(onGo = { closeKeyboard(); if (link.isNotBlank()) runImport { listOf(ImportService.importFromURL(link)) } }),
+                                    modifier = Modifier.fillMaxWidth())
                             }
                             PrismButton("Importar link", "link") { if (link.isNotBlank()) runImport { listOf(ImportService.importFromURL(link)) } }
                         }
@@ -371,10 +391,15 @@ fun ImportScreen(bottomInset: Dp) {
                             Text("Uma música por linha: “Artista - Música”. Também aceita M3U.", style = Theme.font(14f, color = Theme.secondary))
                             Box(Modifier.fillMaxWidth().height(48.dp).glass(RoundedCornerShape(24.dp)).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
                                 if (name.isEmpty()) Text("Nome da playlist", style = Theme.font(16f, color = Theme.tertiary))
-                                BasicTextField(name, { name = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose), modifier = Modifier.fillMaxWidth())
+                                BasicTextField(name, { name = it }, singleLine = true, textStyle = Theme.font(16f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
+                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth())
                             }
                             Box(Modifier.fillMaxWidth().height(180.dp).glass(RoundedCornerShape(20.dp)).padding(14.dp)) {
-                                BasicTextField(text, { text = it }, textStyle = Theme.font(15f, color = Theme.text), cursorBrush = SolidColor(Theme.rose), modifier = Modifier.fillMaxSize())
+                                BasicTextField(text, { text = it }, textStyle = Theme.font(15f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                                    modifier = Modifier.fillMaxSize().onFocusChanged { textFocused = it.isFocused })
+                                // campo de várias linhas: o Enter pula de linha, então o "OK" fica visível enquanto o teclado estiver aberto
+                                if (textFocused) KeyboardOkButton(Modifier.align(Alignment.BottomEnd))
                             }
                             PrismButton("Criar playlist", "text.badge.plus") { if (text.isNotBlank()) runImport { listOf(ImportService.importFromText(text, name)) } }
                         }

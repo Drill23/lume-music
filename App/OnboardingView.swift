@@ -603,22 +603,27 @@ private struct AccessStep: View {
   @State private var claiming = false
 
   var body: some View {
-    VStack {
-      Spacer(minLength: 20)
-      if let info {
-        AccessSuccessView(info: info, buttonTitle: "Continuar", onContinue: onDone)
-          .transition(.scale(scale: 0.94).combined(with: .opacity))
-      } else {
-        AccessCodeView(prefill: AccessService.shared.prefillCode) { i in
-          withAnimation(.spring(response: 0.55, dampingFraction: 0.85)) { info = i }
+    // Rolável: com o teclado aberto (ou em telas pequenas) o botão "Ativar" continua alcançável.
+    ScrollView {
+      VStack {
+        Spacer(minLength: 20)
+        if let info {
+          AccessSuccessView(info: info, buttonTitle: "Continuar", onContinue: onDone)
+            .transition(.scale(scale: 0.94).combined(with: .opacity))
+        } else {
+          AccessCodeView(prefill: AccessService.shared.prefillCode) { i in
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.85)) { info = i }
+          }
+          .transition(.opacity)
+          GlassButton(title: "Já sou vitalício", systemImage: "person.badge.key.fill", height: 46) { claiming = true }
+            .padding(.top, 14)
         }
-        .transition(.opacity)
-        GlassButton(title: "Já sou vitalício", systemImage: "person.badge.key.fill", height: 46) { claiming = true }
-          .padding(.top, 14)
+        Spacer(minLength: 20)
       }
-      Spacer(minLength: 20)
+      .padding(.horizontal, 24)
+      .padding(.bottom, 24)
     }
-    .padding(.horizontal, 24)
+    .lumeSheetScroll()
     .padding(.top, 60)
     .sheet(isPresented: $claiming) {
       ClaimLifetimeSheet(prefillCode: AccessService.shared.prefillCode) { onDone() }
@@ -888,11 +893,13 @@ private struct ArtistsStep: View {
           .foregroundStyle(Theme.text)
           .autocorrectionDisabled()
           .submitLabel(.search)
+          .onSubmit { LumeKeyboard.dismiss() }
         if model.searching { ProgressView().scaleEffect(0.8) }
         else if !query.isEmpty {
           Button { query = "" } label: {
             Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.tertiary).frame(width: 44, height: 44)
           }
+          .accessibilityLabel("Limpar busca")
         }
       }
       .padding(.leading, 16)
@@ -914,6 +921,7 @@ private struct ArtistsStep: View {
         .padding(.vertical, 18)
       }
       .scrollDismissesKeyboard(.interactively)
+      .scrollBounceBehavior(.basedOnSize)
 
       VStack(spacing: 8) {
         PrismButton(title: selected.isEmpty ? "Continuar sem escolher" : "Continuar · \(selected.count)", systemImage: "arrow.right", height: 54, action: onNext)

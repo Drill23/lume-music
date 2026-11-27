@@ -45,6 +45,7 @@ struct LibraryView: View {
       .padding(.top, 6)
       .padding(.bottom, 16)
     }
+    .lumeTabScroll()
     .background(backdrop)
     .alert("Nova playlist", isPresented: $showNewPlaylist) {
       TextField("Nome da playlist", text: $newName)
@@ -98,12 +99,12 @@ struct LibraryView: View {
         Image(systemName: "arrow.up.arrow.down")
           .font(.system(size: 16, weight: .semibold))
           .foregroundStyle(Theme.text)
-          .frame(width: 40, height: 40)
+          .frame(width: 44, height: 44)
           .glassCircle(interactive: true)
       }
-      GlassIconButton(systemName: "plus", size: 40) { showNewPlaylist = true }
+      GlassIconButton(systemName: "plus", size: 44) { showNewPlaylist = true }
         .accessibilityLabel("Nova playlist")
-      GlassIconButton(systemName: "square.and.arrow.down", size: 40) { app.push(.importHub) }
+      GlassIconButton(systemName: "square.and.arrow.down", size: 44) { app.push(.importHub) }
         .accessibilityLabel("Importar músicas")
     }
     .glassGroup()
@@ -119,11 +120,16 @@ struct LibraryView: View {
         .font(Theme.font(15))
         .foregroundStyle(Theme.text)
         .autocorrectionDisabled()
+        .submitLabel(.search)
+        .onSubmit { LumeKeyboard.dismiss() }
       if !filterText.isEmpty {
         Button { filterText = "" } label: {
           Image(systemName: "xmark.circle.fill")
             .foregroundStyle(Theme.tertiary)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
         }
+        .accessibilityLabel("Limpar filtro")
       }
     }
     .padding(.horizontal, 14)

@@ -52,7 +52,7 @@ object UpgradeModel {
     /** "none" | "sending" | "review" */
     var claimState by mutableStateOf("none"); private set
     var statusMessage by mutableStateOf<String?>(null); private set
-    var priceText by mutableStateOf("R$ 10,00"); private set
+    var priceText by mutableStateOf("R$ 5,00"); private set
     val shortPrice get() = PurchaseService.shortPrice(priceText)
 
     // ---- teste grátis automático (v2.3) ----
@@ -205,7 +205,7 @@ object UpgradeModel {
     // ============================================================ Depuração
 
     private fun fakeOrder() = PurchaseOrder(
-        orderId = "LM-DEBUG1", status = "pending", amount = 1000, amountText = "R$ 10,00", plan = "Vitalício",
+        orderId = "LM-DEBUG1", status = "pending", amount = 500, amountText = "R$ 5,00", plan = "Vitalício",
         checkoutUrl = null,
         pix = PixData(
             key = if (debugManual) "d0a9a4ea-96dd-4125-b161-1d7fc83ffd1d" else null, name = if (debugManual) "ADRIANO ALMEIDA" else "Lume Music",

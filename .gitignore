@@ -4,3 +4,4 @@ DerivedData/
 outputs/
 .DS_Store
 .claude/
+__pycache__/
