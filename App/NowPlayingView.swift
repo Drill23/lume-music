@@ -29,12 +29,12 @@ struct NowPlayingView: View {
           .gesture(dismissDrag)
 
         stageSwitcher
-          .padding(.top, 8)
+          .padding(.top, 6)
+          .padding(.bottom, 4)
           .zIndex(10)
 
         stage
           .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .clipped()
 
         controls
           .padding(.horizontal, 24)
@@ -102,55 +102,25 @@ struct NowPlayingView: View {
   // MARK: Stage
 
   private var stageSwitcher: some View {
-    HStack(spacing: 4) {
-      ForEach(PlayerSurfaceTab.allCases) { t in
-        let active = mode == t
-        Button {
-          Haptics.selection()
-          withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-            if t != .lyrics { app.playerStyle = t }
-            app.playerTab = t
-          }
-        } label: {
-          HStack(spacing: 4) {
-            Image(systemName: t.icon)
-              .font(.system(size: 11, weight: .semibold))
-            if active {
-              Text(t.rawValue)
-                .font(Theme.font(11.5, .semibold))
-                .lineLimit(1)
-            }
-          }
-          .foregroundStyle(active ? Theme.onPrism : Theme.secondary)
-          .padding(.horizontal, active ? 10 : 9)
-          .frame(height: 28)
-          .background {
-            if active { Capsule().fill(Theme.prismDiagonal) }
-          }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(t.rawValue)
+    StageSwitcher(selection: mode) { t in
+      withAnimation(.spring(response: 0.42, dampingFraction: 0.84)) {
+        if t != .lyrics { app.playerStyle = t }
+        app.playerTab = t
       }
     }
-    .padding(3)
-    .glassCapsule()
   }
 
   @ViewBuilder
   private var stage: some View {
     ZStack {
       if let track = player.currentTrack {
-        Group {
-          switch mode {
-          case .artwork: ArtworkStage(track: track)
-          case .vinyl: TurntableStage(track: track)
-          case .cassette: CassetteStage(track: track)
-          case .waves: WavesStage(track: track)
-          case .lyrics: LyricsStage()
-          }
+        switch mode {
+        case .artwork: ArtworkStage(track: track).transition(StageTransition())
+        case .vinyl: TurntableStage(track: track).transition(StageTransition())
+        case .cassette: CassetteStage(track: track).transition(StageTransition())
+        case .waves: WavesStage(track: track).transition(StageTransition())
+        case .lyrics: LyricsStage().transition(StageTransition())
         }
-        .id(mode)
-        .transition(.opacity.combined(with: .scale(scale: 0.97)))
       } else {
         EmptyStateView(icon: "music.note", title: "Nada tocando", message: "Escolha uma música para começar.")
       }
@@ -909,68 +879,6 @@ struct AddToPlaylistSheet: View {
     Haptics.success()
     AppModel.shared.showToast("Playlist “\(clean)” criada")
     dismiss()
-  }
-}
-
-/// Botão circular retrátil reutilizável para abrir estilos/acabamentos no palco sem ocupar a tela.
-struct StageStyleOrb<Content: View>: View {
-  var icon: String = "paintpalette.fill"
-  var accessibilityLabel: String = "Estilos visuais"
-  @ViewBuilder let content: (_ dismiss: @escaping () -> Void) -> Content
-
-  @State private var expanded = false
-
-  private func close() {
-    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-      expanded = false
-    }
-  }
-
-  var body: some View {
-    ZStack(alignment: .topTrailing) {
-      if expanded {
-        Color.black.opacity(0.001)
-          .ignoresSafeArea()
-          .contentShape(Rectangle())
-          .onTapGesture { close() }
-      }
-
-      VStack(alignment: .trailing, spacing: 8) {
-        Button {
-          Haptics.selection()
-          withAnimation(.spring(response: 0.30, dampingFraction: 0.82)) {
-            expanded.toggle()
-          }
-        } label: {
-          Image(systemName: expanded ? "xmark" : icon)
-            .font(.system(size: 13.5, weight: .semibold))
-            .foregroundStyle(expanded ? Theme.accent : Theme.text)
-            .frame(width: 34, height: 34)
-            .glassCircle(interactive: true)
-            .overlay(Circle().stroke(Theme.prismDiagonal.opacity(expanded ? 0.70 : 0.28), lineWidth: 1))
-            .shadow(color: .black.opacity(0.22), radius: 6, y: 2)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(expanded ? "Fechar estilos" : accessibilityLabel)
-
-        if expanded {
-          content(close)
-            .padding(10)
-            .frame(width: 266)
-            .glass(20)
-            .overlay(
-              RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Color.white.opacity(0.22), lineWidth: 0.8)
-            )
-            .shadow(color: .black.opacity(0.32), radius: 18, y: 8)
-            .transition(.scale(scale: 0.86, anchor: .topTrailing).combined(with: .opacity))
-        }
-      }
-      .padding(.top, 8)
-      .padding(.trailing, 18)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-    .zIndex(50)
   }
 }
 
