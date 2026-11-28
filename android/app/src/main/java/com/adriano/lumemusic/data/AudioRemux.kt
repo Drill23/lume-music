@@ -43,7 +43,10 @@ object AudioRemux {
                 buf.clear()
                 val size = extractor.readSampleData(buf, 0)
                 if (size < 0) break
-                info.set(0, size, extractor.sampleTime, extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC)
+                val pts = extractor.sampleTime
+                if (pts < 0L) { extractor.advance(); continue }
+                val flags = if ((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
+                info.set(0, size, pts, flags)
                 muxer.writeSampleData(outTrack, buf, info)
                 extractor.advance()
             }

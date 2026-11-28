@@ -130,7 +130,6 @@ struct TrackRow: View {
 
   @ObservedObject private var player = AudioPlayer.shared
   @ObservedObject private var store = LibraryStore.shared
-  @ObservedObject private var downloads = DownloadManager.shared
 
   var body: some View {
     let active = player.currentTrack?.id == track.id
@@ -176,13 +175,7 @@ struct TrackRow: View {
         }
       }
       Spacer(minLength: 6)
-      if let p = downloads.progressById[track.id] {
-        Circle()
-          .trim(from: 0, to: CGFloat(p))
-          .stroke(Theme.accent, style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
-          .rotationEffect(.degrees(-90))
-          .frame(width: 18, height: 18)
-      }
+      TrackDownloadIndicator(trackId: track.id)
       Menu {
         TrackMenuItems(track: track, queue: queue)
       } label: {
@@ -209,6 +202,22 @@ struct TrackRow: View {
     case 2: return Theme.hex(0x94A3B8)
     case 3: return Theme.hex(0xD97706)
     default: return Theme.secondary
+    }
+  }
+}
+
+/// Isola a assinatura do DownloadManager para não re-renderizar todas as linhas de música a cada tick.
+private struct TrackDownloadIndicator: View {
+  let trackId: String
+  @ObservedObject private var downloads = DownloadManager.shared
+
+  var body: some View {
+    if let p = downloads.progressById[trackId] {
+      Circle()
+        .trim(from: 0, to: CGFloat(p))
+        .stroke(Theme.accent, style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+        .rotationEffect(.degrees(-90))
+        .frame(width: 18, height: 18)
     }
   }
 }

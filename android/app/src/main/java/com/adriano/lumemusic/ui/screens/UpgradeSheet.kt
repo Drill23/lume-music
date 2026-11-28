@@ -407,7 +407,9 @@ fun PaidDialog() {
 /** Confete leve: partículas caem e somem em ~3 s. */
 @Composable
 private fun Confetti() {
-    val p by animateFloatAsState(1f, tween(3200, easing = LinearEasing), label = "confetti")
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { started = true }
+    val p by animateFloatAsState(if (started) 1f else 0f, tween(3200, easing = LinearEasing), label = "confetti")
     val colors = Theme.prismColors + Theme.mint
     Canvas(Modifier.fillMaxWidth().height(0.dp)) {
         val rnd = java.util.Random(7)

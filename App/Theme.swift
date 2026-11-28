@@ -501,6 +501,11 @@ actor ImagePipeline {
     memory.object(forKey: Self.key(url, maxPixel))
   }
 
+  func clearCache() {
+    memory.removeAllObjects()
+    session.configuration.urlCache?.removeAllCachedResponses()
+  }
+
   func image(_ url: String, maxPixel: CGFloat = 800) async -> UIImage? {
     guard !url.isEmpty, let u = URL(string: url) else { return nil }
     let key = Self.key(url, maxPixel)
@@ -730,6 +735,8 @@ enum BlurredArtworkCache {
   private static let ciContext = CIContext(options: [.useSoftwareRenderer: false, .cacheIntermediates: false])
 
   static func cached(_ url: String) -> UIImage? { memory.object(forKey: url as NSString) }
+
+  static func clear() { memory.removeAllObjects() }
 
   static func load(_ url: String) async -> UIImage? {
     if let hit = cached(url) { return hit }

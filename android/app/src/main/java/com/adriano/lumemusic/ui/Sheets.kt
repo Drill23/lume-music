@@ -200,6 +200,14 @@ fun AddToPlaylistSheet(track: Track, onDismiss: () -> Unit) {
         SheetHeader("Adicionar à playlist", "${track.title} · ${track.artist}", onTrailing = onDismiss)
         SheetCard(Modifier.padding(bottom = 12.dp)) {
             if (creating) {
+                fun submitNew() {
+                    val trimmed = name.trim()
+                    if (trimmed.isEmpty()) return
+                    closeKeyboard()
+                    val pl = LibraryStore.createPlaylist(trimmed, tracks = listOf(track))
+                    AppModel.showToast("Adicionada a “${pl.name}”")
+                    onDismiss()
+                }
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
@@ -207,14 +215,11 @@ fun AddToPlaylistSheet(track: Track, onDismiss: () -> Unit) {
                     Box(Modifier.weight(1f).height(46.dp).glass(RoundedCornerShape(23.dp)).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
                         if (name.isEmpty()) Text("Nome da playlist", style = Theme.font(15f, color = Theme.tertiary))
                         BasicTextField(name, { name = it }, singleLine = true, textStyle = Theme.font(15.5f, color = Theme.text), cursorBrush = SolidColor(Theme.rose),
-                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { closeKeyboard() }),
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { if (name.isNotBlank()) submitNew() else closeKeyboard() }),
                             modifier = Modifier.fillMaxWidth())
                     }
-                    PrismButton("Criar", modifier = Modifier.width(92.dp), height = 46.dp, fontSize = 14.5f) {
-                        if (name.isNotBlank()) {
-                            val pl = LibraryStore.createPlaylist(name.trim(), tracks = listOf(track))
-                            AppModel.showToast("Adicionada a “${pl.name}”"); onDismiss()
-                        }
+                    PrismButton("Criar", modifier = Modifier.width(92.dp).alpha(if (name.isBlank()) 0.45f else 1f), height = 46.dp, fontSize = 14.5f) {
+                        submitNew()
                     }
                 }
             } else {
@@ -230,8 +235,12 @@ fun AddToPlaylistSheet(track: Track, onDismiss: () -> Unit) {
                         if (idx > 0) SheetDivider()
                         Row(
                             Modifier.fillMaxWidth().heightIn(min = 62.dp).pressable(0.985f) {
-                                LibraryStore.addTrack(track, pl.id)
-                                AppModel.showToast("Adicionada a “${pl.name}”")
+                                if (track.id in pl.trackIds) {
+                                    AppModel.showToast("Já está em “${pl.name}”")
+                                } else {
+                                    LibraryStore.addTrack(track, pl.id)
+                                    AppModel.showToast("Adicionada a “${pl.name}”")
+                                }
                                 onDismiss()
                             }.padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),

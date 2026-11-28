@@ -278,7 +278,7 @@ struct SearchView: View {
         .padding(.horizontal, 20)
       case .countries:
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-          ForEach(ChartCountry.all) { c in CountryFlagCard(country: c, width: .infinity) }
+          ForEach(ChartCountry.all) { c in CountryFlagCard(country: c, width: nil) }
         }
         .padding(.horizontal, 20)
       case .decades:
@@ -617,25 +617,63 @@ struct SearchView: View {
       return
     }
     loading = true
-    async let sugTask = SearchService.shared.suggestions(q)
-    try? await Task.sleep(for: .milliseconds(320))
-    if Task.isCancelled { return }
 
-    async let s = MusicEngine.shared.searchSongs(query: q, limit: 25)
-    async let a = SearchService.shared.artists(q)
-    async let al = SearchService.shared.albums(q)
-    async let pl = SearchService.shared.playlists(q, limit: 12)
-    async let ly = SearchService.shared.searchByLyrics(q)
+    // 1. Sugestões instantâneas aparecem enquanto o usuário ainda digita (antes do debounce completo).
+    let sugJob = Task { await SearchService.shared.suggestions(q) }
+    Task { @MainActor in
+      let foundSug = await sugJob.value
+      guard !Task.isCancelled, self.trimmed == q else { return }
+      self.suggestions = foundSug
+    }
 
-    let (foundSug, foundSongs, foundArtists, foundAlbums, foundPlaylists, foundLyrics) = await (sugTask, s, a, al, pl, ly)
+    try? await Task.sleep(for: .milliseconds(260))
+    if Task.isCancelled { sugJob.cancel(); return }
+
+    // 2. Publica cada fonte assim que responder (músicas/artistas/álbuns não ficam presos esperando letra).
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask {
+        let foundSongs = await MusicEngine.shared.searchSongs(query: q, limit: 25)
+        await MainActor.run {
+          guard !Task.isCancelled, self.trimmed == q else { return }
+          self.songs = foundSongs
+          self.resultsFor = q
+        }
+      }
+      group.addTask {
+        let foundArtists = await SearchService.shared.artists(q)
+        await MainActor.run {
+          guard !Task.isCancelled, self.trimmed == q else { return }
+          ArtworkStore.shared.register(foundArtists)
+          self.artists = foundArtists
+          self.resultsFor = q
+        }
+      }
+      group.addTask {
+        let foundAlbums = await SearchService.shared.albums(q)
+        await MainActor.run {
+          guard !Task.isCancelled, self.trimmed == q else { return }
+          self.albums = foundAlbums
+          self.resultsFor = q
+        }
+      }
+      group.addTask {
+        let foundPlaylists = await SearchService.shared.playlists(q, limit: 12)
+        await MainActor.run {
+          guard !Task.isCancelled, self.trimmed == q else { return }
+          self.playlists = foundPlaylists
+          self.resultsFor = q
+        }
+      }
+      group.addTask {
+        let foundLyrics = await SearchService.shared.searchByLyrics(q)
+        await MainActor.run {
+          guard !Task.isCancelled, self.trimmed == q else { return }
+          self.lyricHits = foundLyrics
+          self.resultsFor = q
+        }
+      }
+    }
     if Task.isCancelled { return }
-    ArtworkStore.shared.register(foundArtists)
-    suggestions = foundSug
-    songs = foundSongs
-    artists = foundArtists
-    albums = foundAlbums
-    playlists = foundPlaylists
-    lyricHits = foundLyrics
     resultsFor = q
     loading = false
   }

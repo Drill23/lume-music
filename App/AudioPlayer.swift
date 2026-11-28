@@ -51,7 +51,7 @@ final class AudioPlayer: ObservableObject {
   @Published var palette: ArtworkPalette = .fallback
   @Published var currentArtwork: String = ""
   @Published var contextTitle: String = ""
-  private var varispeed: Float = 1.0
+  private(set) var varispeed: Float = 1.0
 
   // Sleep timer
   @Published var sleepTimerOption: SleepTimerOption = .off
@@ -184,9 +184,20 @@ final class AudioPlayer: ObservableObject {
       play(track)
       return
     }
-    let insertAt = min(queue.count, currentIndex + 1)
-    queue.removeAll { $0.id == track.id && queue.firstIndex(of: $0) != currentIndex }
-    let safeIdx = min(queue.count, insertAt)
+    let currentId = currentTrack?.id
+    if currentId == track.id {
+      Haptics.light()
+      return
+    }
+    queue = queue.enumerated().compactMap { idx, item in
+      (item.id == track.id && idx != currentIndex) ? nil : item
+    }
+    if let currentId, let updatedIdx = queue.firstIndex(where: { $0.id == currentId }) {
+      currentIndex = updatedIdx
+    } else {
+      currentIndex = min(currentIndex, max(0, queue.count - 1))
+    }
+    let safeIdx = min(queue.count, currentIndex + 1)
     queue.insert(track, at: safeIdx)
     Haptics.light()
   }
@@ -372,11 +383,13 @@ final class AudioPlayer: ObservableObject {
             self.sleepRemainingSeconds = 0
             self.player?.pause()
             self.isPlaying = false
-            self.player?.volume = 1.0
+            self.player?.volume = LibraryStore.shared.soundProfile == .night ? 0.72 : 1.0
+            self.updateNowPlaying()
           } else {
             self.sleepRemainingSeconds -= 1
             if self.sleepRemainingSeconds <= 5 {
-              self.player?.volume = Float(self.sleepRemainingSeconds) / 5.0
+              let baseVol: Float = LibraryStore.shared.soundProfile == .night ? 0.72 : 1.0
+              self.player?.volume = baseVol * (Float(self.sleepRemainingSeconds) / 5.0)
             }
           }
         }
@@ -485,14 +498,25 @@ final class AudioPlayer: ObservableObject {
       let store = LibraryStore.shared
       if store.isDownloaded(track.id) {
         let localURL = store.localAudioURL(for: track.id)
-        let asset = AVURLAsset(url: localURL)
-        self.currentBitrateLabel = "Offline · AAC"
-        self.currentLoudnessDb = LoudnessStore.shared.db(for: track.videoId, track.id)
-        self.beginAVPlayback(asset: asset, track: track)
-        return
+        if FileManager.default.fileExists(atPath: localURL.path) {
+          let asset = AVURLAsset(url: localURL)
+          self.currentBitrateLabel = "Offline · AAC"
+          self.currentLoudnessDb = LoudnessStore.shared.db(for: track.videoId, track.id)
+          self.beginAVPlayback(asset: asset, track: track)
+          if !store.offlineMode {
+            if self.autoplayRadio && self.queue.count - self.currentIndex <= 2 {
+              Task { await self.appendRadio(for: track) }
+            }
+            self.scheduleNextTrackPrefetch()
+          }
+          return
+        } else {
+          store.removeDownload(track.id)
+        }
       }
 
       if store.offlineMode {
+        self.cleanupPlayerObservers()
         self.isLoading = false
         self.isPlaying = false
         self.errorToast = "Modo offline ativo. Baixe “\(track.title)” para ouvir sem internet."
@@ -584,9 +608,11 @@ final class AudioPlayer: ObservableObject {
 
     statusObs = item.observe(\.status, options: [.new]) { [weak self] it, _ in
       if it.status == .readyToPlay {
-        // O stream progressivo (MP4 itag 18) traz vídeo 360p: desligamos a faixa de vídeo para o
-        // iPhone não decodificar imagem que ninguém vê (menos CPU/GPU, menos calor e bateria).
-        for t in it.tracks where t.assetTrack?.mediaType == .video && t.isEnabled { t.isEnabled = false }
+        // O stream progressivo (MP4 itag 18) traz vídeo 360p: desligamos a faixa de vídeo na MainActor
+        // para o iPhone não decodificar imagem que ninguém vê (menos CPU/GPU, menos calor e bateria).
+        Task { @MainActor in
+          for t in it.tracks where t.assetTrack?.mediaType == .video && t.isEnabled { t.isEnabled = false }
+        }
       }
       if it.status == .failed {
         let msg = it.error?.localizedDescription ?? "Falha ao reproduzir esta faixa."

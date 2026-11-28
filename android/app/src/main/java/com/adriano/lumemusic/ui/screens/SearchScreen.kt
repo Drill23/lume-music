@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import com.adriano.lumemusic.audio.AudioPlayer
 import com.adriano.lumemusic.data.AlbumShowcase
 import com.adriano.lumemusic.data.ArtistInfo
+import com.adriano.lumemusic.data.ArtworkStore
+import kotlinx.coroutines.launch
 import com.adriano.lumemusic.data.ChartCountry
 import com.adriano.lumemusic.data.LibraryStore
 import com.adriano.lumemusic.data.LyricSearchHit
@@ -105,14 +107,32 @@ fun SearchScreen(bottomInset: Dp) {
         val q = submitted
         if (q.isBlank()) return@LaunchedEffect
         loading = true
-        results = coroutineScope {
-            val songs = async { if (scope in listOf("Tudo", "Músicas")) MusicEngine.searchSongs(q, 25) else emptyList() }
-            val artists = async { if (scope in listOf("Tudo", "Artistas")) SearchService.artists(q) else emptyList() }
-            val albums = async { if (scope in listOf("Tudo", "Álbuns")) SearchService.albums(q) else emptyList() }
-            val pls = async { if (scope in listOf("Tudo", "Playlists")) SearchService.playlists(q) else emptyList() }
-            val lyr = async { if (scope in listOf("Tudo", "Letras")) SearchService.searchByLyrics(q) else emptyList() }
-            Results(songs.await(), artists.await(), albums.await(), pls.await(), lyr.await())
+        results = null
+        var acc = Results(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+        coroutineScope {
+            if (scope in listOf("Tudo", "Músicas")) launch {
+                val found = MusicEngine.searchSongs(q, 25)
+                acc = acc.copy(songs = found); results = acc
+            }
+            if (scope in listOf("Tudo", "Artistas")) launch {
+                val found = SearchService.artists(q)
+                ArtworkStore.register(found)
+                acc = acc.copy(artists = found); results = acc
+            }
+            if (scope in listOf("Tudo", "Álbuns")) launch {
+                val found = SearchService.albums(q)
+                acc = acc.copy(albums = found); results = acc
+            }
+            if (scope in listOf("Tudo", "Playlists")) launch {
+                val found = SearchService.playlists(q)
+                acc = acc.copy(playlists = found); results = acc
+            }
+            if (scope in listOf("Tudo", "Letras")) launch {
+                val found = SearchService.searchByLyrics(q)
+                acc = acc.copy(lyrics = found); results = acc
+            }
         }
+        results = acc
         loading = false
     }
     val closeKeyboard = rememberKeyboardCloser()
@@ -133,7 +153,14 @@ fun SearchScreen(bottomInset: Dp) {
                 Icon(sf("xmark.circle.fill"), "Limpar", tint = Theme.tertiary, modifier = Modifier.size(19.dp))
             }
         }
-        HRow(spacing = 8.dp, contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp)) { items(scopes) { s -> PrismChip(s, scope == s) { scope = s } } }
+        HRow(spacing = 8.dp, contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp)) {
+            items(scopes) { s ->
+                PrismChip(s, scope == s) {
+                    scope = s
+                    if (query.isNotBlank() && submitted != query.trim()) submit(query)
+                }
+            }
+        }
 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             if (suggestions.isNotEmpty() && submitted != query.trim()) {

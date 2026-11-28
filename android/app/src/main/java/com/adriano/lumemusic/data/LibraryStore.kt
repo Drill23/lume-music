@@ -87,6 +87,8 @@ object LibraryStore {
     var totalListeningSeconds by mutableStateOf(0.0); private set
     /** Lápides de playlists apagadas (backup da biblioteca). */
     var deletedPlaylists by mutableStateOf<List<DeletedPlaylist>>(emptyList()); private set
+    var offlineStorageBytes by mutableStateOf(0L); private set
+    var offlineFileSizes by mutableStateOf<Map<String, Long>>(emptyMap()); private set
 
     // Preferências
     var visualizerStyle by Saved(VisualizerStyle.ARES)
@@ -128,34 +130,48 @@ object LibraryStore {
     private fun safeName(id: String) = id.replace(Regex("[^A-Za-z0-9_-]"), "_")
 
     fun localAudioFile(trackId: String): File {
-        val mp4 = File(offlineDir, "${safeName(trackId)}.mp4")
-        if (mp4.exists()) return mp4
-        val m4a = File(offlineDir, "${safeName(trackId)}.m4a")
+        val base = safeName(trackId)
+        val m4a = File(offlineDir, "$base.m4a")
         if (m4a.exists()) return m4a
-        return mp4
+        val mp4 = File(offlineDir, "$base.mp4")
+        if (mp4.exists()) return mp4
+        return m4a
     }
 
     fun removeDownload(trackId: String) {
         val base = safeName(trackId)
-        File(offlineDir, "$base.mp4").delete()
-        File(offlineDir, "$base.m4a").delete()
+        val prev = offlineFileSizes[trackId] ?: 0L
+        offlineFileSizes = offlineFileSizes - trackId
+        offlineStorageBytes = (offlineStorageBytes - prev).coerceAtLeast(0L)
         downloadedIds = downloadedIds - trackId
         save()
+        scope.launch {
+            File(offlineDir, "$base.m4a").delete()
+            File(offlineDir, "$base.mp4").delete()
+            File(offlineDir, "$base.part").delete()
+        }
     }
 
-    fun isDownloaded(trackId: String): Boolean = trackId in downloadedIds && localAudioFile(trackId).exists()
+    /** O(1) em memória (sem I/O de disco na thread de UI a cada TrackRow). */
+    fun isDownloaded(trackId: String): Boolean = trackId in downloadedIds
 
     fun removeAllDownloads() {
-        for (id in downloadedIds) {
-            val base = safeName(id)
-            File(offlineDir, "$base.mp4").delete()
-            File(offlineDir, "$base.m4a").delete()
-        }
+        val ids = downloadedIds.toList()
         downloadedIds = emptySet()
+        offlineFileSizes = emptyMap()
+        offlineStorageBytes = 0L
         save()
+        scope.launch {
+            for (id in ids) {
+                val base = safeName(id)
+                File(offlineDir, "$base.m4a").delete()
+                File(offlineDir, "$base.mp4").delete()
+                File(offlineDir, "$base.part").delete()
+            }
+        }
     }
 
-    fun fileSizeBytes(trackId: String): Long = localAudioFile(trackId).takeIf { it.exists() }?.length() ?: 0L
+    fun fileSizeBytes(trackId: String): Long = offlineFileSizes[trackId] ?: 0L
 
     fun fileSizeFormatted(trackId: String): String {
         val bytes = fileSizeBytes(trackId)
@@ -165,14 +181,44 @@ object LibraryStore {
 
     val offlineStorageFormatted: String
         get() {
-            val total = offlineDir.listFiles()?.sumOf { it.length() } ?: 0L
-            val mb = total / (1024.0 * 1024.0)
+            val mb = offlineStorageBytes / (1024.0 * 1024.0)
             return if (mb >= 1024) "%.2f GB".format(mb / 1024.0) else "%.1f MB".format(mb)
         }
 
     private fun reconcileOfflineFiles() {
-        val valid = downloadedIds.filter { localAudioFile(it).exists() }.toSet()
-        if (valid.size != downloadedIds.size) { downloadedIds = valid; save() }
+        val snapshotIds = downloadedIds
+        scope.launch {
+            val dir = offlineDir
+            val valid = HashSet<String>()
+            val sizes = HashMap<String, Long>()
+            var total = 0L
+            for (id in snapshotIds) {
+                val f = localAudioFile(id)
+                if (f.exists()) {
+                    valid.add(id)
+                    val len = f.length()
+                    sizes[id] = len
+                    total += len
+                }
+            }
+            dir.listFiles()?.forEach { if (it.name.endsWith(".part") || it.name.endsWith(".strip.tmp")) it.delete() }
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                val newlyAdded = downloadedIds - snapshotIds
+                val merged = valid + newlyAdded
+                if (merged != downloadedIds) {
+                    downloadedIds = merged
+                    save()
+                }
+                val mergedSizes = HashMap(sizes)
+                var sum = total
+                for (id in newlyAdded) {
+                    val sz = offlineFileSizes[id] ?: 0L
+                    if (sz > 0L) { mergedSizes[id] = sz; sum += sz }
+                }
+                offlineFileSizes = mergedSizes
+                offlineStorageBytes = sum
+            }
+        }
     }
 
     // ---------- Faixas ----------
@@ -328,9 +374,25 @@ object LibraryStore {
         save(); LibraryBackup.markChanged()
     }
 
-    fun markDownloaded(track: Track) {
+    fun markDownloaded(track: Track, fileSize: Long = -1L) {
         register(track)
         downloadedIds = downloadedIds + track.id
+        if (fileSize > 0L) {
+            val prev = offlineFileSizes[track.id] ?: 0L
+            offlineFileSizes = offlineFileSizes + (track.id to fileSize)
+            offlineStorageBytes = (offlineStorageBytes - prev + fileSize).coerceAtLeast(0L)
+        } else {
+            scope.launch {
+                val len = localAudioFile(track.id).takeIf { it.exists() }?.length() ?: 0L
+                if (len > 0L) {
+                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                        val prev = offlineFileSizes[track.id] ?: 0L
+                        offlineFileSizes = offlineFileSizes + (track.id to len)
+                        offlineStorageBytes = (offlineStorageBytes - prev + len).coerceAtLeast(0L)
+                    }
+                }
+            }
+        }
         save()
     }
 

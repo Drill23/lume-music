@@ -179,15 +179,22 @@ class ImportCoordinator {
     var phase by mutableStateOf<ImportPhase>(ImportPhase.Idle)
     var importedTracks by mutableIntStateOf(0)
     var importedPlaylists by mutableIntStateOf(0)
+    private var activeJob: kotlinx.coroutines.Job? = null
 
-    fun reset() { phase = ImportPhase.Idle }
+    fun reset() {
+        activeJob?.cancel()
+        activeJob = null
+        phase = ImportPhase.Idle
+    }
 
     suspend fun run(service: String, work: suspend ((String) -> Unit) -> List<ImportService.ImportResult>) {
         if (phase is ImportPhase.Running) return
+        activeJob = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
         Haptics.medium()
         phase = ImportPhase.Running(service, "Conectando…")
         try {
-            val packs = work { msg -> phase = ImportPhase.Running(service, msg) }
+            val packs = work { msg -> if (phase is ImportPhase.Running) phase = ImportPhase.Running(service, msg) }
+            kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]?.let { if (!it.isActive) return }
             val saved = packs.map { r ->
                 val pl = LibraryStore.createPlaylist(r.playlistName, sourceBadge = r.sourceBadge, artworkURL = r.artworkURL, tracks = r.tracks)
                 SummaryItem(r.playlistName, r.tracks.size, pl.artworkURL)
@@ -199,12 +206,17 @@ class ImportCoordinator {
             Haptics.success()
             AppModel.showToast("$total músicas importadas para a sua biblioteca")
             phase = ImportPhase.Done(packs.firstOrNull()?.sourceBadge ?: service, saved)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            if (phase is ImportPhase.Running) phase = ImportPhase.Idle
+            throw e
         } catch (e: ImportException) {
             SoundFX.play(SoundFX.Effect.ERROR)
             phase = ImportPhase.Failed(e.message ?: "Não foi possível importar.")
         } catch (_: Exception) {
             SoundFX.play(SoundFX.Effect.ERROR)
             phase = ImportPhase.Failed("Não foi possível importar agora. Confira sua conexão e tente novamente.")
+        } finally {
+            activeJob = null
         }
     }
 }

@@ -331,8 +331,13 @@ fun CountryChartScreen(country: ChartCountry, bottomInset: Dp) {
                         Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Box(Modifier.weight(1f)) { PlayShuffleRow(b.topSongs, "Top 50 ${b.country.name}", horizontalPadding = 0.dp) }
                             GlassIconButton("arrow.down.circle", size = 48.dp, desc = "Baixar Top 10") {
-                                DownloadManager.downloadBatch(b.topSongs.take(10))
-                                AppModel.showToast("Baixando Top 10 de ${b.country.name}")
+                                val top10 = b.topSongs.take(10)
+                                val pending = top10.filter { !com.adriano.lumemusic.data.LibraryStore.isDownloaded(it.id) }
+                                if (pending.isEmpty()) AppModel.showToast("Top 10 de ${b.country.name} já está baixado")
+                                else {
+                                    DownloadManager.downloadBatch(pending)
+                                    AppModel.showToast("Baixando ${pending.size} músicas de ${b.country.name}")
+                                }
                             }
                         }
                     }

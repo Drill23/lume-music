@@ -275,12 +275,13 @@ struct SettingsView: View {
     let v = info?["CFBundleShortVersionString"] as? String
     let b = info?["CFBundleVersion"] as? String
     if let v, let b { return "\(v) (\(b))" }
-    return "5.1.8 (15)"
+    return "5.2.2 (18)"
   }
 
   private func clearCache() {
     URLCache.shared.removeAllCachedResponses()
-    ImagePipeline.shared.memory.removeAllObjects()
+    BlurredArtworkCache.clear()
+    Task { await ImagePipeline.shared.clearCache() }
     if let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
       try? FileManager.default.removeItem(at: caches.appendingPathComponent("LumeMusicLyrics", isDirectory: true))
     }

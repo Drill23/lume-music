@@ -164,6 +164,7 @@ struct CassetteStage: View {
 /// Dois VUs analógicos discretos. Observa o espectro só aqui (e só com a música tocando), sem refazer o palco inteiro.
 private struct VUDock: View {
   @ObservedObject private var player = AudioPlayer.shared
+  @ObservedObject private var gov = PerfGovernor.shared
   @State private var phys = VUBallistics()
   @Environment(\.displayScale) private var displayScale
 
@@ -171,7 +172,7 @@ private struct VUDock: View {
     GeometryReader { g in
       let w = min(64, (g.size.width - 30) / 2)
       let face = LumeTextures.shared.vuFace(px: Int(w * displayScale))
-      TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !player.isPlaying)) { tl in
+      TimelineView(.animation(minimumInterval: gov.reduced ? 1.0 / 20.0 : 1.0 / 30.0, paused: !gov.isActive || !player.isPlaying)) { tl in
         let raw = levels(at: tl.date)
         let s = phys.step(now: tl.date.timeIntervalSinceReferenceDate, targetL: raw.0, targetR: raw.1)
         HStack(spacing: 10) {
@@ -280,6 +281,7 @@ struct CassetteTape: View {
 
   @Environment(\.displayScale) private var displayScale
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ObservedObject private var gov = PerfGovernor.shared
   @State private var layers: CassetteLayers?
   @State private var reels = ReelState()
 
@@ -317,7 +319,7 @@ struct CassetteTape: View {
   @ViewBuilder
   private func reelLayer(w: CGFloat, h: CGFloat, parts: (hub: UIImage, pack: UIImage)) -> some View {
     if let live {
-      TimelineView(.animation(minimumInterval: reduceMotion ? 1 : 1.0 / 30.0, paused: !live.playing)) { tl in
+      TimelineView(.animation(minimumInterval: reduceMotion ? 1 : (gov.reduced ? 1.0 / 20.0 : 1.0 / 30.0), paused: !gov.isActive || !live.playing)) { tl in
         reelsView(p: live.progress(at: tl.date), now: tl.date.timeIntervalSinceReferenceDate, w: w, h: h, parts: parts, animate: live.playing && !reduceMotion)
       }
     } else {

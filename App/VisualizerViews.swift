@@ -778,8 +778,8 @@ enum LyricsLanguage {
 }
 
 private struct LyricCardPayload: Identifiable {
-  let id = UUID()
   let text: String
+  var id: String { text }
 }
 
 private struct LyricShareSheet: View {
@@ -787,6 +787,7 @@ private struct LyricShareSheet: View {
   let artworkURL: String
   let snippet: String
   @Environment(\.dismiss) private var dismiss
+  @State private var coverImage: UIImage?
   @State private var rendered: UIImage?
 
   var body: some View {
@@ -827,6 +828,9 @@ private struct LyricShareSheet: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Fechar") { dismiss() } } }
       .task {
+        if !artworkURL.isEmpty {
+          coverImage = await ImagePipeline.shared.image(artworkURL, maxPixel: 300)
+        }
         let renderer = ImageRenderer(content: cardView.padding(16))
         renderer.scale = 3.0
         rendered = renderer.uiImage
@@ -837,8 +841,17 @@ private struct LyricShareSheet: View {
   private var cardView: some View {
     VStack(alignment: .leading, spacing: 18) {
       HStack(spacing: 12) {
-        ArtworkImage(url: artworkURL, cornerRadius: 10, maxPixel: 300)
-          .frame(width: 52, height: 52)
+        Group {
+          if let coverImage {
+            Image(uiImage: coverImage)
+              .resizable()
+              .scaledToFill()
+              .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+          } else {
+            ArtworkImage(url: artworkURL, cornerRadius: 10, maxPixel: 300)
+          }
+        }
+        .frame(width: 52, height: 52)
         VStack(alignment: .leading, spacing: 2) {
           Text(track.title)
             .font(Theme.font(16, .bold))

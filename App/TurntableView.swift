@@ -50,6 +50,11 @@ struct TurntableStage: View {
         }
       }
     }
+    .onAppear {
+      if abs(player.varispeed - 1.0) > 0.005 {
+        pitch = max(-1, min(1, Double(player.varispeed - 1.0) / 0.08))
+      }
+    }
   }
 
   // MARK: doca
@@ -251,6 +256,7 @@ struct TurntableDeck: View {
 
   @Environment(\.displayScale) private var displayScale
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ObservedObject private var gov = PerfGovernor.shared
   @State private var baseImage: UIImage?
   @State private var recordImage: UIImage?
   @State private var spin = SpinModel()
@@ -370,7 +376,7 @@ struct TurntableDeck: View {
     let D = DeckGeo.platterD * H
     let labelD = DeckGeo.labelD * H
     let c = CGPoint(x: DeckGeo.platterC.x * H, y: DeckGeo.platterC.y * H)
-    return TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !spinActive && !scratching)) { tl in
+    return TimelineView(.animation(minimumInterval: gov.frameInterval, paused: !gov.isActive || (!spinActive && !scratching))) { tl in
       let a = spin.step(now: tl.date.timeIntervalSinceReferenceDate, target: spinTarget)
       ZStack {
         if let recordImage {

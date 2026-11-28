@@ -102,6 +102,21 @@ fun LibraryScreen(bottomInset: Dp) {
             }
         }
         item { HRow(spacing = 8.dp) { items(filters) { f -> PrismChip(f, filter == f) { filter = f } } } }
+        if (DownloadManager.pendingCount > 0) item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).pressable(0.98f) { AppModel.push(LumeRoute.Downloads) }.glass(RoundedCornerShape(18.dp), tint = Theme.sky).padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(sf("arrow.down.circle.fill"), null, tint = Theme.sky, modifier = Modifier.size(22.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        if (DownloadManager.paused) "Downloads pausados (${DownloadManager.pendingCount})"
+                        else "Baixando ${DownloadManager.pendingCount} ${if (DownloadManager.pendingCount == 1) "música" else "músicas"}…",
+                        style = Theme.font(15f, FontWeight.SemiBold, Theme.text),
+                    )
+                    LinearProgressIndicator(progress = { DownloadManager.overallProgress.toFloat() }, modifier = Modifier.fillMaxWidth().clip(CircleShape), color = Theme.sky, trackColor = Theme.fill)
+                }
+                Icon(sf("chevron.right"), null, tint = Theme.tertiary, modifier = Modifier.size(16.dp))
+            }
+        }
         if (failed.isNotEmpty()) item {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).pressable(0.98f) { DownloadManager.retryAllFailed() }.glass(RoundedCornerShape(18.dp), tint = Theme.danger).padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -122,7 +137,10 @@ fun LibraryScreen(bottomInset: Dp) {
                         pair.forEach { (t, icon, data) ->
                             val (list, tint) = data
                             Row(
-                                Modifier.weight(1f).heightIn(min = 66.dp).pressable(0.96f) { AppModel.push(LumeRoute.Tracks(t, list)) }
+                                Modifier.weight(1f).heightIn(min = 66.dp).pressable(0.96f) {
+                                    if (t == "Baixadas") AppModel.push(LumeRoute.Downloads)
+                                    else AppModel.push(LumeRoute.Tracks(t, list))
+                                }
                                     .glass(RoundedCornerShape(20.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
@@ -259,7 +277,9 @@ fun PlaylistScreen(id: String, bottomInset: Dp) {
                 Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(Modifier.weight(1f)) { PlayShuffleRow(tracks, pl.name, horizontalPadding = 0.dp) }
                     GlassIconButton("arrow.down.circle", size = 48.dp, desc = "Baixar tudo") {
-                        DownloadManager.downloadPlaylist(pl); AppModel.showToast("Baixando ${tracks.size} músicas")
+                        val pending = tracks.filter { !LibraryStore.isDownloaded(it.id) }
+                        if (pending.isEmpty()) AppModel.showToast("Todas as músicas já estão baixadas")
+                        else { DownloadManager.downloadBatch(pending); AppModel.showToast("Baixando ${pending.size} músicas") }
                     }
                 }
             }
@@ -287,6 +307,7 @@ fun DownloadsScreen(bottomInset: Dp) {
     val dl = LibraryStore.downloadedTracks
     val states = DownloadManager.statesById
     val active = states.filter { it.value.isActive }
+    var confirmClearAll by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         DetailHeader("Central de Downloads")
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -314,7 +335,15 @@ fun DownloadsScreen(bottomInset: Dp) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(t.title, style = Theme.font(15f, color = Theme.text), maxLines = 1)
                             LinearProgressIndicator(progress = { (st?.fraction ?: 0.0).toFloat() }, modifier = Modifier.fillMaxWidth().clip(CircleShape), color = Theme.rose, trackColor = Theme.fill)
-                            Text(when (st) { is DownloadState.Queued -> "Na fila"; is DownloadState.Resolving -> "Preparando…"; else -> "Baixando…" }, style = Theme.font(12f, color = Theme.secondary))
+                            Text(
+                                when (st) {
+                                    is DownloadState.Queued -> "Na fila"
+                                    is DownloadState.Resolving -> "Preparando…"
+                                    is DownloadState.Downloading -> "Baixando ${(st.progress * 100).toInt()}%"
+                                    else -> "Baixando…"
+                                },
+                                style = Theme.font(12f, color = Theme.secondary),
+                            )
                         }
                         Box(Modifier.size(Chrome.minTouch).pressable(0.85f) { DownloadManager.cancel(id) }, contentAlignment = Alignment.Center) { Icon(sf("xmark.circle.fill"), "Cancelar", tint = Theme.tertiary) }
                     }
@@ -338,9 +367,23 @@ fun DownloadsScreen(bottomInset: Dp) {
                     Text(LibraryStore.fileSizeFormatted(t.id), style = Theme.font(12f, color = Theme.tertiary), modifier = Modifier.padding(end = 20.dp))
                 }
             }
-            if (dl.isNotEmpty()) item { Box(Modifier.padding(horizontal = 20.dp)) { GlassButton("Apagar todos os downloads", "trash") { LibraryStore.removeAllDownloads(); AppModel.showToast("Downloads apagados") } } }
+            if (dl.isNotEmpty()) item { Box(Modifier.padding(horizontal = 20.dp)) { GlassButton("Apagar todos os downloads", "trash") { confirmClearAll = true } } }
         }
     }
+    if (confirmClearAll) AlertDialog(
+        onDismissRequest = { confirmClearAll = false },
+        containerColor = Theme.canvasRaised,
+        title = { Text("Apagar todos os downloads?", color = Theme.text) },
+        text = { Text("Todas as ${dl.size} músicas salvas offline serão removidas deste aparelho. Suas playlists e curtidas continuam intactas.", color = Theme.secondary) },
+        confirmButton = {
+            TextButton({
+                LibraryStore.removeAllDownloads()
+                confirmClearAll = false
+                AppModel.showToast("Downloads apagados")
+            }) { Text("Apagar", color = Theme.danger) }
+        },
+        dismissButton = { TextButton({ confirmClearAll = false }) { Text("Cancelar", color = Theme.secondary) } },
+    )
 }
 
 @Composable

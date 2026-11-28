@@ -170,7 +170,6 @@ fun RootScreen() {
                 )
                 Box(Modifier.align(Alignment.BottomCenter)) { BottomBar() }
             }
-            Toast(Modifier.align(Alignment.TopCenter))
 
             AnimatedVisibility(
                 AppModel.showPlayer,
@@ -181,6 +180,8 @@ fun RootScreen() {
             SheetsHost()
 
             AnimatedVisibility(AppModel.showCoverFlow, enter = fadeIn(tween(250)), exit = fadeOut(tween(200))) { com.adriano.lumemusic.ui.screens.CoverFlowScreen() }
+
+            Toast(Modifier.align(Alignment.TopCenter).zIndex(50f))
 
             if (onboarding) com.adriano.lumemusic.ui.screens.OnboardingScreen { onboarding = false }
             else Box(Modifier.hazeSource(haze)) { com.adriano.lumemusic.ui.screens.AccessGateScreen() }

@@ -5,7 +5,6 @@ import SwiftUI
 struct HomeView: View {
   @ObservedObject private var app = AppModel.shared
   @ObservedObject private var store = LibraryStore.shared
-  @ObservedObject private var player = AudioPlayer.shared
   @ObservedObject private var home = HomeStore.shared
 
   private let gutter: CGFloat = 20
@@ -466,10 +465,9 @@ struct ReleaseHeroCard: View {
       .frame(maxWidth: .infinity)
       .background {
         ZStack {
-          ArtworkImage(url: album.artworkURL, cornerRadius: 0, maxPixel: 300)
+          PreblurredArtwork(url: album.artworkURL)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .scaleEffect(1.5)
-            .blur(radius: 34)
             .clipped()
           LinearGradient(colors: [.black.opacity(0.05), .black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
           LinearGradient(colors: [Theme.lavender.opacity(0.18), Theme.rose.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)

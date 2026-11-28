@@ -1,20 +1,20 @@
 {
-  "versionName": "5.2.1",
-  "build": 17,
+  "versionName": "5.2.2",
+  "build": 18,
   "mandatory": false,
-  "notes": "• Ajustes mais fluidos + novidades da 5.2",
+  "notes": "• Correção do travamento ao baixar músicas durante a reprodução + mais velocidade",
   "android": {
-    "build": 17,
-    "versionName": "5.2.1",
+    "build": 18,
+    "versionName": "5.2.2",
     "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-Android.apk",
-    "notes": "• Ajustes muito mais leves e fluidos ao rolar\n• Volume igual entre as músicas, com limitador de pico\n• Pular silêncio do começo e do fim das faixas (opcional)\n• Backup das playlists, curtidas e artistas junto com o seu acesso\n• Widget na tela inicial e Android Auto\n• ListenBrainz: registre o que você ouve",
+    "notes": "• Downloads offline muito mais rápidos, sem travar em 95–99% e sem interromper a música tocando\n• Busca progressiva: músicas, artistas e álbuns aparecem na hora sem esperar a busca por letras\n• Avisos (toasts) agora aparecem corretamente por cima do player\n• Correções em Artistas seguidos, Central de Downloads, Limpar cache e gestos do player\n• Menos uso de bateria com animações pausadas em segundo plano e menos leitura de disco na interface",
     "mandatory": false
   },
   "ios": {
-    "build": 17,
-    "versionName": "5.2.1",
+    "build": 18,
+    "versionName": "5.2.2",
     "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-iPhone.ipa",
-    "notes": "• Ajustes muito mais leves e fluidos ao rolar\n• Volume igual entre as músicas, com limitador de pico\n• Pular silêncio do começo e do fim das faixas (opcional)\n• Backup das playlists, curtidas e artistas junto com o seu acesso\n• Widget na tela inicial (instalando pelo SideStore)\n• ListenBrainz: registre o que você ouve",
+    "notes": "• Corrigido o travamento do player ao baixar uma música em 95–99% (remux instantâneo em passthrough fora da thread principal)\n• Busca muito mais rápida: sugestões ao vivo corrigidas e resultados progressivos\n• Corrigido o cartão de compartilhamento de letra/música, grade de países na busca e toque no widget\n• Interface mais fluida durante downloads e rolagens (menos leitura de disco e re-renderizações)\n• Correções na fila ("Tocar a seguir"), modo offline, limpeza de cache e economia de bateria nos palcos",
     "mandatory": false
   }
 }

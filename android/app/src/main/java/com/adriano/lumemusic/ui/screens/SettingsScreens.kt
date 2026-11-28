@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -202,7 +203,13 @@ fun SettingsScreen(bottomInset: Dp) {
                     CardDivider()
                     LinkRow("square.and.arrow.down", "Importar músicas") { AppModel.push(LumeRoute.ImportHub) }
                     CardDivider()
-                    LinkRow("person.2", "Artistas seguidos", "${s.followedArtists.size}") { AppModel.select(com.adriano.lumemusic.data.AppTab.LIBRARY) }
+                    LinkRow("person.2", "Artistas seguidos", "${s.followedArtists.size}") {
+                        if (s.followedArtists.isEmpty()) {
+                            AppModel.showToast("Você ainda não segue nenhum artista")
+                        } else {
+                            AppModel.push(LumeRoute.Artists("Artistas seguidos", s.followedArtists.map { com.adriano.lumemusic.data.ArtistInfo("lib_$it", it) }))
+                        }
+                    }
                 }
             }
             if (accessActive) SettingsBackupSection()
@@ -244,12 +251,20 @@ fun SettingsScreen(bottomInset: Dp) {
         }
         }
     }
+    val ioScope = androidx.compose.runtime.rememberCoroutineScope()
     if (confirmCache) AlertDialog(
         onDismissRequest = { confirmCache = false }, containerColor = Theme.canvasRaised, title = { Text("Limpar cache?", color = Theme.text) },
         text = { Text("Capas e letras serão baixadas de novo quando precisar. Suas músicas e playlists não são afetadas.", color = Theme.secondary) },
         confirmButton = { TextButton({
-            File(DiscNet.cacheDir, "LumeMusicLyrics").deleteRecursively(); File(DiscNet.cacheDir, "img").deleteRecursively()
-            confirmCache = false; AppModel.showToast("Cache limpo")
+            confirmCache = false
+            val loader = coil3.SingletonImageLoader.get(ctx)
+            loader.memoryCache?.clear()
+            ioScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { loader.diskCache?.clear() }
+                runCatching { File(DiscNet.cacheDir, "LumeMusicLyrics").deleteRecursively() }
+                runCatching { File(DiscNet.cacheDir, "img").deleteRecursively() }
+            }
+            AppModel.showToast("Cache limpo")
         }) { Text("Limpar", color = Theme.danger) } },
         dismissButton = { TextButton({ confirmCache = false }) { Text("Cancelar", color = Theme.secondary) } },
     )

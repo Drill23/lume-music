@@ -8,7 +8,6 @@ struct NowPlayingView: View {
   @ObservedObject private var app = AppModel.shared
   @ObservedObject private var player = AudioPlayer.shared
   @ObservedObject private var store = LibraryStore.shared
-  @ObservedObject private var downloads = DownloadManager.shared
   @Environment(\.dismiss) private var dismiss
 
   @State private var showQueue = false
@@ -166,7 +165,7 @@ struct NowPlayingView: View {
         .buttonStyle(.plain)
       }
       Spacer(minLength: 8)
-      downloadButton(track)
+      DownloadActionButton(track: track)
       let fav = store.isFavorite(track.id)
       Button {
         store.toggleFavorite(track)
@@ -180,37 +179,6 @@ struct NowPlayingView: View {
       }
       .buttonStyle(PressableStyle(scale: 0.88))
     }
-  }
-
-  private func downloadButton(_ track: Track) -> some View {
-    Button {
-      if store.isDownloaded(track.id) {
-        Haptics.selection()
-        app.showToast("Esta música já está salva no iPhone")
-      } else if downloads.isDownloading(track.id) {
-        downloads.cancel(track.id)
-      } else {
-        Haptics.light()
-        downloads.download(track)
-      }
-    } label: {
-      ZStack {
-        if let p = downloads.progressById[track.id] {
-          Circle().stroke(Theme.text.opacity(0.15), lineWidth: 2.4).frame(width: 20, height: 20)
-          Circle().trim(from: 0, to: CGFloat(p))
-            .stroke(Theme.text, style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
-            .rotationEffect(.degrees(-90))
-            .frame(width: 20, height: 20)
-        } else {
-          Image(systemName: store.isDownloaded(track.id) ? "arrow.down.circle.fill" : "arrow.down")
-            .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(Theme.text)
-        }
-      }
-      .frame(width: 44, height: 44)
-      .glassCircle(interactive: true)
-    }
-    .buttonStyle(PressableStyle(scale: 0.88))
   }
 
   private var transport: some View {
@@ -296,6 +264,44 @@ struct NowPlayingView: View {
           .frame(width: 48, height: 40)
       }
     }
+  }
+}
+
+/// Botão de download isolado: observa DownloadManager sem re-renderizar o NowPlayingView inteiro a cada tick.
+private struct DownloadActionButton: View {
+  let track: Track
+  @ObservedObject private var store = LibraryStore.shared
+  @ObservedObject private var downloads = DownloadManager.shared
+
+  var body: some View {
+    Button {
+      if store.isDownloaded(track.id) {
+        Haptics.selection()
+        AppModel.shared.showToast("Esta música já está salva no iPhone")
+      } else if downloads.isDownloading(track.id) {
+        downloads.cancel(track.id)
+      } else {
+        Haptics.light()
+        downloads.download(track)
+      }
+    } label: {
+      ZStack {
+        if let p = downloads.progressById[track.id] {
+          Circle().stroke(Theme.text.opacity(0.15), lineWidth: 2.4).frame(width: 20, height: 20)
+          Circle().trim(from: 0, to: CGFloat(p))
+            .stroke(Theme.text, style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
+            .rotationEffect(.degrees(-90))
+            .frame(width: 20, height: 20)
+        } else {
+          Image(systemName: store.isDownloaded(track.id) ? "arrow.down.circle.fill" : "arrow.down")
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(Theme.text)
+        }
+      }
+      .frame(width: 44, height: 44)
+      .glassCircle(interactive: true)
+    }
+    .buttonStyle(PressableStyle(scale: 0.88))
   }
 }
 
@@ -640,9 +646,11 @@ struct QueueSheet: View {
           }
           Section {
             ForEach(upNextIndices, id: \.self) { idx in
-              QueueRow(track: player.queue[idx], current: false)
-                .contentShape(Rectangle())
-                .onTapGesture { player.jumpToQueueIndex(idx) }
+              if player.queue.indices.contains(idx) {
+                QueueRow(track: player.queue[idx], current: false)
+                  .contentShape(Rectangle())
+                  .onTapGesture { player.jumpToQueueIndex(idx) }
+              }
             }
             .onMove { from, to in
               let base = player.currentIndex + 1
@@ -895,6 +903,7 @@ private struct TrackShareCardSheet: View {
   let artworkURL: String
   let palette: ArtworkPalette
   @Environment(\.dismiss) private var dismiss
+  @State private var coverImage: UIImage?
   @State private var rendered: UIImage?
 
   var body: some View {
@@ -925,6 +934,9 @@ private struct TrackShareCardSheet: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Fechar") { dismiss() } } }
       .task {
+        if !artworkURL.isEmpty {
+          coverImage = await ImagePipeline.shared.image(artworkURL, maxPixel: 600)
+        }
         let renderer = ImageRenderer(content: cardView.padding(16))
         renderer.scale = 3.0
         rendered = renderer.uiImage
@@ -934,7 +946,16 @@ private struct TrackShareCardSheet: View {
 
   private var cardView: some View {
     VStack(spacing: 16) {
-      ArtworkImage(url: artworkURL, cornerRadius: 16, maxPixel: 600)
+      Group {
+        if let coverImage {
+          Image(uiImage: coverImage)
+            .resizable()
+            .scaledToFill()
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        } else {
+          ArtworkImage(url: artworkURL, cornerRadius: 16, maxPixel: 600)
+        }
+      }
         .frame(width: 210, height: 210)
         .shadow(color: .black.opacity(0.35), radius: 14, y: 8)
       VStack(spacing: 4) {

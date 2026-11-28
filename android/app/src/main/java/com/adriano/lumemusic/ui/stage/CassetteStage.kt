@@ -1,5 +1,7 @@
 package com.adriano.lumemusic.ui.stage
 
+import androidx.lifecycle.repeatOnLifecycle
+
 import android.graphics.Bitmap
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -212,17 +214,20 @@ private fun VUDock(modifier: Modifier) {
     var tick by remember { mutableFloatStateOf(0f) }
     var level by remember { mutableStateOf(0.0 to 0.0) }
     val playingNow by rememberUpdatedState(playing)
-    LaunchedEffect(playing) {
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(playing, lifecycle) {
         if (!playing) { phys.l = 0.0; phys.r = 0.0; tick += 1f; return@LaunchedEffect }
-        var lastFrame = 0L
-        while (true) {
-            val now = withFrameNanos { it }
-            if (now - lastFrame < 32_000_000L) continue
-            lastFrame = now
-            val raw = vuLevels(now / 1e9, playingNow)
-            phys.step(now, raw.first, raw.second)
-            level = phys.l to phys.r
-            tick += 1f
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            var lastFrame = 0L
+            while (true) {
+                val now = withFrameNanos { it }
+                if (now - lastFrame < 32_000_000L) continue
+                lastFrame = now
+                val raw = vuLevels(now / 1e9, playingNow)
+                phys.step(now, raw.first, raw.second)
+                level = phys.l to phys.r
+                tick += 1f
+            }
         }
     }
     BoxWithConstraints(modifier.height(44.dp).glass(RoundedCornerShape(50)), contentAlignment = Alignment.Center) {
@@ -322,28 +327,31 @@ private fun Reels(w: Float, h: Float, hub: Bitmap, pack: Bitmap) {
     LaunchedEffect(Unit) {
         snapshotFlow { PlaybackClock.currentTime }.collect { anchor.time = it; anchor.nanos = System.nanoTime() }
     }
-    LaunchedEffect(playing, reduce) {
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(playing, reduce, lifecycle) {
         anchor.time = PlaybackClock.currentTime; anchor.nanos = System.nanoTime()
         if (!playing) return@LaunchedEffect
-        var last = 0L
-        var lastFrame = 0L
-        val frameGap = if (reduce) 1_000_000_000L else 32_000_000L
-        while (true) {
-            val now = withFrameNanos { it }
-            if (now - lastFrame < frameGap) continue
-            lastFrame = now
-            val dur = max(1.0, PlaybackClock.duration)
-            val t = anchor.time + (System.nanoTime() - anchor.nanos) / 1e9
-            val p = (t / dur).coerceIn(0.0, 1.0).toFloat()
-            live = p
-            val dt = if (last == 0L) 0f else min(0.1f, (now - last) / 1e9f)
-            last = now
-            if (!reduce) {
-                val (rl, rr) = reelRadii(p)
-                aL -= 14f / max(0.03f, rl) * dt
-                aR -= 14f / max(0.03f, rr) * dt
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            var last = 0L
+            var lastFrame = 0L
+            val frameGap = if (reduce) 1_000_000_000L else 32_000_000L
+            while (true) {
+                val now = withFrameNanos { it }
+                if (now - lastFrame < frameGap) continue
+                lastFrame = now
+                val dur = max(1.0, PlaybackClock.duration)
+                val t = anchor.time + (System.nanoTime() - anchor.nanos) / 1e9
+                val p = (t / dur).coerceIn(0.0, 1.0).toFloat()
+                live = p
+                val dt = if (last == 0L) 0f else min(0.1f, (now - last) / 1e9f)
+                last = now
+                if (!reduce) {
+                    val (rl, rr) = reelRadii(p)
+                    aL -= 14f / max(0.03f, rl) * dt
+                    aR -= 14f / max(0.03f, rr) * dt
+                }
+                tick += 1f
             }
-            tick += 1f
         }
     }
     Canvas(Modifier.size(w.dp, h.dp)) {

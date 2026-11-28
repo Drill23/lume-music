@@ -46,6 +46,7 @@ final class AppModel: ObservableObject {
       if playerStyle == .lyrics { playerStyle = .artwork }
       UserDefaults.standard.set(playerStyle.rawValue, forKey: "lume.playerStyle")
       if playerTab != .lyrics { playerTab = playerStyle }
+      AudioPlayer.shared.refreshLockScreenArtwork()
     }
   }
   @Published var showCoverFlow = false

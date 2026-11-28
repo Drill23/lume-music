@@ -98,7 +98,9 @@ fun AlbumScreen(album: AlbumShowcase, bottomInset: Dp) {
                 Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(Modifier.weight(1f)) { PlayShuffleRow(tracks, album.title, horizontalPadding = 0.dp) }
                     GlassIconButton("arrow.down.circle", size = 48.dp, desc = "Baixar álbum") {
-                        DownloadManager.downloadBatch(tracks); AppModel.showToast("Baixando ${tracks.size} músicas")
+                        val pending = tracks.filter { !LibraryStore.isDownloaded(it.id) }
+                        if (pending.isEmpty()) AppModel.showToast("Todas as músicas deste álbum já estão baixadas")
+                        else { DownloadManager.downloadBatch(pending); AppModel.showToast("Baixando ${pending.size} músicas") }
                     }
                 }
             }
@@ -228,7 +230,12 @@ fun RemotePlaylistScreen(pl: RemotePlaylist, bottomInset: Dp) {
                 item {
                     Row(Modifier.padding(horizontal = 20.dp)) {
                         GlassButton("Salvar na biblioteca", "plus", modifier = Modifier.weight(1f)) {
-                            LibraryStore.createPlaylist(pl.title, "Deezer", "Deezer", pl.artworkURL, t); AppModel.showToast("Playlist salva na biblioteca")
+                            if (LibraryStore.playlists.any { it.name == pl.title }) {
+                                AppModel.showToast("Esta playlist já está na sua biblioteca")
+                            } else {
+                                LibraryStore.createPlaylist(pl.title, "Deezer", "Deezer", pl.artworkURL, t)
+                                AppModel.showToast("Playlist salva na biblioteca")
+                            }
                         }
                     }
                 }

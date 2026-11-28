@@ -167,30 +167,58 @@ object DownloadManager {
                 ensureActive()
                 // Guarda a sonoridade para o "Volume igual" valer também offline.
                 resolved.loudnessDb?.let { com.adriano.lumemusic.audio.LoudnessStore.put(track.id, it) }
-                statesById[track.id] = DownloadState.Downloading(0.24); progressById[track.id] = 0.24
+                statesById[track.id] = DownloadState.Downloading(0.20); progressById[track.id] = 0.20
 
                 val dest = LibraryStore.localAudioFile(track.id)
+                val part = File(dest.parentFile, dest.nameWithoutExtension + ".part")
                 val bytes = try {
-                    withContext(Dispatchers.IO) { fetchToFile(resolved.url, resolved.headers, dest) { f ->
-                        val p = minOf(0.95, 0.24 + 0.71 * f)
+                    withContext(Dispatchers.IO) { fetchToFile(resolved.url, resolved.headers, part) { f ->
+                        val p = minOf(0.96, 0.20 + 0.76 * f)
                         scope.launch { if (statesById[track.id]?.isActive == true) { statesById[track.id] = DownloadState.Downloading(p); progressById[track.id] = p } }
                     } }
-                } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
-                    dest.delete(); markFailed(working, "Falha de rede"); return@launch
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    withContext(Dispatchers.IO) { part.delete() }
+                    throw e
+                } catch (_: Exception) {
+                    withContext(Dispatchers.IO) { part.delete() }
+                    markFailed(working, "Falha de rede"); return@launch
                 }
-                if (bytes <= 32768) { dest.delete(); markFailed(working, "Arquivo incompleto"); return@launch }
-
-                // Só áudio: tira a faixa de vídeo do MP4 (remux sem recodificar; se falhar, mantém o original)
-                withContext(Dispatchers.IO) { AudioRemux.stripVideoTrack(dest) }
-
-                // Prefetch de capa e letra para uso 100% offline
-                withContext(Dispatchers.IO) {
-                    try { LyricsService.fetchLyrics(working) } catch (_: Exception) {}
+                if (bytes <= 32768) {
+                    withContext(Dispatchers.IO) { part.delete() }
+                    markFailed(working, "Arquivo incompleto"); return@launch
                 }
-                LibraryStore.markDownloaded(working)
+
+                if (statesById[track.id]?.isActive == true) {
+                    statesById[track.id] = DownloadState.Downloading(0.98)
+                    progressById[track.id] = 0.98
+                }
+
+                // Só áudio: tira a faixa de vídeo do MP4 (remux sem recodificar; se não houver vídeo, move para .m4a)
+                val finalFile = withContext(Dispatchers.IO) {
+                    val m4a = File(dest.parentFile, dest.nameWithoutExtension + ".m4a")
+                    val mp4 = File(dest.parentFile, dest.nameWithoutExtension + ".mp4")
+                    val stripped = AudioRemux.stripVideoTrack(part)
+                    if (stripped != part && stripped.exists() && stripped.length() > 32768) {
+                        part.delete()
+                        if (stripped != mp4) mp4.delete()
+                        stripped
+                    } else {
+                        m4a.delete()
+                        mp4.delete()
+                        if (part.renameTo(m4a)) m4a else part
+                    }
+                }
+                val finalSize = withContext(Dispatchers.IO) { finalFile.length() }
+
+                LibraryStore.markDownloaded(working, finalSize)
                 statesById.remove(track.id); progressById.remove(track.id); failed.remove(track.id)
                 Haptics.success()
                 lastMessage = "Baixada offline: ${track.title}"
+
+                // Prefetch de letra em segundo plano (nunca trava o progresso em 95–99%)
+                scope.launch(Dispatchers.IO) {
+                    try { LyricsService.fetchLyrics(working) } catch (_: Exception) {}
+                }
             } finally {
                 active.remove(track.id)
                 refreshCounts(); pumpQueue()
@@ -200,38 +228,41 @@ object DownloadManager {
         refreshCounts()
     }
 
-    private suspend fun fetchToFile(url: String, headers: Map<String, String>, dest: File, onProgress: (Double) -> Unit): Long {
-        val part = File(dest.parentFile, dest.name + ".part")
+    private suspend fun fetchToFile(url: String, headers: Map<String, String>, part: File, onProgress: (Double) -> Unit): Long {
         val rb = Request.Builder().url(url)
         for ((k, v) in headers) rb.header(k, v)
         // Sem cabeçalho Range o YouTube estrangula o áudio puro (itag 140); com "bytes=0-" vem em velocidade total.
         rb.header("Range", "bytes=0-")
         val client = DiscNet.client.newBuilder()
             .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS).callTimeout(0, java.util.concurrent.TimeUnit.SECONDS).build()
-        client.newCall(rb.build()).execute().use { resp ->
-            if (!resp.isSuccessful) throw java.io.IOException("HTTP ${resp.code}")
-            val body = resp.body ?: throw java.io.IOException("sem corpo")
-            val total = body.contentLength()
-            var written = 0L
-            var lastReport = 0L
-            part.outputStream().use { out ->
-                body.byteStream().use { input ->
-                    val buf = ByteArray(64 * 1024)
-                    while (true) {
-                        coroutineContext.ensureActive()
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        out.write(buf, 0, n)
-                        written += n
-                        val now = System.nanoTime()
-                        if (total > 0 && now - lastReport > 150_000_000L) { lastReport = now; onProgress(written.toDouble() / total) }
+        val call = client.newCall(rb.build())
+        val cancelHandle = coroutineContext[Job]?.invokeOnCompletion { if (it != null) call.cancel() }
+        try {
+            call.execute().use { resp ->
+                if (!resp.isSuccessful) throw java.io.IOException("HTTP ${resp.code}")
+                val body = resp.body ?: throw java.io.IOException("sem corpo")
+                val total = body.contentLength()
+                var written = 0L
+                var lastReport = 0L
+                part.outputStream().use { out ->
+                    body.byteStream().use { input ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            coroutineContext.ensureActive()
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            out.write(buf, 0, n)
+                            written += n
+                            val now = System.nanoTime()
+                            if (total > 0 && now - lastReport > 150_000_000L) { lastReport = now; onProgress(written.toDouble() / total) }
+                        }
                     }
                 }
+                if (total > 0 && written < total) { part.delete(); throw java.io.IOException("incompleto") }
+                return written
             }
-            if (total > 0 && written < total) { part.delete(); throw java.io.IOException("incompleto") }
-            dest.delete()
-            part.renameTo(dest)
-            return written
+        } finally {
+            cancelHandle?.dispose()
         }
     }
 

@@ -136,9 +136,9 @@ struct CoverFlowScreen: View {
   @State private var choosePortrait = false
   @State private var forcedLandscape = false
   @State private var closing = false
-  @State private var position = CoverFlowPosition()
-  @State private var selection = CoverFlowSelection()
-  @State private var trackStore = CoverFlowTrackStore()
+  @StateObject private var position = CoverFlowPosition()
+  @StateObject private var selection = CoverFlowSelection()
+  @StateObject private var trackStore = CoverFlowTrackStore()
   @StateObject private var motion = MotionOrientationMonitor()
 
   enum Source: String, CaseIterable, Identifiable {

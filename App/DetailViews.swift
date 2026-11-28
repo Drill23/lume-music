@@ -670,8 +670,13 @@ struct PlaylistView: View {
         VStack(spacing: 16) {
           PlayShuffleBar(tracks: tracks, context: pl.name)
           GlassIconButton(systemName: "arrow.down.circle", size: 46) {
-            DownloadManager.shared.downloadPlaylist(pl)
-            app.showToast("Baixando as músicas da playlist")
+            let pending = tracks.filter { !store.isDownloaded($0.id) }
+            if pending.isEmpty {
+              app.showToast("Todas as músicas já estão baixadas")
+            } else {
+              DownloadManager.shared.downloadBatch(pending)
+              app.showToast("Baixando \(pending.count) músicas da playlist")
+            }
           }
           .accessibilityLabel("Baixar todas")
           .disabled(tracks.isEmpty)

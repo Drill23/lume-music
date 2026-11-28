@@ -4,7 +4,7 @@ import SwiftUI
 
 struct CountryFlagCard: View {
   let country: ChartCountry
-  var width: CGFloat = 152
+  var width: CGFloat? = 152
 
   var body: some View {
     Button {
@@ -36,7 +36,8 @@ struct CountryFlagCard: View {
         }
         .padding(14)
       }
-      .frame(width: width, height: 112)
+      .frame(width: (width != nil && width!.isFinite) ? width : nil, height: 112)
+      .frame(maxWidth: (width == nil || !width!.isFinite) ? .infinity : nil)
       .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
       .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(.white.opacity(0.22), lineWidth: 0.8))
       .lumeShadow(10, y: 6, opacity: 0.45)
@@ -305,8 +306,13 @@ struct CountryChartView: View {
           PlayShuffleBar(tracks: b.topSongs, context: "Top 50 \(b.country.name)")
           GlassIconButton(systemName: "arrow.down.circle", size: 50) {
             let top10 = Array(b.topSongs.prefix(10))
-            DownloadManager.shared.downloadBatch(top10)
-            AppModel.shared.showToast("Baixando Top 10 de \(b.country.name)")
+            let pending = top10.filter { !LibraryStore.shared.isDownloaded($0.id) }
+            if pending.isEmpty {
+              AppModel.shared.showToast("Top 10 de \(b.country.name) já está baixado")
+            } else {
+              DownloadManager.shared.downloadBatch(pending)
+              AppModel.shared.showToast("Baixando \(pending.count) músicas de \(b.country.name)")
+            }
           }
           .accessibilityLabel("Baixar Top 10")
         }
@@ -532,8 +538,13 @@ struct RemotePlaylistView: View {
           PlayShuffleBar(tracks: tracks, context: playlist.title)
           HStack(spacing: 14) {
             GlassIconButton(systemName: "arrow.down.circle", size: 46) {
-              DownloadManager.shared.downloadBatch(tracks)
-              app.showToast("Baixando \(tracks.count) músicas")
+              let pending = tracks.filter { !store.isDownloaded($0.id) }
+              if pending.isEmpty {
+                app.showToast("Todas as músicas já estão baixadas")
+              } else {
+                DownloadManager.shared.downloadBatch(pending)
+                app.showToast("Baixando \(pending.count) músicas")
+              }
             }
             .accessibilityLabel("Baixar todas")
             GlassIconButton(systemName: "text.badge.plus", size: 46) {
@@ -634,14 +645,23 @@ struct MixDetailView: View {
         HStack(spacing: 10) {
           PlayShuffleBar(tracks: mix.tracks, context: mix.title)
           GlassIconButton(systemName: "arrow.down.circle", size: 50) {
-            DownloadManager.shared.downloadBatch(mix.tracks)
-            app.showToast("Baixando \(mix.title)")
+            let pending = mix.tracks.filter { !store.isDownloaded($0.id) }
+            if pending.isEmpty {
+              app.showToast("Todas as músicas deste mix já estão baixadas")
+            } else {
+              DownloadManager.shared.downloadBatch(pending)
+              app.showToast("Baixando \(pending.count) músicas de \(mix.title)")
+            }
           }
           .accessibilityLabel("Baixar mix")
           GlassIconButton(systemName: "text.badge.plus", size: 50) {
-            store.createPlaylist(name: mix.title, subtitle: mix.subtitle, sourceBadge: "Lume Mix", tracks: mix.tracks)
-            Haptics.success()
-            app.showToast("Mix salvo nas suas playlists")
+            if store.playlists.contains(where: { $0.name == mix.title }) {
+              app.showToast("Este mix já está nas suas playlists")
+            } else {
+              store.createPlaylist(name: mix.title, subtitle: mix.subtitle, sourceBadge: "Lume Mix", tracks: mix.tracks)
+              Haptics.success()
+              app.showToast("Mix salvo nas suas playlists")
+            }
           }
           .accessibilityLabel("Salvar mix")
         }

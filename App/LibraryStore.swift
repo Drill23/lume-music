@@ -94,6 +94,8 @@ final class LibraryStore: ObservableObject {
   private var playlistHashes: [String: Int] = [:]
   private var librarySignature = 0
   private var bookkeepingReady = false
+  @Published private(set) var offlineStorageBytes: Int64 = 0
+  private var cachedFileSizes: [String: Int64] = [:]
 
   private var storeURL: URL {
     let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -117,23 +119,34 @@ final class LibraryStore: ObservableObject {
   }
 
   func localAudioURL(for trackId: String) -> URL {
-    let mp4 = offlineDir.appendingPathComponent("\(safeName(trackId)).mp4")
-    if FileManager.default.fileExists(atPath: mp4.path) { return mp4 }
-    let m4a = offlineDir.appendingPathComponent("\(safeName(trackId)).m4a")
+    let base = safeName(trackId)
+    let m4a = offlineDir.appendingPathComponent("\(base).m4a")
     if FileManager.default.fileExists(atPath: m4a.path) { return m4a }
-    return mp4
+    let mp4 = offlineDir.appendingPathComponent("\(base).mp4")
+    if FileManager.default.fileExists(atPath: mp4.path) { return mp4 }
+    return m4a
   }
 
   func removeDownload(_ trackId: String) {
     let base = safeName(trackId)
-    try? FileManager.default.removeItem(at: offlineDir.appendingPathComponent("\(base).mp4"))
-    try? FileManager.default.removeItem(at: offlineDir.appendingPathComponent("\(base).m4a"))
+    let dir = offlineDir
+    let known = cachedFileSizes.removeValue(forKey: trackId)
+    if let known {
+      offlineStorageBytes = max(0, offlineStorageBytes - known)
+    }
     downloadedIds.remove(trackId)
     save()
+    Task.detached(priority: .utility) {
+      let fm = FileManager.default
+      try? fm.removeItem(at: dir.appendingPathComponent("\(base).m4a"))
+      try? fm.removeItem(at: dir.appendingPathComponent("\(base).mp4"))
+      try? fm.removeItem(at: dir.appendingPathComponent("\(base).part"))
+    }
   }
 
+  /// O(1) em memória (sem syscalls de disco na thread principal a cada célula da lista).
   func isDownloaded(_ trackId: String) -> Bool {
-    downloadedIds.contains(trackId) && FileManager.default.fileExists(atPath: localAudioURL(for: trackId).path)
+    downloadedIds.contains(trackId)
   }
 
   func register(_ track: Track) {
@@ -383,16 +396,23 @@ final class LibraryStore: ObservableObject {
     save()
   }
 
-  func markDownloaded(_ track: Track) {
+  func markDownloaded(_ track: Track, fileSize: Int64? = nil) {
     register(track)
     downloadedIds.insert(track.id)
+    if let sz = fileSize, sz > 0 {
+      let prev = cachedFileSizes[track.id] ?? 0
+      cachedFileSizes[track.id] = sz
+      offlineStorageBytes = max(0, offlineStorageBytes - prev + sz)
+    } else {
+      refreshOfflineStorageInBackground()
+    }
     save()
   }
 
   var favoriteTracks: [Track] { favoriteIds.compactMap { tracksById[$0] } }
   var recentTracks: [Track] { recentIds.compactMap { tracksById[$0] } }
   var downloadedTracks: [Track] {
-    downloadedIds.compactMap { isDownloaded($0) ? tracksById[$0] : nil }
+    downloadedIds.compactMap { tracksById[$0] }
       .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
   }
 
@@ -401,21 +421,66 @@ final class LibraryStore: ObservableObject {
   }
 
   var offlineStorageFormatted: String {
-    let fm = FileManager.default
-    guard let files = try? fm.contentsOfDirectory(at: offlineDir, includingPropertiesForKeys: [.fileSizeKey]) else { return "0 MB" }
-    let total = files.reduce(Int64(0)) { acc, u in
-      let sz = (try? u.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-      return acc + Int64(sz)
-    }
-    let mb = Double(total) / (1024.0 * 1024.0)
+    let mb = Double(offlineStorageBytes) / (1024.0 * 1024.0)
     return Self.formatMB(mb)
   }
 
   private func reconcileOfflineFiles() {
-    let valid = downloadedIds.filter { FileManager.default.fileExists(atPath: localAudioURL(for: $0).path) }
-    if valid.count != downloadedIds.count {
-      downloadedIds = valid
-      save()
+    let dir = offlineDir
+    let currentIds = downloadedIds
+    let nameMap: [(id: String, base: String)] = currentIds.map { ($0, safeName($0)) }
+    Task.detached(priority: .utility) { [weak self] in
+      let fm = FileManager.default
+      var valid = Set<String>()
+      var sizes: [String: Int64] = [:]
+      var total: Int64 = 0
+      for item in nameMap {
+        let m4a = dir.appendingPathComponent("\(item.base).m4a")
+        let mp4 = dir.appendingPathComponent("\(item.base).mp4")
+        let target: URL? = fm.fileExists(atPath: m4a.path) ? m4a : (fm.fileExists(atPath: mp4.path) ? mp4 : nil)
+        if let target {
+          valid.insert(item.id)
+          let sz = Int64((try? target.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+          sizes[item.id] = sz
+          total += sz
+        }
+      }
+      // Remove arquivos .part órfãos de downloads interrompidos
+      if let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+        for f in files where f.pathExtension == "part" {
+          try? fm.removeItem(at: f)
+        }
+      }
+      await MainActor.run { [weak self] in
+        guard let self else { return }
+        // Preserva downloads adicionados enquanto a varredura rodava
+        let newlyAdded = self.downloadedIds.subtracting(currentIds)
+        let merged = valid.union(newlyAdded)
+        if merged != self.downloadedIds {
+          self.downloadedIds = merged
+          self.save()
+        }
+        for (id, sz) in sizes { self.cachedFileSizes[id] = sz }
+        var sum = total
+        for id in newlyAdded { sum += self.cachedFileSizes[id] ?? 0 }
+        self.offlineStorageBytes = sum
+      }
+    }
+  }
+
+  private func refreshOfflineStorageInBackground() {
+    let dir = offlineDir
+    Task.detached(priority: .utility) { [weak self] in
+      let fm = FileManager.default
+      guard let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey]) else { return }
+      let total = files.reduce(Int64(0)) { acc, u in
+        guard u.pathExtension == "m4a" || u.pathExtension == "mp4" else { return acc }
+        let sz = (try? u.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        return acc + Int64(sz)
+      }
+      await MainActor.run { [weak self] in
+        self?.offlineStorageBytes = total
+      }
     }
   }
 
@@ -497,18 +562,31 @@ final class LibraryStore: ObservableObject {
 }
 
 extension LibraryStore {
-  /// "0 MB", "12,4 MB", "1,25 GB" (vírgula decimal pt-BR).
-  static func formatMB(_ mb: Double) -> String {
-    if mb < 0.05 { return "0 MB" }
+  private static let gbFormatter: NumberFormatter = {
     let f = NumberFormatter()
     f.locale = Locale(identifier: "pt_BR")
     f.numberStyle = .decimal
+    f.minimumFractionDigits = 2
+    f.maximumFractionDigits = 2
+    return f
+  }()
+
+  private static let mbFormatter: NumberFormatter = {
+    let f = NumberFormatter()
+    f.locale = Locale(identifier: "pt_BR")
+    f.numberStyle = .decimal
+    f.minimumFractionDigits = 0
+    f.maximumFractionDigits = 1
+    return f
+  }()
+
+  /// "0 MB", "12,4 MB", "1,25 GB" (vírgula decimal pt-BR).
+  static func formatMB(_ mb: Double) -> String {
+    if mb < 0.05 { return "0 MB" }
     if mb >= 1024 {
-      f.minimumFractionDigits = 2; f.maximumFractionDigits = 2
-      return (f.string(from: NSNumber(value: mb / 1024)) ?? "0") + " GB"
+      return (gbFormatter.string(from: NSNumber(value: mb / 1024)) ?? "0") + " GB"
     }
-    f.minimumFractionDigits = 0; f.maximumFractionDigits = 1
-    return (f.string(from: NSNumber(value: mb)) ?? "0") + " MB"
+    return (mbFormatter.string(from: NSNumber(value: mb)) ?? "0") + " MB"
   }
 }
 

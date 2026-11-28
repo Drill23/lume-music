@@ -94,6 +94,7 @@ import kotlin.math.atan2
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import androidx.lifecycle.repeatOnLifecycle
 
 /** Palco "Vinil" (TurntableView.swift): deck estático pré-renderizado + prato/disco que só giram + braço que só roda. */
 object VinylStage : PlayerStage {
@@ -109,7 +110,7 @@ internal fun spF(v: Float) = TextUnit(v, TextUnitType.Sp)
 private fun TurntableStage(track: Track, artwork: String, modifier: Modifier) {
     val store = LibraryStore
     var rpm45 by remember { mutableStateOf(false) }
-    var pitch by remember { mutableFloatStateOf(0f) }
+    var pitch by remember { mutableFloatStateOf(((AudioPlayer.varispeed - 1f) / 0.08f).coerceIn(-1f, 1f)) }
     val playing = AudioPlayer.isPlaying
     val progressQ by remember { derivedStateOf { val d = PlaybackClock.duration; if (d > 0) ((PlaybackClock.currentTime / d).coerceIn(0.0, 1.0) * 400).roundToInt() else 0 } }
 
@@ -326,14 +327,17 @@ private fun TurntableDeck(
     LaunchedEffect(playing) {
         if (playing) spinActive = !reduce else { delay(2800); if (!scratching) spinActive = false }
     }
-    LaunchedEffect(spinActive, scratching) {
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(spinActive, scratching, lifecycle) {
         if (!spinActive && !scratching) return@LaunchedEffect
-        var last = withFrameNanos { it }
-        while (true) {
-            val now = withFrameNanos { it }
-            val dt = min(0.1f, max(0f, (now - last) / 1e9f))
-            last = now
-            spinAngle.floatValue = model.step(spinAngle.floatValue, dt, spinTarget)
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            var last = withFrameNanos { it }
+            while (true) {
+                val now = withFrameNanos { it }
+                val dt = min(0.1f, max(0f, (now - last) / 1e9f))
+                last = now
+                spinAngle.floatValue = model.step(spinAngle.floatValue, dt, spinTarget)
+            }
         }
     }
 

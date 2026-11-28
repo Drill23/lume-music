@@ -67,6 +67,12 @@ struct LumeMusicApp: App {
         showIntro = false
         withAnimation(.easeInOut(duration: 0.3)) { showOnboarding = true }
       }
+      .onOpenURL { url in
+        guard url.scheme == "lumemusic" else { return }
+        if AudioPlayer.shared.currentTrack != nil {
+          AppModel.shared.showPlayer = true
+        }
+      }
     }
   }
 

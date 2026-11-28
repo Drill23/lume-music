@@ -97,6 +97,11 @@ fun NowPlayingScreen() {
     val mode = AppModel.playerTab
     val lyrics = mode == PlayerSurfaceTab.LYRICS
 
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val bgReq = remember(art) {
+        if (art.isEmpty()) null else coil3.request.ImageRequest.Builder(ctx).data(art).size(128).build()
+    }
+
     // O Tocando agora tem sempre fundo escuro ambiente (igual ao iOS); forçar LocalDark=true faz o Liquid Glass
     // dos botões, StageSwitcher e menus de palco ficarem translúcidos escuros mesmo quando o aparelho está no modo claro.
     CompositionLocalProvider(LocalDark provides true) {
@@ -104,13 +109,16 @@ fun NowPlayingScreen() {
         Modifier.fillMaxSize().background(Color(0xFF09090B))
             .graphicsLayer { translationY = maxOf(0f, dragY); alpha = 1f - (maxOf(0f, dragY) / 1800f) }
             .pointerInput(Unit) {
-                detectDragGestures(onDragEnd = { if (dragY > 260f) AppModel.showPlayer = false; dragY = 0f }, onDragCancel = { dragY = 0f }) { change, d ->
-                    if (abs(d.y) > abs(d.x) || dragY > 0f) { dragY += d.y; change.consume() }
+                detectDragGestures(onDragEnd = { if (dragY > 240f) AppModel.showPlayer = false; dragY = 0f }, onDragCancel = { dragY = 0f }) { change, d ->
+                    if (dragY > 0f || (d.y > 0f && abs(d.y) > abs(d.x))) {
+                        dragY = (dragY + d.y).coerceAtLeast(0f)
+                        change.consume()
+                    }
                 }
             },
     ) {
-        // Fundo ambiente: capa borrada + malha de cores da capa + véu de legibilidade
-        if (art.isNotEmpty()) AsyncImage(art, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.8f; scaleY = 1.8f; alpha = 0.55f }.blur(70.dp))
+        // Fundo ambiente: capa reduzida (128 px) + borrada + malha de cores da capa + véu de legibilidade
+        if (bgReq != null) AsyncImage(bgReq, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.8f; scaleY = 1.8f; alpha = 0.55f }.blur(70.dp))
         Box(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(c0.copy(0.75f), Color.Transparent), center = Offset(0f, 0f), radius = 1400f)))
         Box(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(c1.copy(0.65f), Color.Transparent), center = Offset(1200f, 100f), radius = 1300f)))
         Box(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(c2.copy(0.6f), Color.Transparent), center = Offset(0f, 2200f), radius = 1500f)))
@@ -168,29 +176,34 @@ private fun Metadata(track: Track, lyrics: Boolean) {
             Text(track.artist, style = Theme.font(if (lyrics) 14f else 17f, color = Color.White.copy(0.62f)), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.pressable(0.97f) { AppModel.navigateFromPlayer(LumeRoute.Artist(LibraryStore.mainArtist(track.artist), null)) })
         }
-        // baixar
-        val downloaded = track.id in LibraryStore.downloadedIds
-        val p = DownloadManager.progressById[track.id]
-        Box(Modifier.size(Chrome.minTouch).pressable(0.88f) {
-            if (downloaded) { Haptics.selection(); AppModel.showToast("Esta música já está salva no celular") }
-            else if (DownloadManager.isDownloading(track.id)) DownloadManager.cancel(track.id)
-            else { Haptics.light(); DownloadManager.download(track) }
-        }, contentAlignment = Alignment.Center) {
-            Box(Modifier.size(44.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
-                if (p != null) {
-                    Canvas(Modifier.size(20.dp)) {
-                        val sw = 2.4.dp.toPx()
-                        drawCircle(Color.White.copy(0.15f), size.minDimension / 2 - sw / 2, style = Stroke(sw))
-                        drawArc(Color.White, -90f, 360f * p.toFloat(), false, topLeft = Offset(sw / 2, sw / 2), size = Size(size.width - sw, size.height - sw), style = Stroke(sw, cap = StrokeCap.Round))
-                    }
-                } else Icon(sf(if (downloaded) "arrow.down.circle.fill" else "arrow.down"), "Baixar", tint = Color.White, modifier = Modifier.size(19.dp))
-            }
-        }
+        // baixar (isolado para não recompor a barra de metadados a cada tick de progresso)
+        PlayerDownloadButton(track)
         // curtir
         Box(Modifier.size(Chrome.minTouch).pressable(0.88f) { LibraryStore.toggleFavorite(track) }, contentAlignment = Alignment.Center) {
             Box(Modifier.size(44.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
                 Icon(sf(if (fav) "heart.fill" else "heart"), if (fav) "Remover das curtidas" else "Curtir", tint = if (fav) Theme.rose else Color.White, modifier = Modifier.size(19.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun PlayerDownloadButton(track: Track) {
+    val downloaded = track.id in LibraryStore.downloadedIds
+    val p = DownloadManager.progressById[track.id]
+    Box(Modifier.size(Chrome.minTouch).pressable(0.88f) {
+        if (downloaded) { Haptics.selection(); AppModel.showToast("Esta música já está salva no celular") }
+        else if (DownloadManager.isDownloading(track.id)) DownloadManager.cancel(track.id)
+        else { Haptics.light(); DownloadManager.download(track) }
+    }, contentAlignment = Alignment.Center) {
+        Box(Modifier.size(44.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
+            if (p != null) {
+                Canvas(Modifier.size(20.dp)) {
+                    val sw = 2.4.dp.toPx()
+                    drawCircle(Color.White.copy(0.15f), size.minDimension / 2 - sw / 2, style = Stroke(sw))
+                    drawArc(Color.White, -90f, 360f * p.toFloat(), false, topLeft = Offset(sw / 2, sw / 2), size = Size(size.width - sw, size.height - sw), style = Stroke(sw, cap = StrokeCap.Round))
+                }
+            } else Icon(sf(if (downloaded) "arrow.down.circle.fill" else "arrow.down"), "Baixar", tint = Color.White, modifier = Modifier.size(19.dp))
         }
     }
 }

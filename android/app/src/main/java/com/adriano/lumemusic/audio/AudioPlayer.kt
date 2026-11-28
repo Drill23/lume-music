@@ -81,7 +81,7 @@ object AudioPlayer {
     var sleepRemainingSeconds by mutableIntStateOf(0); private set
     var sessionHistory by mutableStateOf<List<Track>>(emptyList()); private set
 
-    private var varispeed = 1f
+    var varispeed = 1f; private set
     private var pollJob: Job? = null
     private var sleepJob: Job? = null
     private var lyricsJob: Job? = null
@@ -329,13 +329,15 @@ object AudioPlayer {
         }
         if (currentIndex + 1 < queue.size) { currentIndex += 1; startCurrentTrack() }
         else if (repeatMode == RepeatMode.ALL) { currentIndex = 0; startCurrentTrack() }
-        else if (autoplayRadio && currentTrack != null) {
-            val cur = currentTrack!!
-            scope.launch {
-                appendRadio(cur)
-                if (currentIndex + 1 < queue.size) { currentIndex += 1; startCurrentTrack() }
-                else { player.pause(); syncState() }
-            }
+        else if (autoplayRadio) {
+            val cur = currentTrack
+            if (cur != null) {
+                scope.launch {
+                    appendRadio(cur)
+                    if (currentIndex + 1 < queue.size) { currentIndex += 1; startCurrentTrack() }
+                    else { player.pause(); syncState() }
+                }
+            } else { player.pause(); syncState() }
         } else { player.pause(); syncState() }
     }
 
@@ -451,14 +453,28 @@ object AudioPlayer {
     private var lockArtBytes: ByteArray? = null
     private var lockArtTrackId: String? = null
 
-    private fun buildItem(track: Track, art: String): MediaItem {
-        val local = LibraryStore.isDownloaded(track.id)
-        val uri = if (local) File(LibraryStore.localAudioFile(track.id).path).toUri() else StreamResolver.uriFor(track)
+    private fun buildMetadata(track: Track, art: String): MediaMetadata {
         val md = MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist).setAlbumTitle(track.album.ifEmpty { null })
         val composite = lockArtBytes?.takeIf { lockArtTrackId == track.id }
         if (composite != null) md.setArtworkData(composite, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
         else md.setArtworkUri(if (art.isNotEmpty()) art.toUri() else null)
-        return MediaItem.Builder().setMediaId(track.id).setUri(uri).setMediaMetadata(md.build()).build()
+        return md.build()
+    }
+
+    private fun buildItem(track: Track, art: String): MediaItem {
+        val local = LibraryStore.isDownloaded(track.id) && LibraryStore.localAudioFile(track.id).exists()
+        val uri = if (local) File(LibraryStore.localAudioFile(track.id).path).toUri() else StreamResolver.uriFor(track)
+        return MediaItem.Builder().setMediaId(track.id).setUri(uri).setMediaMetadata(buildMetadata(track, art)).build()
+    }
+
+    /** Atualiza apenas metadados/capa mantendo a URI atual do ExoPlayer (nunca reinicia a música se ela acabou de ser baixada). */
+    private fun updateCurrentMetadata(track: Track, art: String) {
+        try {
+            val curItem = player.currentMediaItem ?: return
+            if (player.mediaItemCount > 0 && curItem.mediaId == track.id) {
+                player.replaceMediaItem(0, curItem.buildUpon().setMediaMetadata(buildMetadata(track, art)).build())
+            }
+        } catch (_: Exception) {}
     }
 
     /** Redesenha a arte da tela de bloqueio (ex.: o estilo mudou nos Ajustes). */
@@ -474,11 +490,7 @@ object AudioPlayer {
             if (currentTrack?.id != track.id) return@launch
             if (bytes == null && lockArtBytes == null) return@launch
             lockArtBytes = bytes; lockArtTrackId = if (bytes != null) track.id else null
-            try {
-                if (player.mediaItemCount > 0 && player.currentMediaItem?.mediaId == track.id) {
-                    player.replaceMediaItem(0, buildItem(track, currentArtwork))
-                }
-            } catch (_: Exception) {}
+            updateCurrentMetadata(track, currentArtwork)
         }
     }
 
@@ -516,11 +528,7 @@ object AudioPlayer {
                 if (currentTrack?.id != track.id) return@launch
                 palette = pal
                 // atualiza capa na tela de bloqueio (troca só de metadados; não reinicia o áudio)
-                try {
-                    if (player.mediaItemCount > 0 && player.currentMediaItem?.mediaId == track.id) {
-                        player.replaceMediaItem(0, buildItem(track, art).let { it })
-                    }
-                } catch (_: Exception) {}
+                updateCurrentMetadata(track, art)
                 scheduleLockArtwork(track)
             }
             if (LibraryStore.animatedArtEnabled && track.animatedArtworkURL == null) {
@@ -556,13 +564,18 @@ object AudioPlayer {
         }
 
         // 3. Áudio: arquivo offline ou stream (resolvido pela fonte de dados do ExoPlayer)
-        if (LibraryStore.isDownloaded(track.id)) {
+        val hasLocalFile = LibraryStore.isDownloaded(track.id) && LibraryStore.localAudioFile(track.id).exists()
+        if (LibraryStore.isDownloaded(track.id) && !hasLocalFile) {
+            LibraryStore.removeDownload(track.id)
+        }
+        if (hasLocalFile) {
             currentBitrateLabel = "Offline · AAC"
         } else {
             if (LibraryStore.offlineMode) {
                 isLoading = false; isPlaying = false
                 errorToast = "Modo offline ativo. Baixe “${track.title}” para ouvir sem internet."
-                player.pause()
+                player.stop()
+                player.clearMediaItems()
                 return
             }
             currentBitrateLabel = "AAC"
