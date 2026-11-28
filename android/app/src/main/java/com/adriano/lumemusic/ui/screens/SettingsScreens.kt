@@ -152,6 +152,7 @@ fun SettingsScreen(bottomInset: Dp) {
                     ToggleRow("infinity", "Rádio automática", "Continua tocando músicas parecidas quando a fila acaba", AudioPlayer.autoplayRadio) { AudioPlayer.autoplayRadio = it }
                     CardDivider()
                     LinkRow("slider.vertical.3", "Equalizador (5 bandas)", s.soundProfile.raw) { AppModel.push(LumeRoute.Equalizer) }
+                    AudioExtrasRows()
                     CardDivider()
                     Section("Crossfade entre faixas") {
                         ChipsRow(listOf("Desligado" to 0.0, "3 segundos" to 3.0, "6 segundos" to 6.0, "9 segundos" to 9.0), s.crossfadeSeconds) { s.crossfadeSeconds = it }

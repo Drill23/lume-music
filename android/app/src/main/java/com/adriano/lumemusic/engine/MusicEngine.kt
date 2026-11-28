@@ -15,7 +15,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Descoberta, busca, paradas, resolução de stream (InnerTube) e capas animadas. */
 object MusicEngine {
-    data class ResolvedStream(val url: String, val headers: Map<String, String>, val bitrate: Int, val expiresAt: Long, val itag: Int)
+    data class ResolvedStream(val url: String, val headers: Map<String, String>, val bitrate: Int, val expiresAt: Long, val itag: Int,
+                              /** playerConfig.audioConfig.loudnessDb (dB relativo à referência do YouTube); null se não veio. */
+                              val loudnessDb: Double? = null)
 
     private val streamCache = ConcurrentHashMap<String, ResolvedStream>()
     private val videoIdCache = ConcurrentHashMap<String, String>()
@@ -224,6 +226,12 @@ object MusicEngine {
         return null
     }
 
+    /** Sonoridade da faixa (`playerConfig.audioConfig.loudnessDb`). Valor ausente ou absurdo → null (ganho 0 dB). */
+    fun parseLoudnessDb(playerJson: kotlinx.serialization.json.JsonElement): Double? {
+        val v = playerJson["playerConfig"]["audioConfig"]["loudnessDb"].dbl() ?: return null
+        return v.takeIf { it.isFinite() && it > -60.0 && it < 60.0 }
+    }
+
     private suspend fun requestPlayerStream(videoId: String, client: Map<String, Any>, userAgent: String): ResolvedStream? {
         val body = jsonObjectOf(
             "videoId" to videoId, "context" to mapOf("client" to client),
@@ -235,7 +243,7 @@ object MusicEngine {
         ) ?: return null
         val picked = pickProgressive(json) ?: return null
         return ResolvedStream(picked.first, mapOf("User-Agent" to userAgent), picked.second,
-            System.currentTimeMillis() + 40 * 60_000L, picked.third)
+            System.currentTimeMillis() + 40 * 60_000L, picked.third, parseLoudnessDb(json))
     }
 
     // ---------------- Capa animada (Apple Music .m3u8) ----------------

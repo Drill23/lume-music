@@ -50,7 +50,10 @@ object DownloadManager {
     private val active = HashMap<String, Job>()
     private val failed = LinkedHashMap<String, Track>()
 
-    fun init(context: Context) { appContext = context.applicationContext }
+    fun init(context: Context) {
+        appContext = context.applicationContext
+        com.adriano.lumemusic.audio.LoudnessStore.init(appContext)
+    }
 
     val pendingCount: Int get() = active.size + queued.size
 
@@ -162,6 +165,8 @@ object DownloadManager {
                 val resolved = MusicEngine.resolveStream(vid)
                 if (resolved == null) { markFailed(working, "Stream indisponível"); return@launch }
                 ensureActive()
+                // Guarda a sonoridade para o "Volume igual" valer também offline.
+                resolved.loudnessDb?.let { com.adriano.lumemusic.audio.LoudnessStore.put(track.id, it) }
                 statesById[track.id] = DownloadState.Downloading(0.24); progressById[track.id] = 0.24
 
                 val dest = LibraryStore.localAudioFile(track.id)

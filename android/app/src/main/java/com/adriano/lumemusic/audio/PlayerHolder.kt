@@ -29,7 +29,7 @@ object StreamResolver {
     const val SCHEME = "lume"
     val tracks = ConcurrentHashMap<String, Track>()
     @Volatile var lastError: String? = null
-    var onResolved: ((trackId: String, videoId: String, bitrate: Int, itag: Int) -> Unit)? = null
+    var onResolved: ((trackId: String, videoId: String, bitrate: Int, itag: Int, loudnessDb: Double?) -> Unit)? = null
 
     fun uriFor(track: Track): Uri { tracks[track.id] = track; return Uri.parse("$SCHEME://stream/${Uri.encode(track.id)}") }
 
@@ -40,7 +40,7 @@ object StreamResolver {
         return runBlocking {
             val vid = MusicEngine.resolveVideoId(t) ?: run { lastError = "Áudio não encontrado para ${t.title}."; throw IOException(lastError) }
             val rs = MusicEngine.resolveStream(vid) ?: run { lastError = "Não foi possível conectar ao stream de áudio."; throw IOException(lastError) }
-            onResolved?.invoke(trackId, vid, rs.bitrate, rs.itag)
+            onResolved?.invoke(trackId, vid, rs.bitrate, rs.itag, rs.loudnessDb)
             rs.url
         }
     }

@@ -98,8 +98,14 @@ object AudioPlayer {
         started = true
         app = application
         PlayerHolder.init(application)
-        StreamResolver.onResolved = { trackId, vid, bitrate, itag ->
+        AudioPrefs.init(application)
+        LoudnessStore.init(application)
+        StreamResolver.onResolved = { trackId, vid, bitrate, itag, loudnessDb ->
             scope.launch {
+                if (loudnessDb != null) {
+                    LoudnessStore.put(trackId, loudnessDb)
+                    if (currentTrack?.id == trackId) { currentLoudnessDb = loudnessDb; updateGain() }
+                }
                 LibraryStore.updateVideoId(vid, trackId)
                 if (currentTrack?.id == trackId) {
                     currentTrack = currentTrack?.copy(videoId = vid)
@@ -121,6 +127,84 @@ object AudioPlayer {
             MediaController.Builder(app, token).buildAsync()
         } catch (_: Exception) {}
         applyVolume()
+        applyAudioPrefs()
+    }
+
+    // ---------------- Volume igual / limitador / pular silêncio ----------------
+
+    private var currentLoudnessDb: Double? = null
+    private var silenceJob: Job? = null
+    private var silenceEpoch = -1
+    private var silenceOrigin = 0.0
+    private var silencePendingEpoch = -1
+    private var silencePendingSinceMs = 0L
+
+    fun setNormalizeVolume(on: Boolean) { AudioPrefs.updateNormalize(on); updateGain() }
+
+    fun setSkipSilence(on: Boolean) { AudioPrefs.updateSkipSilence(on); applyAudioPrefs() }
+
+    private fun applyAudioPrefs() {
+        updateGain()
+        PlayerHolder.processor.setSilenceWatch(AudioPrefs.skipSilence)
+        if (AudioPrefs.skipSilence) {
+            if (silenceJob?.isActive != true) {
+                silenceEpoch = -1; silencePendingEpoch = -1
+                silenceJob = scope.launch { while (isActive) { delay(100); silenceTick() } }
+            }
+        } else { silenceJob?.cancel(); silenceJob = null }
+    }
+
+    /** Ganho = -loudnessDb limitado a [-12, +6] dB (0 dB sem dado ou com o recurso desligado). */
+    private fun updateGain() {
+        val db = if (AudioPrefs.normalize) AudioDsp.normalizationGainDb(currentLoudnessDb) else 0.0
+        PlayerHolder.processor.setNormalizationGainDb(db)
+    }
+
+    /**
+     * "Pular silêncio": o processador de áudio só MEDE (variáveis @Volatile); a decisão fica aqui, a cada 100 ms,
+     * e só vale para o começo e o fim da faixa (ver [SilencePolicy]) — pausas no meio da música nunca são tocadas.
+     */
+    private fun silenceTick() {
+        if (!AudioPrefs.skipSilence || crossfadeTriggered) return
+        val p = player
+        if (p.mediaItemCount == 0 || !p.isPlaying) return
+        val m = PlayerHolder.processor.silence
+        val pos = p.currentPosition / 1000.0
+        val epoch = m.epoch
+        if (silencePendingEpoch >= 0) {
+            // acabamos de pular: ignora as medidas antigas até o medidor recomeçar (flush do seek)
+            if (epoch == silencePendingEpoch && System.currentTimeMillis() - silencePendingSinceMs < 1500) return
+            silencePendingEpoch = -1
+        }
+        if (epoch != silenceEpoch) { silenceEpoch = epoch; silenceOrigin = pos; return }
+        val dur = p.duration.takeIf { it > 0 && it != androidx.media3.common.C.TIME_UNSET }?.let { it / 1000.0 } ?: return
+        when (val d = SilencePolicy.decide(pos, dur, m.silentRunSec, m.processedSec, silenceOrigin)) {
+            SilenceDecision.None -> {}
+            is SilenceDecision.SkipTo -> {
+                silencePendingEpoch = epoch; silencePendingSinceMs = System.currentTimeMillis()
+                PlaybackClock.currentTime = d.seconds
+                p.seekTo((d.seconds * 1000).toLong())
+            }
+            SilenceDecision.NextTrack -> finishTrackEarly()
+        }
+    }
+
+    /** Fim em silêncio: segue o mesmo caminho do fim natural (timer de dormir, repetir 1, crossfade, fila, rádio). */
+    private fun finishTrackEarly() {
+        if (crossfadeTriggered) return
+        crossfadeTriggered = true
+        when {
+            sleepTimerOption == SleepTimerOption.END_OF_TRACK -> {
+                sleepTimerOption = SleepTimerOption.OFF; sleepRemainingSeconds = 0
+                player.pause(); syncState()
+            }
+            repeatMode == RepeatMode.ONE -> { crossfadeTriggered = false; silenceEpoch = -1; player.seekTo(0); player.play() }
+            else -> {
+                val hasNext = currentIndex + 1 < queue.size || repeatMode == RepeatMode.ALL || autoplayRadio
+                if (LibraryStore.crossfadeSeconds > 0 && hasNext) shouldFadeInNext = true
+                nextTrack()
+            }
+        }
     }
 
     // ---------------- Estado ----------------
@@ -417,6 +501,9 @@ object AudioPlayer {
         lockArtBytes = null; lockArtTrackId = null
         retriedTrackIds.remove(track.id)
         currentArtwork = ArtworkStore.url(track)
+        currentLoudnessDb = LoudnessStore.get(track.id)   // do cache/download; o stream atualiza ao resolver
+        updateGain()
+        silenceEpoch = -1; silencePendingEpoch = -1
 
         // 1. Capa real + paleta ambiente + capa animada
         artJob = scope.launch {
@@ -537,7 +624,7 @@ object AudioPlayer {
             if (!LibraryStore.isDownloaded(next.id)) {
                 MusicEngine.resolveVideoId(next)?.let { vid ->
                     launch(Dispatchers.Main) { LibraryStore.updateVideoId(vid, next.id) }
-                    MusicEngine.resolveStream(vid)
+                    MusicEngine.resolveStream(vid)?.loudnessDb?.let { LoudnessStore.put(next.id, it) }
                 }
             }
             LyricsService.fetchLyrics(next)

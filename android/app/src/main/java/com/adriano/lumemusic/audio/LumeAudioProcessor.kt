@@ -13,14 +13,19 @@ import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
  * Processador de áudio no pipeline do ExoPlayer (não precisa de permissão de microfone):
  *  1. Equalizador de 5 bandas (biquads — 60 Hz / 230 Hz / 910 Hz / 3,6 kHz / 14 kHz), igual ao do iOS.
- *  2. Análise FFT real (1024 pts, janela Hann) → 24 bandas log (40 Hz–16 kHz) + nível RMS.
- * O áudio segue adiante (com EQ aplicado); a análise é publicada com timestamp para o AudioSpectrum.
+ *  2. Ganho de "Volume igual entre as músicas" (rampa de ~300 ms) + limitador de pico em -1 dBFS (lookahead ~1 ms,
+ *     release ~100 ms) quando o ganho ou o EQ aumenta o volume; senão o teto é 0 dBFS (só proteção de clipe).
+ *  3. Medição de silêncio (só mede; a decisão de pular fica no AudioPlayer) — ver [SilenceMeter].
+ *  4. Análise FFT real (1024 pts, janela Hann) → 24 bandas log (40 Hz–16 kHz) + nível RMS.
+ * O áudio segue adiante (com EQ/ganho/limitador aplicados); a análise é publicada com timestamp para o AudioSpectrum.
+ * Todo o processamento é feito em vetor float reaproveitado (sem alocação por amostra), em PCM 16-bit ou float.
  */
 class LumeAudioProcessor : BaseAudioProcessor() {
     companion object {
@@ -42,8 +47,21 @@ class LumeAudioProcessor : BaseAudioProcessor() {
     private val eqGains = FloatArray(5)
     private val coeffs = DoubleArray(25)          // b0,b1,b2,a1,a2 normalizados por banda
     @Volatile private var eqBypass = true
+    @Volatile private var eqBoost = false         // algum ajuste de EQ > 0 dB → limitador no teto de -1 dBFS
     private var z1 = Array(8) { DoubleArray(5) }  // por canal, por banda (DF2 transposta)
     private var z2 = Array(8) { DoubleArray(5) }
+
+    // ---- ganho / limitador / silêncio ----
+    @Volatile private var gainTarget = 1.0
+    @Volatile private var watchSilence = false
+    private var wasWatching = false
+    private val ramp = GainRamp()
+    private var limiter: PeakLimiter? = null
+    private var work = FloatArray(0)
+    private var monoBuf = FloatArray(0)
+    private val ceilingLimited = AudioDsp.dbToLinear(AudioDsp.LIMITER_CEILING_DB).toFloat()
+    /** Medidor de silêncio (lido pelo AudioPlayer). */
+    val silence = SilenceMeter()
 
     // ---- análise ----
     private val ring = FloatArray(RING)
@@ -82,6 +100,12 @@ class LumeAudioProcessor : BaseAudioProcessor() {
 
     fun setAnalysisActive(active: Boolean) { analysisActive = active }
 
+    /** Ganho do volume igual, em dB (0 = desligado/sem dado). A mudança entra com rampa de ~300 ms. */
+    fun setNormalizationGainDb(db: Double) { gainTarget = AudioDsp.dbToLinear(db) }
+
+    /** Liga/desliga a medição de silêncio (só gasta CPU enquanto "Pular silêncio" estiver ligado). */
+    fun setSilenceWatch(on: Boolean) { watchSilence = on }
+
     fun snapshot(out: FloatArray): Snapshot {
         synchronized(pubLock) {
             if (pubHasData) System.arraycopy(pubBands, 0, out, 0, BANDS)
@@ -93,19 +117,24 @@ class LumeAudioProcessor : BaseAudioProcessor() {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT && inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT) {
             return AudioProcessor.AudioFormat.NOT_SET // inativo: o áudio passa direto
         }
-        channels = min(inputAudioFormat.channelCount, 8)
+        if (inputAudioFormat.channelCount > 8 || inputAudioFormat.channelCount < 1) return AudioProcessor.AudioFormat.NOT_SET
+        channels = inputAudioFormat.channelCount
         sampleRate = inputAudioFormat.sampleRate
         encoding = inputAudioFormat.encoding
         synchronized(eqLock) { recomputeCoeffsLocked() }
         computeBands()
         for (c in 0 until 8) { z1[c].fill(0.0); z2[c].fill(0.0) }
         writeCount = 0; sinceLast = 0
+        limiter = PeakLimiter(sampleRate, channels)
+        silence.configure(sampleRate)
         return inputAudioFormat
     }
 
     override fun onFlush() {
         for (c in 0 until 8) { z1[c].fill(0.0); z2[c].fill(0.0) }
         sinceLast = 0
+        limiter?.reset()
+        silence.reset()
     }
 
     override fun onReset() {
@@ -116,25 +145,45 @@ class LumeAudioProcessor : BaseAudioProcessor() {
         val size = inputBuffer.remaining()
         if (size == 0) return
         val out = replaceOutputBuffer(size)
+        val lim = limiter
         val is16 = encoding == C.ENCODING_PCM_16BIT
         val bytesPerSample = if (is16) 2 else 4
         val ch = channels
         val frameBytes = bytesPerSample * ch
         val frames = size / frameBytes
-        val doEq = !eqBypass
-        val doAnalysis = analysisActive
+        val base = inputBuffer.position()
+        if (frames == 0 || lim == null) {
+            out.put(inputBuffer); out.flip(); return
+        }
         val order = java.nio.ByteOrder.nativeOrder()
         inputBuffer.order(order)
         out.order(order)
-        val base = inputBuffer.position()
-        val mono = if (doAnalysis) FloatArray(frames) else null
+        val n = frames * ch
+        if (work.size < n) work = FloatArray(n + 8192)
+        val w = work
 
-        for (f in 0 until frames) {
-            var sum = 0f
-            for (c in 0 until ch) {
-                val idx = base + f * frameBytes + c * bytesPerSample
-                var x = if (is16) inputBuffer.getShort(idx) / 32768.0 else inputBuffer.getFloat(idx).toDouble()
-                if (doEq) {
+        // 1. leitura para float
+        if (is16) for (i in 0 until n) w[i] = inputBuffer.getShort(base + i * 2) * (1f / 32768f)
+        else for (i in 0 until n) w[i] = inputBuffer.getFloat(base + i * 4)
+
+        // 2. silêncio: mede o áudio original (antes de ganho e EQ)
+        val watch = watchSilence
+        if (watch != wasWatching) { wasWatching = watch; if (watch) silence.reset() }
+        if (watch) {
+            val inv = 1f / ch
+            var p = 0
+            for (f in 0 until frames) {
+                var e = 0f
+                for (c in 0 until ch) { val v = w[p++]; e += v * v }
+                silence.addFrame(e * inv)
+            }
+        }
+
+        // 3. equalizador
+        if (!eqBypass) {
+            for (f in 0 until frames) {
+                for (c in 0 until ch) {
+                    var x = w[f * ch + c].toDouble()
                     for (b in 0 until 5) {
                         val o = b * 5
                         val b0 = coeffs[o]; val b1 = coeffs[o + 1]; val b2 = coeffs[o + 2]; val a1 = coeffs[o + 3]; val a2 = coeffs[o + 4]
@@ -143,30 +192,76 @@ class LumeAudioProcessor : BaseAudioProcessor() {
                         z2[c][b] = b2 * x - a2 * y
                         x = y
                     }
+                    w[f * ch + c] = x.toFloat()
                 }
-                if (is16) {
-                    val v = (x * 32768.0).toInt().coerceIn(-32768, 32767)
-                    out.putShort(v.toShort())
-                } else {
-                    out.putFloat(max(-1.0, min(1.0, x)).toFloat())
-                }
-                sum += x.toFloat()
             }
-            if (mono != null) mono[f] = sum / ch
         }
+
+        // 4. análise do espectro (pós-EQ, antes do ganho)
+        val doAnalysis = analysisActive
+        if (doAnalysis) {
+            if (monoBuf.size < frames) monoBuf = FloatArray(frames + 2048)
+            val inv = 1f / ch
+            var p = 0
+            for (f in 0 until frames) {
+                var sum = 0f
+                for (c in 0 until ch) sum += w[p++]
+                monoBuf[f] = sum * inv
+            }
+        }
+
+        // 5. ganho do volume igual (com rampa) + limitador
+        ramp.setTarget(gainTarget, sampleRate)
+        lim.ceiling = if (eqBoost || max(ramp.current, ramp.target) > 1.0 + 1e-4) ceilingLimited else 1f
+        if (ramp.isSettled) {
+            val g = ramp.current.toFloat()
+            if (g != 1f) for (i in 0 until n) w[i] *= g
+        } else {
+            var p = 0
+            for (f in 0 until frames) {
+                val g = ramp.next().toFloat()
+                for (c in 0 until ch) { w[p] *= g; p++ }
+            }
+        }
+        lim.process(w, frames)
+
+        // 6. saída
+        writeSamples(out, w, n, is16)
         // sobra (frames incompletos): copia crua
         val used = frames * frameBytes
         if (used < size) { inputBuffer.position(base + used); out.put(inputBuffer) }
         inputBuffer.position(base + size)
         out.flip()
-        if (mono != null) feed(mono)
+        if (doAnalysis) feed(monoBuf, frames)
+    }
+
+    /** Fim do stream: despeja o atraso (~1 ms) do limitador para não cortar o final da faixa. */
+    override fun onQueueEndOfStream() {
+        val lim = limiter ?: return
+        val tail = lim.latencyFrames
+        if (tail <= 0) return
+        val is16 = encoding == C.ENCODING_PCM_16BIT
+        val n = tail * channels
+        if (work.size < n) work = FloatArray(n + 8192)
+        java.util.Arrays.fill(work, 0, n, 0f)
+        lim.process(work, tail)
+        val out = replaceOutputBuffer(n * (if (is16) 2 else 4))
+        out.order(java.nio.ByteOrder.nativeOrder())
+        writeSamples(out, work, n, is16)
+        out.flip()
+    }
+
+    private fun writeSamples(out: ByteBuffer, w: FloatArray, n: Int, is16: Boolean) {
+        if (is16) for (i in 0 until n) out.putShort((w[i] * 32768f).roundToInt().coerceIn(-32768, 32767).toShort())
+        else for (i in 0 until n) out.putFloat(if (w[i] > 1f) 1f else if (w[i] < -1f) -1f else w[i])
     }
 
     // ---------------- análise ----------------
 
-    private fun feed(mono: FloatArray) {
+    private fun feed(mono: FloatArray, frames: Int) {
         val mask = RING - 1
-        for (s in mono) {
+        for (i in 0 until frames) {
+            val s = mono[i]
             ring[(writeCount and mask.toLong()).toInt()] = s
             writeCount++
             sinceLast++
@@ -260,9 +355,11 @@ class LumeAudioProcessor : BaseAudioProcessor() {
     private fun recomputeCoeffsLocked() {
         val fs = max(8000.0, sampleRate.toDouble())
         var any = false
+        var boost = false
         for (b in 0 until 5) {
             val dbG = eqGains[b].toDouble()
             if (abs(dbG) >= 0.05) any = true
+            if (dbG > 0.05) boost = true
             val a = 10.0.pow(dbG / 40.0)
             val w0 = 2.0 * PI * min(EQ_FREQS[b], fs * 0.45) / fs
             val cosW = cos(w0); val sinW = sin(w0)
@@ -293,5 +390,6 @@ class LumeAudioProcessor : BaseAudioProcessor() {
             coeffs[o] = b0 / a0; coeffs[o + 1] = b1 / a0; coeffs[o + 2] = b2 / a0; coeffs[o + 3] = a1 / a0; coeffs[o + 4] = a2 / a0
         }
         eqBypass = !any
+        eqBoost = boost
     }
 }
