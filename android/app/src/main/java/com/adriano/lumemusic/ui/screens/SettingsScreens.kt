@@ -197,6 +197,8 @@ fun SettingsScreen(bottomInset: Dp) {
                     LinkRow("person.2", "Artistas seguidos", "${s.followedArtists.size}") { AppModel.select(com.adriano.lumemusic.data.AppTab.LIBRARY) }
                 }
             }
+            item { SettingsBackupSection() }
+            item { SettingsScrobbleSection() }
             item {
                 Card("Armazenamento & Offline") {
                     ToggleRow("airplane", "Modo offline", "Toca apenas músicas baixadas", s.offlineMode) { s.offlineMode = it }

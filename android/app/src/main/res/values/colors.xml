@@ -2,4 +2,7 @@
 <resources>
     <color name="lume_canvas">#F3F2F7</color>
     <color name="lume_icon_bg">#101013</color>
+    <color name="widget_text">#FF1C1C1E</color>
+    <color name="widget_text_secondary">#FF6C6C70</color>
+    <color name="widget_icon">#FF1C1C1E</color>
 </resources>

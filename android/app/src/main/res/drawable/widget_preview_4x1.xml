@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/widget_bg" />
+    <item android:left="8dp" android:top="8dp" android:width="56dp" android:height="56dp" android:drawable="@drawable/widget_cover_placeholder" />
+    <item android:left="78dp" android:top="20dp" android:width="96dp" android:height="9dp">
+        <shape android:shape="rectangle"><solid android:color="#661C1C1E" /><corners android:radius="5dp" /></shape>
+    </item>
+    <item android:left="78dp" android:top="38dp" android:width="64dp" android:height="7dp">
+        <shape android:shape="rectangle"><solid android:color="#331C1C1E" /><corners android:radius="4dp" /></shape>
+    </item>
+    <item android:left="190dp" android:top="26dp" android:width="22dp" android:height="22dp" android:drawable="@drawable/ic_widget_prev" />
+    <item android:left="222dp" android:top="22dp" android:width="28dp" android:height="28dp" android:drawable="@drawable/ic_widget_play" />
+    <item android:left="258dp" android:top="26dp" android:width="22dp" android:height="22dp" android:drawable="@drawable/ic_widget_next" />
+</layer-list>

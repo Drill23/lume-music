@@ -25,6 +25,8 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     while (true) {
                         try { Access.service.check() } catch (_: Exception) {}
+                        // Backup da biblioteca: restaura (mesclando) 1x/dia enquanto este aparelho ainda não foi restaurado.
+                        try { com.adriano.lumemusic.data.LibraryBackup.onAppOpen() } catch (_: Exception) {}
                         try { UpdateController.check(force = true) } catch (_: Exception) {}
                         delay(com.adriano.lumemusic.access.AccessConfig.CHECK_INTERVAL_MS)
                     }
@@ -33,6 +35,12 @@ class MainActivity : ComponentActivity() {
             }
         }
         handleDebug(intent)
+    }
+
+    /** App foi para o fundo: envia o backup da biblioteca se houver mudança pendente (contrato 5.2 A). */
+    override fun onStop() {
+        super.onStop()
+        try { com.adriano.lumemusic.data.LibraryBackup.onBackground() } catch (_: Exception) {}
     }
 
     override fun onNewIntent(intent: Intent) {
