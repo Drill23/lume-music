@@ -64,6 +64,9 @@ final class AudioSpectrum: ObservableObject {
   private var lastRefresh: UInt64 = 0
   private var currentEQGains: [Float] = [0, 0, 0, 0, 0]
   private var inBackground = false
+  /// Ganho de saída em dB (volume igual entre as músicas). Reaplicado a cada tap novo.
+  private var outputGainDb: Double = 0
+  private var measureSilence = false
 
   // batida real
   private var seenBeatCount = -1
@@ -139,6 +142,25 @@ final class AudioSpectrum: ObservableObject {
     context?.setEQGains(normalized)
   }
 
+  /// Ganho de saída (normalização) em dB. `immediate` = faixa nova (sem rampa); senão rampa de ~300 ms.
+  /// O limitador de pico (-1 dBFS) entra sozinho quando o ganho é positivo ou o equalizador está ativo.
+  func setOutputGain(db: Double, immediate: Bool) {
+    outputGainDb = db
+    context?.setGain(LoudnessMath.linear(fromDb: db), immediate: immediate)
+  }
+
+  /// Liga/desliga a medição de silêncio na thread de áudio (só mede; quem decide é o AudioPlayer).
+  func setSilenceMeasuring(_ on: Bool) {
+    measureSilence = on
+    context?.setMeasureSilence(on)
+  }
+
+  /// Último estado de silêncio medido pelo tap (nil se não há tap ou nunca mediu).
+  func silenceSnapshot() -> SilenceSnapshot? {
+    guard let ctx = context else { return nil }
+    return ctx.silence(now: clock_gettime_nsec_np(CLOCK_UPTIME_RAW))
+  }
+
   /// Quadro atual para desenhar. Chame dentro do TimelineView (a leitura também "acorda" a FFT).
   /// Sem espectro real, simula batidas guiadas pelo tempo da faixa.
   func frame() -> SpectrumFrame { frame(isPlaying: AudioPlayer.shared.isPlaying) }
@@ -184,11 +206,13 @@ final class AudioSpectrum: ObservableObject {
       },
       unprepare: { _ in },
       process: { tap, numberFrames, flags, bufferList, numberFramesOut, flagsOut in
+        var range = CMTimeRange()
         let status = MTAudioProcessingTapGetSourceAudio(
-          tap, numberFrames, bufferList, flagsOut, nil, numberFramesOut)
+          tap, numberFrames, bufferList, flagsOut, &range, numberFramesOut)
         guard status == noErr else { return }
         let ctx = Unmanaged<SpectrumTapContext>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
-        ctx.process(bufferList: bufferList, frames: numberFramesOut.pointee)
+        let start = range.start.isNumeric ? range.start.seconds : Double.nan
+        ctx.process(bufferList: bufferList, frames: numberFramesOut.pointee, start: start)
       }
     )
 
@@ -207,6 +231,8 @@ final class AudioSpectrum: ObservableObject {
     item.audioMix = mix
 
     ctx.setEQGains(currentEQGains)
+    ctx.setGain(LoudnessMath.linear(fromDb: outputGainDb), immediate: true)
+    ctx.setMeasureSilence(measureSilence)
     context = ctx
     seenBeatCount = -1
     if !inBackground { startStatusTimer() }
@@ -419,6 +445,22 @@ private final class SpectrumTapContext: @unchecked Sendable {
   private let eqLocal: UnsafeMutablePointer<Float>     // cópia dos coeficientes (sem alocar na thread de áudio)
   private var eqBypass = true
 
+  // Ganho + limitador (flags simples: a main escreve, a thread de áudio lê — sem lock no caminho quente)
+  private let dspFlags: UnsafeMutablePointer<Float>          // [0]=ganho alvo (linear) [1]=medir silêncio [2]=pular rampa
+  private let chPtr: UnsafeMutablePointer<UnsafeMutablePointer<Float>>   // até 8 canais, preenchido por callback
+  private var proc = LoudnessProcessor()
+
+  // Medição de silêncio (estado da thread de áudio; publicado sob `lock`)
+  private var silentRun = 0.0
+  private var silentSince = Double.nan
+  private var silentEnd = Double.nan
+  private var lastSourceEnd = Double.nan
+  private var pubSilentRun = 0.0
+  private var pubSilentSince = Double.nan
+  private var pubSilentEnd = Double.nan
+  private var pubLevelDb: Float = -120
+  private var pubSilenceTime: UInt64 = 0
+
   init() {
     let n = SpectrumTapContext.fftSize
     func alloc(_ c: Int) -> UnsafeMutablePointer<Float> {
@@ -448,6 +490,9 @@ private final class SpectrumTapContext: @unchecked Sendable {
     eqCoeffs = alloc(25)
     eqStates = alloc(4 * 5 * 2)
     eqLocal = alloc(25)
+    dspFlags = alloc(4)
+    dspFlags[0] = 1
+    chPtr = UnsafeMutablePointer<UnsafeMutablePointer<Float>>.allocate(capacity: 8)
     fftSetup = vDSP_create_fftsetup(SpectrumTapContext.log2n, FFTRadix(kFFTRadix2))!
     vDSP_hann_window(window, vDSP_Length(n), Int32(vDSP_HANN_DENORM))
     computeBands()
@@ -461,6 +506,7 @@ private final class SpectrumTapContext: @unchecked Sendable {
     localBands.deallocate(); pubBands.deallocate()
     bandLo.deallocate(); bandHi.deallocate(); bandPos.deallocate()
     eqGains.deallocate(); eqCoeffs.deallocate(); eqStates.deallocate(); eqLocal.deallocate()
+    dspFlags.deallocate(); chPtr.deallocate()
     lock.deallocate(); eqLock.deallocate()
   }
 
@@ -497,8 +543,26 @@ private final class SpectrumTapContext: @unchecked Sendable {
     samplesSinceBeat = 1 << 30
     ring.update(repeating: 0, count: SpectrumTapContext.ringSize)
     eqStates.update(repeating: 0, count: 40)
+    proc.configure(sampleRate: sampleRate)
+    proc.snap(to: dspFlags[0])
+    silentRun = 0; silentSince = .nan; silentEnd = .nan; lastSourceEnd = .nan
     computeBands()
     recomputeEQCoeffs()
+  }
+
+  func setGain(_ linear: Float, immediate: Bool) {
+    dspFlags[0] = min(4, max(0.05, linear))
+    if immediate { dspFlags[2] = 1 }
+  }
+
+  func setMeasureSilence(_ on: Bool) { dspFlags[1] = on ? 1 : 0 }
+
+  func silence(now: UInt64) -> SilenceSnapshot? {
+    os_unfair_lock_lock(lock)
+    defer { os_unfair_lock_unlock(lock) }
+    guard pubSilenceTime != 0 else { return nil }
+    return SilenceSnapshot(run: pubSilentRun, since: pubSilentSince, end: pubSilentEnd, levelDb: pubLevelDb,
+                           age: Double(now &- min(now, pubSilenceTime)) / 1e9)
   }
 
   func setEQGains(_ gains: [Float]) {
@@ -582,7 +646,7 @@ private final class SpectrumTapContext: @unchecked Sendable {
 
   // MARK: process (thread de áudio — sem alocação)
 
-  func process(bufferList: UnsafeMutablePointer<AudioBufferList>, frames: CMItemCount) {
+  func process(bufferList: UnsafeMutablePointer<AudioBufferList>, frames: CMItemCount, start: Double) {
     let n = Int(frames)
     guard n > 0, kind != .unsupported else { return }
     let abl = UnsafeMutableAudioBufferListPointer(bufferList)
@@ -594,7 +658,11 @@ private final class SpectrumTapContext: @unchecked Sendable {
     let wanted = demandTime != 0 && now &- demandTime < SpectrumTapContext.demandNs
     os_unfair_lock_unlock(lock)
 
-    if kind == .float32 { applyEQIfNeeded(abl, n) }
+    if kind == .float32 {
+      measureSilenceIfNeeded(abl, n, start: start, now: now)   // nível da fonte, antes de EQ/ganho
+      let eqApplied = applyEQIfNeeded(abl, n)
+      applyLoudness(abl, n, eqApplied: eqApplied)
+    }
     // Ninguém olhando (tela bloqueada, outro palco, app no fundo): nada de FFT.
     guard wanted else {
       analyzedUpTo = writeCount
@@ -639,19 +707,19 @@ private final class SpectrumTapContext: @unchecked Sendable {
   }
 
   @inline(__always)
-  private func applyEQIfNeeded(_ abl: UnsafeMutableAudioBufferListPointer, _ n: Int) {
+  private func applyEQIfNeeded(_ abl: UnsafeMutableAudioBufferListPointer, _ n: Int) -> Bool {
     os_unfair_lock_lock(eqLock)
     let bypass = eqBypass
     if bypass {
       os_unfair_lock_unlock(eqLock)
-      return
+      return false
     }
     let coeffs = eqLocal
     for i in 0..<25 { coeffs[i] = eqCoeffs[i] }
     os_unfair_lock_unlock(eqLock)
 
     if interleaved {
-      guard let raw = abl[0].mData else { return }
+      guard let raw = abl[0].mData else { return false }
       let p = raw.assumingMemoryBound(to: Float.self)
       let c = min(4, max(1, Int(abl[0].mNumberChannels)))
       for ch in 0..<c {
@@ -666,7 +734,7 @@ private final class SpectrumTapContext: @unchecked Sendable {
             let y = b0 * x + z1
             z1 = b1 * x - a1 * y + z2
             z2 = b2 * x - a2 * y
-            p[idx] = min(1.0, max(-1.0, y))
+            p[idx] = y
           }
           eqStates[st] = z1
           eqStates[st + 1] = z2
@@ -687,13 +755,95 @@ private final class SpectrumTapContext: @unchecked Sendable {
             let y = b0 * x + z1
             z1 = b1 * x - a1 * y + z2
             z2 = b2 * x - a2 * y
-            p[f] = min(1.0, max(-1.0, y))
+            p[f] = y
           }
           eqStates[st] = z1
           eqStates[st + 1] = z2
         }
       }
     }
+    // Sem o corte duro por banda: o limitador (applyLoudness) roda sempre que o EQ está ativo.
+    return true
+  }
+
+  /// Preenche `chPtr` com os canais do buffer (float32). Devolve (canais, passo entre amostras).
+  @inline(__always)
+  private func bindChannels(_ abl: UnsafeMutableAudioBufferListPointer) -> (Int, Int) {
+    if interleaved {
+      guard let raw = abl[0].mData else { return (0, 1) }
+      let p = raw.assumingMemoryBound(to: Float.self)
+      let c = min(8, max(1, Int(abl[0].mNumberChannels)))
+      for ch in 0..<c { chPtr[ch] = p + ch }
+      return (c, c)
+    }
+    var c = 0
+    for b in 0..<min(8, abl.count) {
+      guard let raw = abl[b].mData else { continue }
+      chPtr[c] = raw.assumingMemoryBound(to: Float.self)
+      c += 1
+    }
+    return (c, 1)
+  }
+
+  /// Ganho com rampa (volume igual) + limitador de pico em -1 dBFS. Sem alocação, sem lock.
+  @inline(__always)
+  private func applyLoudness(_ abl: UnsafeMutableAudioBufferListPointer, _ n: Int, eqApplied: Bool) {
+    let target = dspFlags[0]
+    if dspFlags[2] != 0 {
+      dspFlags[2] = 0
+      proc.snap(to: target)
+    }
+    let g = proc.gain
+    let ramping = abs(target - g) > 1e-5
+    let needLimiter = eqApplied || target > 1.0001 || g > 1.0001 || proc.limiterBusy
+    if !needLimiter && !ramping && abs(g - 1) < 1e-5 { return }   // caminho comum: nada a fazer
+    let (c, stride) = bindChannels(abl)
+    guard c > 0 else { return }
+    if !needLimiter && !ramping {
+      // ganho constante (< 1): multiplicação vetorizada
+      var gg = g
+      for ch in 0..<c { vDSP_vsmul(chPtr[ch], vDSP_Stride(stride), &gg, chPtr[ch], vDSP_Stride(stride), vDSP_Length(n)) }
+      return
+    }
+    proc.process(chPtr, channels: c, stride: stride, frames: n, target: target, limiter: needLimiter)
+  }
+
+  /// Mede o nível RMS do bloco (antes de EQ/ganho) e acompanha o trecho silencioso contínuo.
+  /// `start` = tempo de mídia do 1º frame do bloco (NaN se o tap não informa).
+  @inline(__always)
+  private func measureSilenceIfNeeded(_ abl: UnsafeMutableAudioBufferListPointer, _ n: Int, start: Double, now: UInt64) {
+    guard dspFlags[1] != 0 else { return }
+    let (c, stride) = bindChannels(abl)
+    guard c > 0 else { return }
+    var total: Float = 0
+    for ch in 0..<c {
+      var ss: Float = 0
+      vDSP_svesq(chPtr[ch], vDSP_Stride(stride), &ss, vDSP_Length(n))
+      total += ss
+    }
+    let db = 10 * log10f(max(total / Float(n * c), 1e-12))
+    let dur = Double(n) / sampleRate
+    // Salto no tempo de mídia (seek / rebuffer): recomeça a contagem.
+    if start.isFinite {
+      if lastSourceEnd.isFinite && abs(start - lastSourceEnd) > 0.1 { silentRun = 0 }
+      lastSourceEnd = start + dur
+    }
+    if db < LoudnessMath.silenceDb {
+      if silentRun == 0 { silentSince = start }
+      silentRun += dur
+      silentEnd = start.isFinite ? start + dur : .nan
+    } else {
+      silentRun = 0
+      silentSince = .nan
+      silentEnd = start
+    }
+    os_unfair_lock_lock(lock)
+    pubSilentRun = silentRun
+    pubSilentSince = silentSince
+    pubSilentEnd = silentEnd
+    pubLevelDb = db
+    pubSilenceTime = now
+    os_unfair_lock_unlock(lock)
   }
 
   @inline(__always)

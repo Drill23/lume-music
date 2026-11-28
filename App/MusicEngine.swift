@@ -18,6 +18,8 @@ actor MusicEngine {
     var audioOnly: Bool = false
     /// Alternativa já resolvida (MP4 progressivo itag 18) caso o AVPlayer recuse o áudio puro.
     var fallbackURL: URL? = nil
+    /// Sonoridade da faixa (YouTube `playerConfig.audioConfig.loudnessDb`; positivo = mais alta que a referência).
+    var loudnessDb: Double? = nil
   }
 
   private var streamCache: [String: ResolvedStream] = [:]
@@ -382,6 +384,10 @@ actor MusicEngine {
       let (data, _) = try await session.data(for: req)
       guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
             let sd = json["streamingData"] as? [String: Any] else { return nil }
+      let audioConfig = (json["playerConfig"] as? [String: Any])?["audioConfig"] as? [String: Any]
+      let loudness = (audioConfig?["loudnessDb"] as? NSNumber)?.doubleValue
+        ?? (audioConfig?["perceptualLoudnessDb"] as? NSNumber)?.doubleValue
+      LoudnessStore.shared.record(db: loudness, key: videoId)
 
       // 0. Áudio puro AAC (itag 140; reserva 139 HE-AAC) — arquivo m4a progressivo: o tap de FFT funciona.
       let combined = (sd["formats"] as? [[String: Any]]) ?? []
@@ -399,18 +405,18 @@ actor MusicEngine {
       if let fmt = audioFmt, let urlStr = fmt["url"] as? String, let streamURL = URL(string: urlStr) {
         let br = max(96000, (fmt["bitrate"] as? Int) ?? 128000)
         return ResolvedStream(url: streamURL, headers: [:], bitrate: br, expiresAt: Date().addingTimeInterval(40 * 60),
-                              audioOnly: true, fallbackURL: progressiveURL)
+                              audioOnly: true, fallbackURL: progressiveURL, loudnessDb: loudness)
       }
 
       // 1. Progressive formats (itag 18 MP4/AAC-LC) — reserva: toca nativo no AVPlayer, sem PO-token.
       if let fmt = preferredProgressive, let streamURL = progressiveURL {
         let br = max(96000, (fmt["bitrate"] as? Int) ?? 128000)
-        return ResolvedStream(url: streamURL, headers: [:], bitrate: br, expiresAt: Date().addingTimeInterval(40 * 60))
+        return ResolvedStream(url: streamURL, headers: [:], bitrate: br, expiresAt: Date().addingTimeInterval(40 * 60), loudnessDb: loudness)
       }
 
       // 2. HLS manifest if provided
       if let hls = sd["hlsManifestUrl"] as? String, let hlsURL = URL(string: hls) {
-        return ResolvedStream(url: hlsURL, headers: [:], bitrate: 128000, expiresAt: Date().addingTimeInterval(25 * 60))
+        return ResolvedStream(url: hlsURL, headers: [:], bitrate: 128000, expiresAt: Date().addingTimeInterval(25 * 60), loudnessDb: loudness)
       }
     } catch {}
     return nil

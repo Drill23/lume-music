@@ -96,6 +96,8 @@ struct SettingsView: View {
       }
       .listRowBackground(Theme.canvasRaised)
 
+      SettingsAudioExtras()
+
       Section("Estúdio Vinil & K7") {
         Picker(selection: $store.turntableFinish) {
           ForEach(TurntableFinish.allCases) { Text($0.rawValue).tag($0) }

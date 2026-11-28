@@ -83,10 +83,20 @@ final class AudioPlayer: ObservableObject {
   private var crossfadeTriggered = false
   private var shouldFadeInNext = false
 
+  // Áudio 5.2: volume igual entre as músicas + pular silêncio
+  /// Sonoridade da faixa atual (loudnessDb do YouTube; nil = sem dado → 0 dB).
+  private var currentLoudnessDb: Double?
+  private var skipSilenceOn = AudioPrefs.skipSilenceEnabled
+  private var skipEndFired = false
+  private var introSilenceDone = false
+  private var introSkipping = false
+  private var lastSilenceSeekWall: CFTimeInterval = 0
+
   private init() {
     configureAudioSession()
     configureRemoteCommands()
     AudioSpectrum.shared.setEQGains(LibraryStore.shared.effectiveEQGains)
+    refreshAudioDSP(immediate: true)
     let nc = NotificationCenter.default
     lifecycleObservers.append(nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated { self?.inBackground = true }
@@ -109,6 +119,21 @@ final class AudioPlayer: ObservableObject {
   func refreshLockScreenArtwork() {
     guard let track = currentTrack else { return }
     scheduleLockArtwork(for: track)
+  }
+
+  // MARK: - Áudio 5.2 (volume igual, limitador, pular silêncio)
+
+  /// Chamado pelos Ajustes quando "Volume igual" ou "Pular silêncio" mudam: rampa de ~300 ms, sem estalo.
+  func audioPrefsChanged() {
+    refreshAudioDSP(immediate: false)
+  }
+
+  /// Calcula o ganho (volume igual) e liga/desliga a medição de silêncio. `immediate` = faixa nova (sem rampa).
+  private func refreshAudioDSP(immediate: Bool) {
+    let db = AudioPrefs.normalizeEnabled ? LoudnessMath.gainDb(forLoudnessDb: currentLoudnessDb) : 0
+    AudioSpectrum.shared.setOutputGain(db: db, immediate: immediate)
+    skipSilenceOn = AudioPrefs.skipSilenceEnabled
+    AudioSpectrum.shared.setSilenceMeasuring(skipSilenceOn)
   }
 
   /// Ganchos de depuração para o simulador: `-LMDebugPlay <videoId>` toca direto e
@@ -375,6 +400,10 @@ final class AudioPlayer: ObservableObject {
     showTranslation = LibraryStore.shared.autoTranslateLyrics
     currentAnimatedArtURL = track.animatedArtworkURL
     crossfadeTriggered = false
+    skipEndFired = false
+    introSilenceDone = false
+    introSkipping = false
+    currentLoudnessDb = nil
     LibraryStore.shared.recordPlay(track)
     sessionHistory.removeAll { $0.id == track.id }
     sessionHistory.insert(track, at: 0)
@@ -458,6 +487,7 @@ final class AudioPlayer: ObservableObject {
         let localURL = store.localAudioURL(for: track.id)
         let asset = AVURLAsset(url: localURL)
         self.currentBitrateLabel = "Offline · AAC"
+        self.currentLoudnessDb = LoudnessStore.shared.db(for: track.videoId, track.id)
         self.beginAVPlayback(asset: asset, track: track)
         return
       }
@@ -492,6 +522,7 @@ final class AudioPlayer: ObservableObject {
       guard !Task.isCancelled else { return }
       self.currentBitrateLabel = resolved.audioOnly ? "AAC · \(max(96, resolved.bitrate / 1000)) kbps" : "AAC · Estéreo"
       self.pendingFallbackURL = resolved.audioOnly ? resolved.fallbackURL : nil
+      self.currentLoudnessDb = resolved.loudnessDb ?? LoudnessStore.shared.db(for: vid, track.id)
       let asset = resolved.headers.isEmpty
         ? AVURLAsset(url: resolved.url)
         : AVURLAsset(url: resolved.url, options: ["AVURLAssetHTTPHeaderFieldsKey": resolved.headers])
@@ -533,6 +564,7 @@ final class AudioPlayer: ObservableObject {
     let item = AVPlayerItem(asset: asset)
     item.preferredForwardBufferDuration = 12
     item.audioTimePitchAlgorithm = abs(varispeed - 1) < 0.001 ? .timeDomain : .varispeed
+    refreshAudioDSP(immediate: true)   // ganho da faixa já pronto quando o tap nascer
     AudioSpectrum.shared.attach(to: item)
     let p = AVPlayer(playerItem: item)
     p.automaticallyWaitsToMinimizeStalling = true
@@ -593,20 +625,7 @@ final class AudioPlayer: ObservableObject {
       forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
     ) { [weak self] _ in
       Task { @MainActor [weak self] in
-        guard let self else { return }
-        if self.sleepTimerOption == .endOfTrack {
-          self.sleepTimerOption = .off
-          self.sleepRemainingSeconds = 0
-          self.isPlaying = false
-          return
-        }
-        if self.repeatMode == .one {
-          self.seek(to: 0)
-          self.player?.playImmediately(atRate: self.playbackRate)
-          self.isPlaying = true
-        } else {
-          self.nextTrack()
-        }
+        self?.handleTrackEnded(skipped: false)
       }
     }
 
@@ -622,6 +641,59 @@ final class AudioPlayer: ObservableObject {
     isPlaying = true
     isLoading = false
     updateNowPlaying()
+  }
+
+  /// Fim da faixa — usado pelo fim natural e pelo "pular silêncio" (mesmo caminho: sleep timer, repetir uma, fila/rádio).
+  private func handleTrackEnded(skipped: Bool) {
+    if sleepTimerOption == .endOfTrack {
+      sleepTimerOption = .off
+      sleepRemainingSeconds = 0
+      isPlaying = false
+      if skipped { player?.pause() }   // no fim natural o áudio já parou sozinho
+      return
+    }
+    if repeatMode == .one {
+      seek(to: 0)
+      player?.playImmediately(atRate: playbackRate)
+      isPlaying = true
+    } else {
+      nextTrack()
+    }
+  }
+
+  /// Pular silêncio (só começo e fim da faixa). A thread de áudio apenas mede; a decisão é aqui, a cada tick de 0,15 s.
+  private func skipSilenceTick(now: Double, dur: Double) {
+    guard skipSilenceOn, isPlaying, !isLoading, let pl = player, pl.timeControlStatus == .playing,
+          let s = AudioSpectrum.shared.silenceSnapshot(), s.age < 0.6 else { return }
+    let wall = CACurrentMediaTime()
+
+    // Começo: primeiros 15 s. Só pula silêncio que vem desde o início da faixa (nunca uma pausa no meio).
+    if !introSilenceDone {
+      if now >= 15 || s.run == 0 {
+        introSilenceDone = true        // passou da janela, ou o som já começou
+      } else if wall - lastSilenceSeekWall > 0.25, s.since.isFinite, s.end.isFinite,
+                introSkipping || s.since <= 0.6,
+                s.since <= now + 0.1, s.end >= now, s.end <= now + 8 {
+        // Só salta sobre silêncio JÁ medido (tap vê o áudio um pouco à frente do ponto de reprodução) e para
+        // um instante antes do 1º bloco com som: o ataque da primeira nota fica inteiro.
+        let target = min(s.end - 0.08, 15.5)
+        if target - now >= 0.15 {
+          introSkipping = true
+          lastSilenceSeekWall = wall
+          seek(to: target)
+          return
+        }
+      }
+    }
+
+    // Fim: nos últimos 20 s, 1,5 s seguidos de silêncio → próxima faixa (mesmo caminho do fim natural).
+    if !skipEndFired, !crossfadeTriggered, dur > 30, now >= dur - 20, s.run >= 1.5,
+       !s.since.isFinite || s.since <= now {
+      skipEndFired = true
+      crossfadeTriggered = true        // o crossfade não dispara de novo por cima
+      PlaybackClock.shared.currentTime = now
+      handleTrackEnded(skipped: true)
+    }
   }
 
   private func handleTick(_ cm: CMTime) {
@@ -667,6 +739,7 @@ final class AudioPlayer: ObservableObject {
         pl.volume = baseVol
       }
     }
+    if skipSilenceOn { skipSilenceTick(now: now, dur: dur) }
   }
 
   /// Se o áudio puro (itag 140) falhar, troca para o MP4 progressivo já resolvido, do mesmo ponto.
