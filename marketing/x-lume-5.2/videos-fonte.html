@@ -1,0 +1,111 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>
+:root{
+  --bg:#07070A; --ink:#F5F5F7; --muted:rgba(245,245,247,.66); --faint:rgba(245,245,247,.42);
+  --rose:#FF5C9A; --peach:#FF9466; --lav:#A77BFF; --sky:#62B6FF;
+  --grad:linear-gradient(92deg,#FF9466 0%,#FF5C9A 34%,#A77BFF 68%,#62B6FF 100%);
+  --m:88px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1080px;height:1350px;overflow:hidden;background:var(--bg)}
+body{font-family:"SF Pro Display","SF Pro Text",-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;color:var(--ink);
+  -webkit-font-smoothing:antialiased;text-rendering:geometricPrecision;position:relative}
+.slide{display:none;position:absolute;inset:0;overflow:hidden}
+/* luz de fundo */
+.glow{position:absolute;inset:0;pointer-events:none;background:
+  radial-gradient(560px 520px at 12% 70%,rgba(255,92,154,.30),transparent 70%),
+  radial-gradient(600px 560px at 92% 62%,rgba(167,123,255,.32),transparent 70%),
+  radial-gradient(520px 420px at 50% 98%,rgba(98,182,255,.22),transparent 70%)}
+.glow i{display:none}
+.grain{position:absolute;inset:0;background:radial-gradient(ellipse 90% 55% at 50% 0%,rgba(255,255,255,.06),transparent 70%)}
+/* barra superior */
+.top{position:absolute;left:var(--m);right:var(--m);top:68px;height:52px;display:flex;align-items:center;justify-content:space-between;z-index:5}
+.brand{display:flex;align-items:center;gap:14px;font-size:25px;font-weight:600;letter-spacing:-.01em}
+.brand img{width:48px;height:48px;border-radius:12px;box-shadow:0 0 0 1px rgba(255,255,255,.12)}
+.count{font-size:20px;font-weight:500;color:var(--faint);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.count b{color:var(--ink);font-weight:600}
+/* bloco de texto */
+.copy{position:absolute;left:var(--m);right:var(--m);top:168px;text-align:center;z-index:5}
+.eyebrow{display:inline-block;font-size:19px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;
+  background:var(--grad);-webkit-background-clip:text;color:transparent}
+h1{text-wrap:balance;margin-top:20px;font-size:72px;line-height:1.03;font-weight:700;letter-spacing:-.032em}
+.lede{text-wrap:balance;margin:22px auto 0;max-width:840px;font-size:28px;line-height:1.42;font-weight:400;color:var(--muted);letter-spacing:-.005em}
+/* pílulas de especificação */
+.specs{margin-top:28px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
+.specs span{display:inline-flex;align-items:center;gap:9px;height:46px;padding:0 20px;border-radius:23px;font-size:20px;font-weight:600;
+  color:var(--ink);background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.specs svg{width:20px;height:20px;stroke:#FF8DB8;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+/* iPhone */
+.phone{position:absolute;--w:440px;width:var(--w);aspect-ratio:1206/2622;border-radius:calc(var(--w)*.165);
+  padding:calc(var(--w)*.026);background:#050506;
+  box-shadow:0 0 0 calc(var(--w)*.007) #3d3d43, 0 0 0 calc(var(--w)*.0115) #18181b, 0 0 0 calc(var(--w)*.013) rgba(255,255,255,.16),
+    0 50px 120px rgba(0,0,0,.65), 0 20px 50px rgba(0,0,0,.45)}
+.phone img{display:block;width:100%;height:100%;border-radius:calc(var(--w)*.14);object-fit:cover}
+.phone::before,.phone::after{content:"";position:absolute;width:calc(var(--w)*.012);border-radius:3px;background:linear-gradient(90deg,#2a2a2f,#55555c,#2a2a2f)}
+.phone::before{left:calc(var(--w)*-.024);top:22%;height:7%;box-shadow:0 calc(var(--w)*.21) 0 #3a3a40}
+.phone::after{right:calc(var(--w)*-.024);top:27%;height:11%}
+.phone.land{aspect-ratio:2622/1206;border-radius:calc(var(--w)*.075);padding:calc(var(--w)*.012)}
+.phone.land img{border-radius:calc(var(--w)*.065)}
+.phone.land::before,.phone.land::after{display:none}
+.center{left:50%;transform:translateX(-50%)}
+.reflect{position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(125deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,0) 28%)}
+/* cartão do widget */
+.widget{position:absolute;width:760px;left:50%;transform:translateX(-50%);border-radius:44px;overflow:hidden;
+  box-shadow:0 0 0 1px rgba(255,255,255,.14),0 40px 100px rgba(0,0,0,.6)}
+.widget img{display:block;width:100%}
+.rows{position:absolute;left:50%;transform:translateX(-50%);width:760px;display:grid;gap:14px}
+.row{display:flex;align-items:center;gap:22px;padding:24px 28px;border-radius:28px;background:rgba(255,255,255,.055);box-shadow:inset 0 0 0 1px rgba(255,255,255,.10)}
+.row .ic{flex:none;width:58px;height:58px;border-radius:16px;display:grid;place-items:center;background:var(--grad)}
+.row .ic svg{width:28px;height:28px;stroke:#fff;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.row h3{font-size:26px;font-weight:650;letter-spacing:-.01em}
+.row p{margin-top:4px;font-size:20px;line-height:1.35;color:var(--muted)}
+/* CTA */
+.cta{margin-top:30px;display:flex;justify-content:center;gap:14px}
+.btn{height:64px;padding:0 34px;border-radius:32px;display:inline-flex;align-items:center;gap:12px;font-size:24px;font-weight:650;letter-spacing:-.005em}
+.btn.pri{background:var(--grad);color:#fff;box-shadow:0 18px 40px rgba(255,92,154,.35)}
+.btn.sec{background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)}
+.btn svg{width:24px;height:24px;fill:currentColor}
+.url{margin-top:22px;font-size:22px;font-weight:500;color:var(--faint);letter-spacing:.01em}
+.modes{position:absolute;left:var(--m);right:var(--m);top:1110px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;z-index:5}
+.modes div{padding:20px 12px;border-radius:24px;text-align:center;background:rgba(255,255,255,.055);box-shadow:inset 0 0 0 1px rgba(255,255,255,.10)}
+.modes b{display:block;font-size:24px;font-weight:650;letter-spacing:-.01em}
+.modes span{display:block;margin-top:6px;font-size:17px;color:var(--muted)}
+.fade{position:absolute;left:0;right:0;bottom:0;height:150px;background:linear-gradient(transparent,var(--bg));z-index:4}
+
+/* camadas do vídeo: bg = tudo menos a moldura; ov = só a moldura (tela vazada) + véu de baixo */
+body.ov{background:transparent!important}
+body.ov .glow,body.ov .grain,body.ov .top,body.ov .copy{visibility:hidden}
+body.ov .vphone{background:transparent;box-shadow:0 0 0 calc(var(--w)*.007) #3d3d43,0 0 0 calc(var(--w)*.0115) #18181b,0 0 0 calc(var(--w)*.013) rgba(255,255,255,.16)}
+body.bg .vphone::before,body.bg .vphone::after{display:none}
+body.bg .vphone{border-color:#050506;background:#050506}
+.vphone{position:absolute;--w:470px;width:var(--w);aspect-ratio:1206/2622;box-sizing:border-box;border-radius:calc(var(--w)*.165);
+  border:calc(var(--w)*.026) solid #050506;
+  box-shadow:0 0 0 calc(var(--w)*.007) #3d3d43,0 0 0 calc(var(--w)*.0115) #18181b,0 0 0 calc(var(--w)*.013) rgba(255,255,255,.16),0 50px 120px rgba(0,0,0,.65),0 20px 50px rgba(0,0,0,.45)}
+.vphone::before,.vphone::after{content:"";position:absolute;width:calc(var(--w)*.012);border-radius:3px;background:linear-gradient(90deg,#2a2a2f,#55555c,#2a2a2f)}
+.vphone::before{left:calc(var(--w)*-.05);top:22%;height:7%;box-shadow:0 calc(var(--w)*.21) 0 #3a3a40}
+.vphone::after{right:calc(var(--w)*-.05);top:27%;height:11%}
+.vphone.land{aspect-ratio:2622/1206;border-radius:calc(var(--w)*.075);border-width:calc(var(--w)*.012)}
+.vphone.land::before,.vphone.land::after{display:none}
+body.ov .fade{visibility:visible}
+body.bg .fade{display:none}
+.steps{position:absolute;left:var(--m);right:var(--m);top:1110px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.steps div{padding:24px 16px 22px;border-radius:26px;text-align:center;background:rgba(255,255,255,.055);box-shadow:inset 0 0 0 1px rgba(255,255,255,.10)}
+.steps .n{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:50%;font-size:17px;font-weight:700;color:#fff;background:var(--grad)}
+.steps b{display:block;margin-top:12px;font-size:24px;font-weight:650;letter-spacing:-.01em}
+.steps span:not(.n){display:block;margin-top:5px;font-size:18px;color:var(--muted)}
+body.ov .steps{visibility:hidden}
+.badge{display:inline-flex;align-items:center;gap:10px;margin-top:26px;height:44px;padding:0 18px;border-radius:22px;font-size:19px;font-weight:600;color:var(--muted);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.10)}
+.badge i{width:9px;height:9px;border-radius:50%;background:#FF5C9A;box-shadow:0 0 0 4px rgba(255,92,154,.18)}
+</style></head><body>
+<section class="slide" id="v6"><div class="glow"></div><div class="grain"></div><div class="top"><div class="brand"><img src="a/icon.png">Lume Music</div><div class="count"><b>06</b> / 11</div></div><div class="copy"><span class="eyebrow">Navegação em paisagem</span><h1>Vire o celular.<br>Folheie suas capas.</h1><p class="lede">Cover Flow em 3D: deslize pelas capas e toque em uma para ver as faixas do álbum.</p></div><div class="vphone land center" id="ph" style="--w:960px;top:560px"></div>
+<div class="steps"><div><span class="n">1</span><b>Deslize</b><span>para folhear as capas</span></div><div><span class="n">2</span><b>Toque na capa</b><span>para ver as faixas</span></div><div><span class="n">3</span><b>Toque na faixa</b><span>para começar a ouvir</span></div></div></section>
+<section class="slide" id="v9"><div class="glow"></div><div class="grain"></div><div class="top"><div class="brand"><img src="a/icon.png">Lume Music</div><div class="count"><b>09</b> / 11</div></div><div class="copy"><span class="eyebrow">Modo Fita</span><h1>A sua música em fita.</h1><p class="lede">Lado A e lado B, contador de minutos e medidores VU que acompanham o som em tempo real.</p></div><div class="vphone center" id="ph" style="--w:470px;top:560px"></div><div class="fade"></div></section>
+<section class="slide" id="v10"><div class="glow"></div><div class="grain"></div><div class="top"><div class="brand"><img src="a/icon.png">Lume Music</div><div class="count"><b>10</b> / 11</div></div><div class="copy"><span class="eyebrow">Modo Vinil</span><h1>Um toca-discos no seu bolso.</h1><p class="lede">O disco gira com a capa no selo, com 33⅓ e 45 rotações e controle de pitch.</p></div><div class="vphone center" id="ph" style="--w:470px;top:560px"></div><div class="fade"></div></section>
+<section class="slide" id="v11"><div class="glow"></div><div class="grain"></div><div class="top"><div class="brand"><img src="a/icon.png">Lume Music</div><div class="count"><b>11</b> / 11</div></div><div class="copy"><span class="eyebrow">Modo Ondas</span><h1>Veja a música acontecer.</h1><p class="lede">Um visualizador que reage à batida em tempo real, com cinco estilos para escolher.</p></div><div class="vphone center" id="ph" style="--w:470px;top:560px"></div><div class="fade"></div></section>
+
+<script>
+const q=new URLSearchParams(location.search);document.body.className=q.get('layer')||'bg';if(document.body.className==='ov'){document.documentElement.style.background='transparent';document.body.style.background='transparent';}
+const s=document.getElementById(q.get('id'));s.style.display='block';
+const r=s.querySelector('#ph').getBoundingClientRect();const b=parseFloat(getComputedStyle(s.querySelector('#ph')).borderTopWidth);
+document.title=JSON.stringify({x:r.left+b,y:r.top+b,w:r.width-2*b,h:r.height-2*b});
+</script></body></html>

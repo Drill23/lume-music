@@ -529,3 +529,25 @@ h3 { font-size: 22px; line-height: 1.2; letter-spacing: -.015em; font-weight: 65
   .js [data-reveal] { opacity: 1; transform: none; filter: none; }
   .tilt { transform: none; }
 }
+
+/* ---- guia de instalação detalhado ---- */
+.need { padding: 18px 20px; border-radius: 22px; background: color-mix(in srgb, var(--ink) 4%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent); }
+.need__t { font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ink2); margin-bottom: 10px; }
+.need__list { list-style: none; display: grid; gap: 8px; padding: 0; margin: 0; }
+.need__list li { position: relative; padding-left: 22px; font-size: 15px; line-height: 1.45; color: var(--ink); }
+.need__list li::before { content: ""; position: absolute; left: 4px; top: .6em; width: 7px; height: 7px; border-radius: 50%; background: var(--prism); }
+.guide { border-radius: 24px; background: color-mix(in srgb, var(--ink) 3%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent); }
+.guide summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; font-size: 17px; font-weight: 650; color: var(--ink); }
+.guide summary::-webkit-details-marker { display: none; }
+.guide summary i { position: relative; width: 26px; height: 26px; border-radius: 50%; flex: none; background: color-mix(in srgb, var(--ink) 8%, transparent); transition: transform .35s cubic-bezier(.2,.8,.2,1); }
+.guide summary i::before, .guide summary i::after { content: ""; position: absolute; left: 50%; top: 50%; width: 11px; height: 2px; border-radius: 2px; background: var(--ink); transform: translate(-50%,-50%); }
+.guide summary i::after { transform: translate(-50%,-50%) rotate(90deg); }
+.guide[open] summary i { transform: rotate(135deg); }
+.guide__tag { margin-left: 8px; display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-style: normal; font-weight: 650; background: var(--prism); color: #15151e; vertical-align: 2px; }
+.guide__body { padding: 0 14px 16px; }
+.guide__body .install-steps li { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.guide__list { display: grid; gap: 10px; padding: 0 6px 0 24px; margin: 0; }
+.guide__list li { font-size: 14.5px; line-height: 1.5; color: var(--ink2); }
+.guide__list strong { color: var(--ink); }
+.guide[open] .guide__body { animation: faqIn .5s cubic-bezier(.2,.8,.2,1); }
+.install-card code { font-size: .92em; padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 7%, transparent); }
