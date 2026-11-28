@@ -24,16 +24,16 @@ class AudioSectionCTest {
     // ---------- dB → ganho ----------
 
     @Test fun gainIsMinusLoudnessWithinLimits() {
-        assertEquals(3.0, AudioDsp.normalizationGainDb(-3.0), 1e-9)
-        assertEquals(-4.5, AudioDsp.normalizationGainDb(4.5), 1e-9)
-        assertEquals(0.0, AudioDsp.normalizationGainDb(0.0), 1e-9)
+        assertEquals(4.0, AudioDsp.normalizationGainDb(-1.0), 1e-9)
+        assertEquals(-4.5, AudioDsp.normalizationGainDb(7.5), 1e-9)
+        assertEquals(3.0, AudioDsp.normalizationGainDb(0.0), 1e-9)
     }
 
     @Test fun gainIsClampedToMinus12AndPlus6() {
         assertEquals(6.0, AudioDsp.normalizationGainDb(-20.0), 1e-9)
         assertEquals(6.0, AudioDsp.normalizationGainDb(-6.0), 1e-9)
         assertEquals(-12.0, AudioDsp.normalizationGainDb(30.0), 1e-9)
-        assertEquals(-12.0, AudioDsp.normalizationGainDb(12.0), 1e-9)
+        assertEquals(-12.0, AudioDsp.normalizationGainDb(15.0), 1e-9)
     }
 
     @Test fun missingLoudnessMeansZeroDb() {

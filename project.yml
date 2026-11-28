@@ -29,8 +29,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.adriano.lumemusic.ios
         # LUME_APP: o código compartilhado com o widget (Shared/) só toca o AudioPlayer no app.
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) LUME_APP"
-        MARKETING_VERSION: "5.1.8"
-        CURRENT_PROJECT_VERSION: 15
+        MARKETING_VERSION: "5.2.0"
+        CURRENT_PROJECT_VERSION: 16
         TARGETED_DEVICE_FAMILY: '1,2'
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
@@ -73,8 +73,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.adriano.lumemusic.ios.LumeWidget
-        MARKETING_VERSION: "5.1.8"
-        CURRENT_PROJECT_VERSION: 15
+        MARKETING_VERSION: "5.2.0"
+        CURRENT_PROJECT_VERSION: 16
         TARGETED_DEVICE_FAMILY: '1,2'
         SKIP_INSTALL: YES
         INFOPLIST_FILE: LumeWidget/Info.plist

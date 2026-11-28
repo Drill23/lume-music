@@ -11,10 +11,13 @@ object AudioDsp {
     const val LIMITER_CEILING_DB = -1.0
     const val RAMP_MS = 300.0
 
-    /** Ganho = -loudnessDb, limitado a [-12, +6] dB. Sem dado (ou valor inválido) → 0 dB. */
+    /** Alvo 3 dB acima da referência do YouTube (≈ -11 LUFS, como o "Alto" do Spotify): o app não fica mais baixo que antes. */
+    const val TARGET_OFFSET_DB = 3.0
+
+    /** Ganho = 3 - loudnessDb, limitado a [-12, +6] dB. Sem dado (ou valor inválido) → 0 dB. */
     fun normalizationGainDb(loudnessDb: Double?): Double {
         if (loudnessDb == null || !loudnessDb.isFinite()) return 0.0
-        return (-loudnessDb).coerceIn(MIN_GAIN_DB, MAX_GAIN_DB)
+        return (TARGET_OFFSET_DB - loudnessDb).coerceIn(MIN_GAIN_DB, MAX_GAIN_DB)
     }
 
     fun dbToLinear(db: Double): Double = 10.0.pow(db / 20.0)

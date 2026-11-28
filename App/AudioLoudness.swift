@@ -36,9 +36,12 @@ enum LoudnessMath {
   static let ceilingLinear: Float = powf(10, ceilingDb / 20)
 
   /// loudnessDb do YouTube (positivo = faixa mais alta que a referência) → ganho em dB a aplicar.
+  /// Alvo 3 dB acima da referência do YouTube (≈ -11 LUFS, como o "Alto" do Spotify): o app não fica mais baixo que antes.
+  static let targetOffsetDb: Double = 3
+
   static func gainDb(forLoudnessDb loudness: Double?) -> Double {
     guard let loudness, loudness.isFinite else { return 0 }
-    return min(max(-loudness, minGainDb), maxGainDb)
+    return min(max(targetOffsetDb - loudness, minGainDb), maxGainDb)
   }
 
   static func linear(fromDb db: Double) -> Float {
@@ -196,8 +199,8 @@ enum LoudnessSelfTest {
     var out: [(String, Bool)] = []
 
     // dB → ganho, com limites e dado ausente.
-    out.append(("volume igual: loudness -3 dB → ganho +3 dB", LoudnessMath.gainDb(forLoudnessDb: -3) == 3))
-    out.append(("volume igual: loudness +4,5 dB → ganho -4,5 dB", LoudnessMath.gainDb(forLoudnessDb: 4.5) == -4.5))
+    out.append(("volume igual: loudness -1 dB → ganho +4 dB (alvo +3)", LoudnessMath.gainDb(forLoudnessDb: -1) == 4))
+    out.append(("volume igual: loudness +7,5 dB → ganho -4,5 dB (alvo +3)", LoudnessMath.gainDb(forLoudnessDb: 7.5) == -4.5))
     out.append(("volume igual: ganho limitado a +6 dB", LoudnessMath.gainDb(forLoudnessDb: -20) == 6))
     out.append(("volume igual: ganho limitado a -12 dB", LoudnessMath.gainDb(forLoudnessDb: 30) == -12))
     out.append(("volume igual: sem dado → 0 dB", LoudnessMath.gainDb(forLoudnessDb: nil) == 0 && LoudnessMath.gainDb(forLoudnessDb: .nan) == 0))
