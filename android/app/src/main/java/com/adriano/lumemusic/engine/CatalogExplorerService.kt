@@ -189,9 +189,11 @@ object CatalogExplorerService {
         if (mostPlayed.isNotEmpty()) mixes.add(
             PersonalizedMix("mix_norepeat", "No Repeat", "As que você não para de ouvir", "SEU SOM", "repeat", 0xFF7BA9, 0xAD8CFF, mostPlayed.take(30)),
         )
+        val pool = dedupeTracks(mostPlayed.take(60) + favorites.take(60) + recent.take(40) + br + gl)
         topArtists.firstOrNull()?.let { first ->
-            val matching = (mostPlayed + favorites + recent + br + gl).filter { DiscText.artistMatches(it.artist, first) }
-            val extra = br.filter { it !in matching }.take(10)
+            val matching = pool.filter { DiscText.artistMatches(it.artist, first) }
+            val matchIds = matching.mapTo(HashSet()) { it.id }
+            val extra = br.filter { it.id !in matchIds }.take(10)
             val tracks = dedupeTracks(matching + extra)
             if (tracks.isNotEmpty()) mixes.add(
                 PersonalizedMix("mix_daily1", "Mix Diário 1", "$first e sons na mesma vibe", "PARA VOCÊ", "sparkles", 0x7CC8FF, 0x6366F1, tracks.take(25)),
@@ -199,8 +201,9 @@ object CatalogExplorerService {
         }
         if (topArtists.size >= 2) {
             val second = topArtists[1]
-            val matching = (mostPlayed + favorites + recent + br + gl).filter { DiscText.artistMatches(it.artist, second) }
-            val extra = gl.filter { it !in matching }.take(10)
+            val matching = pool.filter { DiscText.artistMatches(it.artist, second) }
+            val matchIds = matching.mapTo(HashSet()) { it.id }
+            val extra = gl.filter { it.id !in matchIds }.take(10)
             val tracks = dedupeTracks(matching + extra)
             if (tracks.isNotEmpty()) mixes.add(
                 PersonalizedMix("mix_daily2", "Mix Diário 2", "Com $second e sucessos", "DESCOBERTA", "waveform.path.ecg", 0xFFB27A, 0xE0457B, tracks.take(25)),

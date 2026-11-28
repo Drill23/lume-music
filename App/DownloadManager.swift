@@ -214,14 +214,14 @@ final class DownloadManager: ObservableObject {
       for (k, v) in resolved.headers { req.setValue(v, forHTTPHeaderField: k) }
 
       let destBase = await MainActor.run { LibraryStore.shared.localAudioURL(for: track.id).deletingPathExtension() }
-      let partURL = destBase.appendingPathExtension("part")
+      let dlURL = destBase.deletingLastPathComponent().appendingPathComponent(destBase.lastPathComponent + ".dl.mp4")
       let m4aURL = destBase.appendingPathExtension("m4a")
       let mp4URL = destBase.appendingPathExtension("mp4")
 
       do {
         let bytesWritten = try await NativeFileDownloader.download(
           request: req,
-          destination: partURL,
+          destination: dlURL,
           onProgress: { fraction in
             let p = min(0.96, 0.20 + 0.76 * fraction)
             Task { @MainActor [weak self] in
@@ -233,14 +233,15 @@ final class DownloadManager: ObservableObject {
         )
 
         if Task.isCancelled {
-          try? FileManager.default.removeItem(at: partURL)
+          try? FileManager.default.removeItem(at: dlURL)
           return
         }
 
         guard bytesWritten > 32768 else {
-          try? FileManager.default.removeItem(at: partURL)
+          try? FileManager.default.removeItem(at: dlURL)
+          let failedTrack = working
           await MainActor.run {
-            self?.markFailed(working, reason: "Arquivo incompleto")
+            self?.markFailed(failedTrack, reason: "Arquivo incompleto")
           }
           return
         }
@@ -251,18 +252,19 @@ final class DownloadManager: ObservableObject {
           self.progressById[track.id] = 0.98
         }
 
-        // Player só de áudio: extrai a faixa AAC por passthrough (zero recodificação, ~30ms) sem bloquear o AVPlayer.
-        let finalURL = await Self.stripVideoTrackPassthrough(from: partURL, toM4A: m4aURL, fallbackMP4: mp4URL)
+        // Player só de áudio: extrai a faixa AAC por passthrough (~100ms, zero recodificação, fora da MainActor).
+        let finalURL = await Self.stripVideoTrackPassthrough(from: dlURL, toM4A: m4aURL, fallbackMP4: mp4URL)
         if Task.isCancelled {
-          try? FileManager.default.removeItem(at: partURL)
+          try? FileManager.default.removeItem(at: dlURL)
           return
         }
 
         let finalSize = (try? FileManager.default.attributesOfItem(atPath: finalURL.path)[.size] as? Int64) ?? bytesWritten
+        let savedTrack = working
 
         await MainActor.run {
           guard let self else { return }
-          LibraryStore.shared.markDownloaded(working, fileSize: finalSize)
+          LibraryStore.shared.markDownloaded(savedTrack, fileSize: finalSize)
           // Sonoridade guardada de forma permanente: o "volume igual" também vale offline.
           LoudnessStore.shared.pin(db: resolved.loudnessDb ?? LoudnessStore.shared.db(for: vid, track.id), keys: [vid, track.id])
           self.statesById.removeValue(forKey: track.id)
@@ -273,7 +275,6 @@ final class DownloadManager: ObservableObject {
         }
 
         // Prefetch de capa e letra em segundo plano para nunca travar a conclusão em 95–99%.
-        let savedTrack = working
         Task.detached(priority: .background) {
           let artURL = await MainActor.run { ArtworkStore.shared.url(for: savedTrack) }
           if !artURL.isEmpty {
@@ -282,11 +283,12 @@ final class DownloadManager: ObservableObject {
           _ = await LyricsService.shared.fetchLyrics(for: savedTrack)
         }
       } catch is CancellationError {
-        try? FileManager.default.removeItem(at: partURL)
+        try? FileManager.default.removeItem(at: dlURL)
       } catch {
-        try? FileManager.default.removeItem(at: partURL)
+        try? FileManager.default.removeItem(at: dlURL)
+        let failedTrack = working
         await MainActor.run {
-          self?.markFailed(working, reason: "Falha de rede")
+          self?.markFailed(failedTrack, reason: "Falha de rede")
         }
       }
     }
@@ -309,6 +311,7 @@ private final class NativeFileDownloader: NSObject, URLSessionDownloadDelegate, 
   private let onProgress: (Double) -> Void
   private let lock = NSLock()
   private var lastReported: Double = -1
+  private var lastReportTime: CFTimeInterval = 0
   private var continuation: CheckedContinuation<Int64, Error>?
   private var downloadTask: URLSessionDownloadTask?
   private var session: URLSession?
@@ -380,8 +383,11 @@ private final class NativeFileDownloader: NSObject, URLSessionDownloadDelegate, 
   ) {
     guard totalBytesExpectedToWrite > 0 else { return }
     let fraction = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
-    if fraction - lastReported >= 0.02 || fraction >= 1 {
+    let now = CFAbsoluteTimeGetCurrent()
+    // Limita a ~8 atualizações/segundo para não enfileirar dezenas de Tasks na MainActor em Wi-Fi rápido.
+    if (now - lastReportTime >= 0.12 && fraction - lastReported >= 0.03) || fraction >= 1 {
       lastReported = fraction
+      lastReportTime = now
       onProgress(fraction)
     }
   }
@@ -445,9 +451,9 @@ extension DownloadManager {
   /// Remuxa o arquivo baixado (`.part`) só com a faixa de áudio usando `AVAssetExportPresetPassthrough`
   /// (sem recodificar AAC, sem disputar o encoder de áudio com o AVPlayer).
   /// Executa fora da MainActor. Em caso de falha, move o arquivo original para `.mp4`.
-  nonisolated static func stripVideoTrackPassthrough(from partURL: URL, toM4A m4aURL: URL, fallbackMP4 mp4URL: URL) async -> URL {
+  nonisolated static func stripVideoTrackPassthrough(from dlURL: URL, toM4A m4aURL: URL, fallbackMP4 mp4URL: URL) async -> URL {
     let fm = FileManager.default
-    let asset = AVURLAsset(url: partURL)
+    let asset = AVURLAsset(url: dlURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: false])
     let videoTracks = (try? await asset.loadTracks(withMediaType: .video)) ?? []
     let audioTracks = (try? await asset.loadTracks(withMediaType: .audio)) ?? []
 
@@ -455,10 +461,10 @@ extension DownloadManager {
     if videoTracks.isEmpty {
       try? fm.removeItem(at: mp4URL)
       try? fm.removeItem(at: m4aURL)
-      if (try? fm.moveItem(at: partURL, to: m4aURL)) != nil {
+      if (try? fm.moveItem(at: dlURL, to: m4aURL)) != nil {
         return m4aURL
       }
-      try? fm.moveItem(at: partURL, to: mp4URL)
+      try? fm.moveItem(at: dlURL, to: mp4URL)
       return mp4URL
     }
 
@@ -474,7 +480,7 @@ extension DownloadManager {
             let targetType: AVFileType? = compatible.contains(.m4a) ? .m4a : (compatible.contains(.mp4) ? .mp4 : nil)
             if let targetType {
               let ext = targetType == .m4a ? "m4a" : "mp4"
-              let tmpURL = partURL.deletingLastPathComponent().appendingPathComponent(UUID().uuidString + "." + ext)
+              let tmpURL = dlURL.deletingLastPathComponent().appendingPathComponent(UUID().uuidString + "." + ext)
               export.outputURL = tmpURL
               export.outputFileType = targetType
               export.shouldOptimizeForNetworkUse = false
@@ -494,7 +500,7 @@ extension DownloadManager {
                 try? fm.removeItem(at: staleDest)
                 try? fm.removeItem(at: finalDest)
                 try? fm.moveItem(at: tmpURL, to: finalDest)
-                try? fm.removeItem(at: partURL)
+                try? fm.removeItem(at: dlURL)
                 return finalDest
               }
               try? fm.removeItem(at: tmpURL)
@@ -509,7 +515,7 @@ extension DownloadManager {
     // Fallback seguro: mantém o MP4 original (o AudioPlayer já desativa a faixa de vídeo ao tocar).
     try? fm.removeItem(at: m4aURL)
     try? fm.removeItem(at: mp4URL)
-    try? fm.moveItem(at: partURL, to: mp4URL)
+    try? fm.moveItem(at: dlURL, to: mp4URL)
     return mp4URL
   }
 }

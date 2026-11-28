@@ -75,24 +75,42 @@ enum DiscNet {
 }
 
 enum DiscText {
+  private static let reBrackets = try! NSRegularExpression(pattern: #"\([^)]*\)|\[[^\]]*\]"#)
+  private static let reSuffixVersion = try! NSRegularExpression(
+    pattern: #"\s[-–—]\s*(ao vivo|live|remaster(ed)?|acoustic|ac[uú]stico|versão|version|radio edit|single version|topic).*$"#,
+    options: .caseInsensitive)
+  private static let reFeat = try! NSRegularExpression(
+    pattern: #"\s(feat\.?|ft\.?|featuring|part\.?|com)\s.*$"#,
+    options: .caseInsensitive)
+  private static let reNonAlnum = try! NSRegularExpression(pattern: #"[^a-z0-9]+"#)
+  private static let reSplitFeat = try! NSRegularExpression(
+    pattern: #"\s(feat\.?|ft\.?|x|e|and|com|part\.?)\s"#,
+    options: .caseInsensitive)
+  private static let reSearchParens = try! NSRegularExpression(pattern: #"\s*[\(\[][^\)\]]*[\)\]]"#)
+  private static let reSearchDash = try! NSRegularExpression(pattern: #"\s[-–—|]\s.*$"#)
+  private static let enUSLocale = Locale(identifier: "en_US")
+  private static let artistSepSet = CharacterSet(charactersIn: ",&;/")
+
+  private static func replace(_ regex: NSRegularExpression, in s: String, with template: String) -> String {
+    let range = NSRange(s.startIndex..<s.endIndex, in: s)
+    return regex.stringByReplacingMatches(in: s, options: [], range: range, withTemplate: template)
+  }
+
   /// minúsculas, sem acentos, sem (feat ...), "- Ao Vivo", parênteses/colchetes e pontuação.
   static func normalize(_ s: String) -> String {
-    var out = s
-    out = out.replacingOccurrences(of: #"\([^)]*\)|\[[^\]]*\]"#, with: " ", options: .regularExpression)
-    out = out.replacingOccurrences(
-      of: #"\s[-–—]\s*(ao vivo|live|remaster(ed)?|acoustic|ac[uú]stico|versão|version|radio edit|single version|topic).*$"#,
-      with: "", options: [.regularExpression, .caseInsensitive])
-    out = out.replacingOccurrences(
-      of: #"\s(feat\.?|ft\.?|featuring|part\.?|com)\s.*$"#, with: "", options: [.regularExpression, .caseInsensitive])
-    out = out.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "en_US"))
+    var out = replace(reBrackets, in: s, with: " ")
+    out = replace(reSuffixVersion, in: out, with: "")
+    out = replace(reFeat, in: out, with: "")
+    out = out.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: enUSLocale)
     out = out.lowercased()
     out = out.replacingOccurrences(of: "&", with: " e ")
-    out = out.replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+    out = replace(reNonAlnum, in: out, with: " ")
     return out.trimmingCharacters(in: .whitespaces)
   }
 
   /// Verdadeiro se os nomes de artista batem (igual, um contém o outro, ou algum artista de uma lista "A, B & C" bate).
   static func artistMatches(_ a: String, _ b: String) -> Bool {
+    if a.caseInsensitiveCompare(b) == .orderedSame { return !a.isEmpty }
     let na = normalize(a), nb = normalize(b)
     if na.isEmpty || nb.isEmpty { return false }
     if na == nb || na.contains(nb) || nb.contains(na) { return true }
@@ -102,8 +120,8 @@ enum DiscText {
   }
 
   static func splitArtists(_ s: String) -> [String] {
-    s.replacingOccurrences(of: #"\s(feat\.?|ft\.?|x|e|and|com|part\.?)\s"#, with: ",", options: [.regularExpression, .caseInsensitive])
-      .components(separatedBy: CharacterSet(charactersIn: ",&;/"))
+    replace(reSplitFeat, in: s, with: ",")
+      .components(separatedBy: artistSepSet)
       .map { normalize($0) }
       .filter { !$0.isEmpty }
   }
@@ -131,8 +149,8 @@ enum DiscText {
   }
 
   static func searchTitle(_ s: String) -> String {
-    var out = s.replacingOccurrences(of: #"\s*[\(\[][^\)\]]*[\)\]]"#, with: "", options: .regularExpression)
-    out = out.replacingOccurrences(of: #"\s[-–—|]\s.*$"#, with: "", options: .regularExpression)
+    var out = replace(reSearchParens, in: s, with: "")
+    out = replace(reSearchDash, in: out, with: "")
     out = out.trimmingCharacters(in: .whitespacesAndNewlines)
     return out.isEmpty ? s : out
   }

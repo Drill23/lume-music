@@ -141,6 +141,7 @@ final class LibraryStore: ObservableObject {
       try? fm.removeItem(at: dir.appendingPathComponent("\(base).m4a"))
       try? fm.removeItem(at: dir.appendingPathComponent("\(base).mp4"))
       try? fm.removeItem(at: dir.appendingPathComponent("\(base).part"))
+      try? fm.removeItem(at: dir.appendingPathComponent("\(base).dl.mp4"))
     }
   }
 
@@ -151,26 +152,27 @@ final class LibraryStore: ObservableObject {
 
   func register(_ track: Track) {
     if var existing = tracksById[track.id] {
-      if existing.videoId == nil, let v = track.videoId { existing.videoId = v }
-      if existing.artworkURL.isEmpty, !track.artworkURL.isEmpty { existing.artworkURL = track.artworkURL }
-      if existing.animatedArtworkURL == nil, let a = track.animatedArtworkURL { existing.animatedArtworkURL = a }
-      if existing.duration <= 0, track.duration > 0 { existing.duration = track.duration }
-      if existing.album.isEmpty, !track.album.isEmpty { existing.album = track.album }
-      tracksById[track.id] = existing
+      var changed = false
+      if existing.videoId == nil, let v = track.videoId { existing.videoId = v; changed = true }
+      if existing.artworkURL.isEmpty, !track.artworkURL.isEmpty { existing.artworkURL = track.artworkURL; changed = true }
+      if existing.animatedArtworkURL == nil, let a = track.animatedArtworkURL { existing.animatedArtworkURL = a; changed = true }
+      if existing.duration <= 0, track.duration > 0 { existing.duration = track.duration; changed = true }
+      if existing.album.isEmpty, !track.album.isEmpty { existing.album = track.album; changed = true }
+      if changed { tracksById[track.id] = existing }
     } else {
       tracksById[track.id] = track
     }
   }
 
   func updateVideoId(_ videoId: String, for trackId: String) {
-    guard var tr = tracksById[trackId] else { return }
+    guard var tr = tracksById[trackId], tr.videoId != videoId else { return }
     tr.videoId = videoId
     tracksById[trackId] = tr
     save()
   }
 
   func updateAnimatedArt(_ url: String, for trackId: String) {
-    guard var tr = tracksById[trackId] else { return }
+    guard var tr = tracksById[trackId], tr.animatedArtworkURL != url else { return }
     tr.animatedArtworkURL = url
     tracksById[trackId] = tr
     save()
@@ -246,13 +248,21 @@ final class LibraryStore: ObservableObject {
   }
 
   func removeAllDownloads() {
-    for id in Array(downloadedIds) {
-      let base = safeName(id)
-      try? FileManager.default.removeItem(at: offlineDir.appendingPathComponent("\(base).mp4"))
-      try? FileManager.default.removeItem(at: offlineDir.appendingPathComponent("\(base).m4a"))
-    }
+    let dir = offlineDir
+    let bases = downloadedIds.map { safeName($0) }
     downloadedIds.removeAll()
+    cachedFileSizes.removeAll()
+    offlineStorageBytes = 0
     save()
+    Task.detached(priority: .utility) {
+      let fm = FileManager.default
+      for base in bases {
+        try? fm.removeItem(at: dir.appendingPathComponent("\(base).mp4"))
+        try? fm.removeItem(at: dir.appendingPathComponent("\(base).m4a"))
+        try? fm.removeItem(at: dir.appendingPathComponent("\(base).part"))
+        try? fm.removeItem(at: dir.appendingPathComponent("\(base).dl.mp4"))
+      }
+    }
   }
 
   var replaySummary: ReplaySummary {
@@ -445,23 +455,26 @@ final class LibraryStore: ObservableObject {
           total += sz
         }
       }
-      // Remove arquivos .part órfãos de downloads interrompidos
+      // Remove arquivos temporários órfãos de downloads interrompidos
       if let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
-        for f in files where f.pathExtension == "part" {
+        for f in files where f.pathExtension == "part" || f.lastPathComponent.hasSuffix(".dl.mp4") {
           try? fm.removeItem(at: f)
         }
       }
+      let finalValid = valid
+      let finalSizes = sizes
+      let finalTotal = total
       await MainActor.run { [weak self] in
         guard let self else { return }
         // Preserva downloads adicionados enquanto a varredura rodava
         let newlyAdded = self.downloadedIds.subtracting(currentIds)
-        let merged = valid.union(newlyAdded)
+        let merged = finalValid.union(newlyAdded)
         if merged != self.downloadedIds {
           self.downloadedIds = merged
           self.save()
         }
-        for (id, sz) in sizes { self.cachedFileSizes[id] = sz }
-        var sum = total
+        for (id, sz) in finalSizes { self.cachedFileSizes[id] = sz }
+        var sum = finalTotal
         for id in newlyAdded { sum += self.cachedFileSizes[id] ?? 0 }
         self.offlineStorageBytes = sum
       }

@@ -1,20 +1,20 @@
 {
-  "versionName": "5.2.2",
-  "build": 18,
+  "versionName": "5.2.3",
+  "build": 19,
   "mandatory": false,
-  "notes": "• Correção do travamento ao baixar músicas durante a reprodução + mais velocidade",
+  "notes": "• Correção definitiva do travamento ao finalizar downloads e muito mais fluidez com bibliotecas grandes",
   "android": {
-    "build": 18,
-    "versionName": "5.2.2",
+    "build": 19,
+    "versionName": "5.2.3",
     "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-Android.apk",
-    "notes": "• Downloads offline muito mais rápidos, sem travar em 95–99% e sem interromper a música tocando\n• Busca progressiva: músicas, artistas e álbuns aparecem na hora sem esperar a busca por letras\n• Avisos (toasts) agora aparecem corretamente por cima do player\n• Correções em Artistas seguidos, Central de Downloads, Limpar cache e gestos do player\n• Menos uso de bateria com animações pausadas em segundo plano e menos leitura de disco na interface",
+    "notes": "• Início e downloads mais leves com bibliotecas grandes (mixes em cache e regex pré-compilada)\n• Downloads offline rápidos, sem travar em 95–99% e sem reiniciar a faixa tocando\n• Busca progressiva, avisos visíveis por cima do player e correções gerais",
     "mandatory": false
   },
   "ios": {
-    "build": 18,
-    "versionName": "5.2.2",
+    "build": 19,
+    "versionName": "5.2.3",
     "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-iPhone.ipa",
-    "notes": "• Corrigido o travamento do player ao baixar uma música em 95–99% (remux instantâneo em passthrough fora da thread principal)\n• Busca muito mais rápida: sugestões ao vivo corrigidas e resultados progressivos\n• Corrigido o cartão de compartilhamento de letra/música, grade de países na busca e toque no widget\n• Interface mais fluida durante downloads e rolagens (menos leitura de disco e re-renderizações)\n• Correções na fila ("Tocar a seguir"), modo offline, limpeza de cache e economia de bateria nos palcos",
+    "notes": "• Corrigido definitivamente o travamento total do player ao finalizar downloads (loop infinito no RootView + recálculo pesado da HomeView)\n• Áudio offline agora salva em .m4a só de áudio via passthrough em ~130 ms sem interferir na reprodução\n• Fechar o player agora é instantâneo (0,3 ms) mesmo baixando faixas em bibliotecas grandes\n• Biblioteca e menus de faixas isolados para zero travamentos durante downloads",
     "mandatory": false
   }
 }

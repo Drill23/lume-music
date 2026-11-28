@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 // MARK: - Routes
@@ -52,12 +53,46 @@ final class AppModel: ObservableObject {
   @Published var showCoverFlow = false
   @Published var playlistPickerTrack: Track?
   @Published var toast: String?
+  @Published var hasActiveTrack = false
   @Published var searchFocusToken = 0
   @Published var searchLyricsToken = 0
   /// Depuração (`-LMDebugRoute search:<texto>`): texto que a busca deve preencher ao abrir.
   @Published var debugSearchText: String?
   /// Depuração (`-LMDebugRoute queue`): o Tocando agora abre já com a fila.
   @Published var debugOpenQueue = false
+
+  private var bag = Set<AnyCancellable>()
+  private var toastTask: Task<Void, Never>?
+
+  private init() {
+    hasActiveTrack = AudioPlayer.shared.currentTrack != nil
+    // Assinaturas únicas (no ciclo de vida do singleton): nunca recriam .removeDuplicates() dentro de View.body,
+    // o que causava loop infinito na Main Thread assim que downloads.lastMessage ou player.errorToast ficava não-nulo.
+    DownloadManager.shared.$lastMessage
+      .dropFirst()
+      .compactMap { $0 }
+      .sink { [weak self] msg in
+        MainActor.assumeIsolated { self?.showToast(msg) }
+      }
+      .store(in: &bag)
+    AudioPlayer.shared.$errorToast
+      .dropFirst()
+      .compactMap { $0 }
+      .sink { [weak self] msg in
+        MainActor.assumeIsolated { self?.showToast(msg) }
+      }
+      .store(in: &bag)
+    AudioPlayer.shared.$currentTrack
+      .map { $0 != nil }
+      .removeDuplicates()
+      .sink { [weak self] active in
+        MainActor.assumeIsolated {
+          guard let self, self.hasActiveTrack != active else { return }
+          self.hasActiveTrack = active
+        }
+      }
+      .store(in: &bag)
+  }
 
   func openLyricsSearch() {
     tab = .search
@@ -262,10 +297,14 @@ final class AppModel: ObservableObject {
   }
 
   func showToast(_ text: String) {
-    withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { toast = text }
-    Task {
+    toastTask?.cancel()
+    if toast != text {
+      withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { toast = text }
+    }
+    toastTask = Task { [weak self] in
       try? await Task.sleep(for: .seconds(2.8))
-      if toast == text { withAnimation(.easeOut(duration: 0.25)) { toast = nil } }
+      guard !Task.isCancelled, let self, self.toast == text else { return }
+      withAnimation(.easeOut(duration: 0.25)) { self.toast = nil }
     }
   }
 }
@@ -275,11 +314,11 @@ final class AppModel: ObservableObject {
 struct RootView: View {
   @ObservedObject private var app = AppModel.shared
   // 5.0 (desempenho): o RootView NÃO observa mais o player nem os downloads inteiros — qualquer
-  // @Published deles re-renderizava as 4 abas (todas vivas no ZStack). Assina só o que usa.
+  // @Published deles re-renderizava as 4 abas (todas vivas no ZStack).
   private let player = AudioPlayer.shared
-  private let downloads = DownloadManager.shared
-  @State private var hasTrack = AudioPlayer.shared.currentTrack != nil
   @Environment(\.scenePhase) private var scenePhase
+
+  private var hasTrack: Bool { app.hasActiveTrack }
 
   var body: some View {
     ZStack(alignment: .bottom) {
@@ -387,9 +426,6 @@ struct RootView: View {
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { Task { await app.loadFeed() } }
     }
-    .onReceive(downloads.$lastMessage.removeDuplicates()) { msg in if let msg { app.showToast(msg) } }
-    .onReceive(player.$errorToast.removeDuplicates()) { msg in if let msg { app.showToast(msg) } }
-    .onReceive(player.$currentTrack.map { $0 != nil }.removeDuplicates()) { hasTrack = $0 }
   }
 
   private func tabOrder(_ t: AppTab) -> Int {

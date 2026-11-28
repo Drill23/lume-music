@@ -13,8 +13,10 @@ object DiscText {
     private val reNonAlnum = Regex("""[^a-z0-9]+""")
     private val reSplitFeat = Regex("""\s(feat\.?|ft\.?|x|e|and|com|part\.?)\s""", RegexOption.IGNORE_CASE)
 
+    private val reMarks = Regex("""\p{M}+""")
+
     fun fold(s: String): String =
-        Normalizer.normalize(s, Normalizer.Form.NFD).replace(Regex("""\p{M}+"""), "")
+        Normalizer.normalize(s, Normalizer.Form.NFD).replace(reMarks, "")
 
     /** minúsculas, sem acentos, sem (feat ...), "- Ao Vivo", parênteses/colchetes e pontuação. */
     fun normalize(s: String): String {
@@ -29,6 +31,7 @@ object DiscText {
     }
 
     fun artistMatches(a: String, b: String): Boolean {
+        if (a.equals(b, ignoreCase = true)) return a.isNotEmpty()
         val na = normalize(a)
         val nb = normalize(b)
         if (na.isEmpty() || nb.isEmpty()) return false

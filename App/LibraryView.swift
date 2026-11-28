@@ -4,7 +4,6 @@ import SwiftUI
 struct LibraryView: View {
   @ObservedObject private var app = AppModel.shared
   @ObservedObject private var store = LibraryStore.shared
-  @ObservedObject private var downloads = DownloadManager.shared
   @State private var showNewPlaylist = false
   @State private var newName = ""
   @State private var filterText = ""
@@ -33,9 +32,7 @@ struct LibraryView: View {
         header
         librarySearchBar
         filterChips
-        if downloads.pendingCount > 0 || !downloads.failedItems.isEmpty {
-          downloadBanner
-        }
+        LibraryDownloadBanner()
         if filterText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && category == .all {
           shortcuts
           replayBanner
@@ -148,42 +145,6 @@ struct LibraryView: View {
       .padding(.horizontal, 20)
     }
     .scrollClipDisabled()
-  }
-
-  private var downloadBanner: some View {
-    Button {
-      Haptics.light()
-      app.push(.downloads)
-    } label: {
-      HStack(spacing: 12) {
-        Image(systemName: downloads.pendingCount > 0 ? "arrow.down.circle.fill" : "exclamationmark.triangle.fill")
-          .font(.system(size: 20, weight: .semibold))
-          .foregroundStyle(downloads.pendingCount > 0 ? Theme.accent : Theme.danger)
-        VStack(alignment: .leading, spacing: 2) {
-          if downloads.pendingCount > 0 {
-            Text(downloads.paused ? "Downloads pausados (\(downloads.pendingCount))" : "Baixando \(downloads.pendingCount) \(downloads.pendingCount == 1 ? "música" : "músicas")")
-              .font(Theme.font(14.5, .semibold))
-              .foregroundStyle(Theme.text)
-            ProgressView(value: downloads.overallProgress).tint(Theme.accent)
-          } else {
-            Text("\(downloads.failedItems.count) downloads falharam")
-              .font(Theme.font(14.5, .semibold))
-              .foregroundStyle(Theme.text)
-            Text("Toque para tentar novamente")
-              .font(Theme.font(12.5))
-              .foregroundStyle(Theme.secondary)
-          }
-        }
-        Spacer()
-        Image(systemName: "chevron.right")
-          .font(.system(size: 12, weight: .semibold))
-          .foregroundStyle(Theme.tertiary)
-      }
-      .padding(14)
-      .glass(20, interactive: true)
-      .padding(.horizontal, 20)
-    }
-    .buttonStyle(PressableStyle(scale: 0.98))
   }
 
   private var replayBanner: some View {
@@ -432,6 +393,50 @@ struct LibraryView: View {
         }
         .padding(.horizontal, 20)
       }
+    }
+  }
+}
+
+// MARK: - Banner isolado de downloads (não re-renderiza a Biblioteca inteira a cada tick)
+
+private struct LibraryDownloadBanner: View {
+  @ObservedObject private var downloads = DownloadManager.shared
+
+  var body: some View {
+    if downloads.pendingCount > 0 || !downloads.failedItems.isEmpty {
+      Button {
+        Haptics.light()
+        AppModel.shared.push(.downloads)
+      } label: {
+        HStack(spacing: 12) {
+          Image(systemName: downloads.pendingCount > 0 ? "arrow.down.circle.fill" : "exclamationmark.triangle.fill")
+            .font(.system(size: 20, weight: .semibold))
+            .foregroundStyle(downloads.pendingCount > 0 ? Theme.accent : Theme.danger)
+          VStack(alignment: .leading, spacing: 2) {
+            if downloads.pendingCount > 0 {
+              Text(downloads.paused ? "Downloads pausados (\(downloads.pendingCount))" : "Baixando \(downloads.pendingCount) \(downloads.pendingCount == 1 ? "música" : "músicas")")
+                .font(Theme.font(14.5, .semibold))
+                .foregroundStyle(Theme.text)
+              ProgressView(value: downloads.overallProgress).tint(Theme.accent)
+            } else {
+              Text("\(downloads.failedItems.count) downloads falharam")
+                .font(Theme.font(14.5, .semibold))
+                .foregroundStyle(Theme.text)
+              Text("Toque para tentar novamente")
+                .font(Theme.font(12.5))
+                .foregroundStyle(Theme.secondary)
+            }
+          }
+          Spacer()
+          Image(systemName: "chevron.right")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Theme.tertiary)
+        }
+        .padding(14)
+        .glass(20, interactive: true)
+        .padding(.horizontal, 20)
+      }
+      .buttonStyle(PressableStyle(scale: 0.98))
     }
   }
 }

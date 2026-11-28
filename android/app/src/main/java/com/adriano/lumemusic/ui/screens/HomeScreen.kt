@@ -226,11 +226,12 @@ private fun Shortcuts() {
 private fun ForYou() {
     val store = LibraryStore
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val mixes: List<PersonalizedMix> = run {
+    val genreMixes = HomeStore.genreMixes
+    val mixes: List<PersonalizedMix> = remember(store.playCounts, store.favoriteIds, store.recentIds, store.followedArtists, genreMixes) {
         val fromHistory = CatalogExplorerService.buildPersonalizedMixes(
             store.mostPlayedTracks, store.favoriteTracks, store.recentTracks, store.topListenedArtists, null,
         ).filter { it.id in setOf("mix_norepeat", "mix_daily1", "mix_daily2", "mix_favorites") }
-        (HomeStore.genreMixes + fromHistory).take(6)
+        (genreMixes + fromHistory).take(6)
     }
     if (mixes.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

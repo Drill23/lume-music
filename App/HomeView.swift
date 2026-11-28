@@ -6,6 +6,7 @@ struct HomeView: View {
   @ObservedObject private var app = AppModel.shared
   @ObservedObject private var store = LibraryStore.shared
   @ObservedObject private var home = HomeStore.shared
+  @State private var cachedHistoryMixes: [PersonalizedMix] = []
 
   private let gutter: CGFloat = 20
   private let sectionGap: CGFloat = 32
@@ -255,30 +256,46 @@ struct HomeView: View {
 
   // MARK: Para você
 
+  /// Chave leve: só recalcula mixes do histórico quando plays/curtidas/seguidos mudam (nunca em download ou toast).
+  private var historyMixKey: String {
+    let topRecent = store.recentIds.first ?? ""
+    return "\(store.playCounts.count)|\(store.favoriteIds.count)|\(store.followedArtists.count)|\(topRecent)"
+  }
+
   private var forYouMixes: [PersonalizedMix] {
-    var mixes = home.genreMixes
-    let fromHistory = CatalogExplorerService.buildPersonalizedMixes(
-      mostPlayed: store.mostPlayedTracks,
-      favorites: store.favoriteTracks,
-      recent: store.recentTracks,
-      topArtists: store.topListenedArtists,
-      feed: nil
-    )
-    mixes += fromHistory.filter { ["mix_norepeat", "mix_daily1", "mix_daily2", "mix_favorites"].contains($0.id) }
-    return Array(mixes.prefix(6))
+    Array((home.genreMixes + cachedHistoryMixes).prefix(6))
   }
 
   @ViewBuilder
   private var forYou: some View {
     let mixes = forYouMixes
-    if !mixes.isEmpty {
-      VStack(alignment: .leading, spacing: 12) {
-        SectionHeader(title: "Para você", subtitle: OnboardingGenres.selected().isEmpty
-                      ? "Com base no que você ouve" : "Seus gêneros e o que você ouve")
-        HRow(spacing: 14) {
-          ForEach(mixes) { mix in PersonalizedMixCard(mix: mix) }
+    Group {
+      if !mixes.isEmpty {
+        VStack(alignment: .leading, spacing: 12) {
+          SectionHeader(title: "Para você", subtitle: OnboardingGenres.selected().isEmpty
+                        ? "Com base no que você ouve" : "Seus gêneros e o que você ouve")
+          HRow(spacing: 14) {
+            ForEach(mixes) { mix in PersonalizedMixCard(mix: mix) }
+          }
         }
       }
+    }
+    .task(id: historyMixKey) {
+      let most = Array(store.mostPlayedTracks.prefix(60))
+      let favs = Array(store.favoriteTracks.prefix(60))
+      let rec = Array(store.recentTracks.prefix(40))
+      let topA = Array(store.topListenedArtists.prefix(5))
+      let built = await Task.detached(priority: .utility) {
+        CatalogExplorerService.buildPersonalizedMixes(
+          mostPlayed: most,
+          favorites: favs,
+          recent: rec,
+          topArtists: topA,
+          feed: nil
+        ).filter { ["mix_norepeat", "mix_daily1", "mix_daily2", "mix_favorites"].contains($0.id) }
+      }.value
+      guard !Task.isCancelled else { return }
+      cachedHistoryMixes = built
     }
   }
 

@@ -39,7 +39,7 @@ extension EnvironmentValues {
 // MARK: - Base: espaço para barra de abas + mini player
 
 private struct LumeTabScrollModifier: ViewModifier {
-  @State private var hasMini = AudioPlayer.shared.currentTrack != nil
+  @Environment(\.lumeHasMiniPlayer) private var hasMini
   @ObservedObject private var keyboard = KeyboardState.shared
 
   func body(content: Content) -> some View {
@@ -52,7 +52,6 @@ private struct LumeTabScrollModifier: ViewModifier {
           .accessibilityHidden(true)
       }
       .scrollDismissesKeyboard(.interactively)
-      .onReceive(AudioPlayer.shared.$currentTrack.map { $0 != nil }.removeDuplicates()) { hasMini = $0 }
   }
 }
 

@@ -209,11 +209,14 @@ actor CatalogExplorerService {
       ))
     }
 
+    let pool = dedupeTracks(Array(mostPlayed.prefix(60)) + Array(favorites.prefix(60)) + Array(recent.prefix(40)) + br + gl)
+
     if let firstArtist = topArtists.first {
-      let matching = (mostPlayed + favorites + recent + br + gl).filter {
+      let matching = pool.filter {
         DiscText.artistMatches($0.artist, firstArtist)
       }
-      let extra = br.filter { !matching.contains($0) }.prefix(10)
+      let matchIds = Set(matching.map(\.id))
+      let extra = br.filter { !matchIds.contains($0.id) }.prefix(10)
       let tracks = dedupeTracks(matching + extra)
       if !tracks.isEmpty {
         mixes.append(PersonalizedMix(
@@ -231,10 +234,11 @@ actor CatalogExplorerService {
 
     if topArtists.count >= 2 {
       let second = topArtists[1]
-      let matching = (mostPlayed + favorites + recent + br + gl).filter {
+      let matching = pool.filter {
         DiscText.artistMatches($0.artist, second)
       }
-      let extra = gl.filter { !matching.contains($0) }.prefix(10)
+      let matchIds = Set(matching.map(\.id))
+      let extra = gl.filter { !matchIds.contains($0.id) }.prefix(10)
       let tracks = dedupeTracks(matching + extra)
       if !tracks.isEmpty {
         mixes.append(PersonalizedMix(

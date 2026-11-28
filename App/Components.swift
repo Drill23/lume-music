@@ -92,8 +92,8 @@ struct ArtistAvatar: View {
 struct TrackMenuItems: View {
   let track: Track
   var queue: [Track]? = nil
-  @ObservedObject private var store = LibraryStore.shared
-  @ObservedObject private var downloads = DownloadManager.shared
+  private var store: LibraryStore { LibraryStore.shared }
+  private var downloads: DownloadManager { DownloadManager.shared }
   private var player: AudioPlayer { AudioPlayer.shared }
   private var app: AppModel { AppModel.shared }
 
