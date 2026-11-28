@@ -47,10 +47,12 @@ struct LumeMusicApp: App {
       .preferredColorScheme(scheme)
       .animation(.easeInOut(duration: 0.3), value: access.needsCode)
       .task {
+        LumeExtras.start()
         LumeTextures.shared.prewarmInBackground()
         access.startMonitoring()
         UpdateService.shared.start()
         if Onboarding.isDone && !Onboarding.debugForced { await access.ensureConfig(); await access.ensureTrialIfNeeded() }
+        LumeExtras.accessReady()
         if ProcessInfo.processInfo.arguments.contains("-LMSelfTest") { await AccessSelfTest.run() }
       }
       .onChange(of: scenePhase) { _, phase in

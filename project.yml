@@ -16,11 +16,19 @@ targets:
     deploymentTarget: '18.0'
     sources:
       - path: App
+      - path: Shared
+    dependencies:
+      - target: LumeWidget
+        embed: true
     entitlements:
       path: App/LumeMusic.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.adriano.lumemusic]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.adriano.lumemusic.ios
+        # LUME_APP: o código compartilhado com o widget (Shared/) só toca o AudioPlayer no app.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) LUME_APP"
         MARKETING_VERSION: "5.1.8"
         CURRENT_PROJECT_VERSION: 15
         TARGETED_DEVICE_FAMILY: '1,2'
@@ -47,3 +55,35 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.adriano.lumemusic
             CFBundleURLSchemes: [lumemusic]
+  # Widget "Tocando agora" (WidgetKit). Mantenha MARKETING_VERSION / CURRENT_PROJECT_VERSION IGUAIS aos do app
+  # (scripts/build-ipa.sh também força os mesmos valores nos dois alvos).
+  LumeWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: '18.0'
+    sources:
+      - path: LumeWidget
+        excludes:
+          - Info.plist
+      - path: Shared
+    entitlements:
+      path: LumeWidget/LumeWidget.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.adriano.lumemusic]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.adriano.lumemusic.ios.LumeWidget
+        MARKETING_VERSION: "5.1.8"
+        CURRENT_PROJECT_VERSION: 15
+        TARGETED_DEVICE_FAMILY: '1,2'
+        SKIP_INSTALL: YES
+        INFOPLIST_FILE: LumeWidget/Info.plist
+    info:
+      path: LumeWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Lume Music
+        CFBundleDevelopmentRegion: pt-BR
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension

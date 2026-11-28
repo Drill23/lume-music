@@ -79,6 +79,8 @@ struct MusicPlaylist: Identifiable, Codable, Hashable {
   var trackIds: [String]
   var sourceBadge: String
   var createdAt: Date
+  /// 5.2: última alteração (nome ou faixas). Opcional para ler bibliotecas antigas; o LibraryStore preenche.
+  var updatedAt: Date?
 
   init(
     id: String = UUID().uuidString,
@@ -87,8 +89,10 @@ struct MusicPlaylist: Identifiable, Codable, Hashable {
     artworkURL: String = "",
     trackIds: [String] = [],
     sourceBadge: String = "Lume",
-    createdAt: Date = Date()
+    createdAt: Date = Date(),
+    updatedAt: Date? = nil
   ) {
+    self.updatedAt = updatedAt
     self.id = id
     self.name = name
     self.subtitle = subtitle

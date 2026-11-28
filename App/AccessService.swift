@@ -397,6 +397,8 @@ final class AccessService: ObservableObject {
     if trialUsedMessage != nil { trialUsedMessage = nil; defaults.removeObject(forKey: "lume.trial.usedMessage") }
     lastCheck = Date()
     startMonitoring()
+    // Contrato 5.2 (A): vitalício ativado/transferido/restaurado → o backup da biblioteca é restaurado (mesclando, sem apagar nada).
+    if parsed.lifetime && isShared { NotificationCenter.default.post(name: .lumeLifetimeAdopted, object: nil) }
     return parsed
   }
 
