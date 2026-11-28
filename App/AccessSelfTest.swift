@@ -277,6 +277,9 @@ enum AccessSelfTest {
       expect("tolerância acaba depois de 24 h", !s4.inGrace && s4.needsCode)
     }
 
+    // 8d. Áudio 5.2: volume igual, limitador de pico, rampa e silêncio (matemática pura).
+    for (name, ok) in LoudnessSelfTest.cases() { expect(name, ok) }
+
     // 9. Utilidades.
     expect("normalizeOrder aceita lm7k3q9x", AccessService.normalizeOrder("lm7k3q9x") == "LM-7K3Q9X")
     expect("CRC16 do BR Code confere (123456789 = 29B1)", BRCode.crc16("123456789") == "29B1")

@@ -246,6 +246,8 @@ final class DownloadManager: ObservableObject {
 
         await MainActor.run {
           LibraryStore.shared.markDownloaded(working)
+          // Sonoridade guardada de forma permanente: o "volume igual" também vale offline.
+          LoudnessStore.shared.pin(db: resolved.loudnessDb ?? LoudnessStore.shared.db(for: vid, track.id), keys: [vid, track.id])
           self.statesById.removeValue(forKey: track.id)
           self.progressById.removeValue(forKey: track.id)
           self.failedTracks.removeValue(forKey: track.id)
