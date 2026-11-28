@@ -85,7 +85,15 @@ final class LibraryStore: ObservableObject {
     var turntable3D: Bool?
     var cassetteStyle: CassetteStyle?
     var introEnabled: Bool?
+    /// 5.2: playlists apagadas (para o backup não trazê-las de volta).
+    var deletedPlaylists: [BackupTombstone]?
   }
+
+  /// 5.2: playlists apagadas deste aparelho (lápide com data), usadas na mesclagem do backup.
+  private(set) var deletedPlaylists: [BackupTombstone] = []
+  private var playlistHashes: [String: Int] = [:]
+  private var librarySignature = 0
+  private var bookkeepingReady = false
 
   private var storeURL: URL {
     let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -104,6 +112,8 @@ final class LibraryStore: ObservableObject {
   private init() {
     load()
     reconcileOfflineFiles()
+    refreshBookkeeping()
+    bookkeepingReady = true
   }
 
   func localAudioURL(for trackId: String) -> URL {
@@ -440,11 +450,13 @@ final class LibraryStore: ObservableObject {
     turntable3D = snap.turntable3D ?? true
     cassetteStyle = snap.cassetteStyle ?? .smokedStudio
     introEnabled = snap.introEnabled ?? true
+    deletedPlaylists = snap.deletedPlaylists ?? []
   }
 
   private var saveTask: Task<Void, Never>?
 
   func save() {
+    trackLibraryChanges()
     let snap = Snapshot(
       tracksById: tracksById,
       favoriteIds: favoriteIds,
@@ -469,7 +481,8 @@ final class LibraryStore: ObservableObject {
       vinylEdition: vinylEdition,
       turntable3D: turntable3D,
       cassetteStyle: cassetteStyle,
-      introEnabled: introEnabled
+      introEnabled: introEnabled,
+      deletedPlaylists: deletedPlaylists
     )
     let url = storeURL
     saveTask?.cancel()
@@ -497,4 +510,186 @@ extension LibraryStore {
     f.minimumFractionDigits = 0; f.maximumFractionDigits = 1
     return (f.string(from: NSNumber(value: mb)) ?? "0") + " MB"
   }
+}
+
+// MARK: - Backup da biblioteca (contrato 5.2 A)
+
+extension LibraryStore {
+  static func ms(_ d: Date) -> Int64 { Int64((d.timeIntervalSince1970 * 1000).rounded()) }
+  static func date(ms: Int64) -> Date { Date(timeIntervalSince1970: Double(ms) / 1000) }
+
+  private static func playlistHash(_ p: MusicPlaylist) -> Int {
+    var h = Hasher()
+    h.combine(p.name)
+    h.combine(p.trackIds)
+    return h.finalize()
+  }
+
+  /// Guarda o "retrato" atual das playlists/curtidas/seguidos como referência para detectar mudanças.
+  fileprivate func refreshBookkeeping() {
+    var hashes: [String: Int] = [:]
+    var sig = Hasher()
+    for p in playlists {
+      let h = Self.playlistHash(p)
+      hashes[p.id] = h
+      sig.combine(p.id); sig.combine(h)
+    }
+    sig.combine(favoriteIds)
+    sig.combine(followedArtists.map { $0.lowercased() })
+    playlistHashes = hashes
+    librarySignature = sig.finalize()
+  }
+
+  /// Chamado em todo `save()`: carimba `updatedAt` nas playlists que mudaram, registra as apagadas e, se algo do
+  /// que vai no backup mudou, avisa o serviço de backup (que espera 20 s antes de enviar).
+  fileprivate func trackLibraryChanges() {
+    guard bookkeepingReady else { return }
+    let now = Date()
+    var copy = playlists
+    var stamped = false
+    var seen = Set<String>()
+    for i in copy.indices {
+      let p = copy[i]
+      seen.insert(p.id)
+      let h = Self.playlistHash(p)
+      if playlistHashes[p.id] != h {
+        copy[i].updatedAt = now
+        stamped = true
+      } else if p.updatedAt == nil {
+        copy[i].updatedAt = p.createdAt
+        stamped = true
+      }
+    }
+    let nowMs = Self.ms(now)
+    var tombs = deletedPlaylists
+    for id in playlistHashes.keys where !seen.contains(id) {
+      tombs.removeAll { $0.id == id }
+      tombs.append(BackupTombstone(id: id, at: nowMs))
+    }
+    tombs = tombs.filter { nowMs - $0.at < LibraryMerge.tombstoneTTLms }
+    if tombs != deletedPlaylists { deletedPlaylists = tombs }
+    if stamped { playlists = copy }
+
+    let before = librarySignature
+    refreshBookkeeping()
+    if before != librarySignature {
+      NotificationCenter.default.post(name: .lumeLibraryChanged, object: nil)
+    }
+  }
+
+  /// Foto da biblioteca no formato do backup. Faixas sem videoId (arquivos locais) não entram.
+  func exportBackup() -> LibraryV1 {
+    func bt(_ t: Track) -> BackupTrack? {
+      guard let v = t.videoId, !v.isEmpty else { return nil }
+      return BackupTrack(
+        videoId: v, title: t.title, artist: t.artist,
+        album: t.album.isEmpty ? nil : t.album,
+        durationSec: t.duration > 0 ? t.duration.rounded() : nil,
+        artworkUrl: t.artworkURL.hasPrefix("http") ? t.artworkURL : nil)
+    }
+    func unique(_ list: [BackupTrack]) -> [BackupTrack] {
+      var seen = Set<String>()
+      return list.filter { seen.insert($0.videoId).inserted }
+    }
+    let lists = playlists.map { p -> BackupPlaylist in
+      BackupPlaylist(
+        id: p.id, name: p.name, created: Self.ms(p.createdAt), updated: Self.ms(p.updatedAt ?? p.createdAt),
+        tracks: unique(p.trackIds.compactMap { tracksById[$0] }.compactMap(bt)))
+    }
+    return LibraryV1(
+      exportedAt: Self.ms(Date()), platform: AccessConfig.platform, app: AccessConfig.appVersion,
+      playlists: lists,
+      liked: unique(favoriteIds.compactMap { tracksById[$0] }.compactMap(bt)),
+      followed: followedArtists,
+      deletedPlaylists: deletedPlaylists)
+  }
+
+  struct BackupApplySummary: Equatable {
+    var addedPlaylists = 0
+    var updatedPlaylists = 0
+    var removedPlaylists = 0
+    var addedLiked = 0
+    var addedFollowed = 0
+    var changed: Bool { addedPlaylists + updatedPlaylists + removedPlaylists + addedLiked + addedFollowed > 0 }
+  }
+
+  /// Mescla o backup do painel com a biblioteca local (nunca apaga nada sem motivo; ver `LibraryMerge`).
+  @discardableResult
+  func applyBackupMerge(_ remote: LibraryV1) -> BackupApplySummary {
+    var summary = BackupApplySummary()
+    let local = exportBackup()
+    let merged = LibraryMerge.merge(local: local, remote: remote, now: Self.ms(Date()))
+    let localEntries = Dictionary(local.playlists.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+
+    var idByVideo: [String: String] = [:]
+    for (id, t) in tracksById {
+      guard let v = t.videoId, !v.isEmpty else { continue }
+      if id == v || idByVideo[v] == nil { idByVideo[v] = id }
+    }
+    func localId(_ b: BackupTrack) -> String {
+      if let id = idByVideo[b.videoId] { return id }
+      let t = Track(id: b.videoId, videoId: b.videoId, title: b.title, artist: b.artist, album: b.album ?? "",
+                    duration: b.durationSec ?? 0, artworkURL: b.artworkUrl ?? "")
+      register(t)
+      idByVideo[b.videoId] = t.id
+      return t.id
+    }
+
+    // Playlists
+    let mergedIds = Set(merged.playlists.map(\.id))
+    var result: [MusicPlaylist] = []
+    for lp in playlists {
+      guard mergedIds.contains(lp.id) else { summary.removedPlaylists += 1; continue }
+      guard let mp = merged.playlists.first(where: { $0.id == lp.id }), mp != localEntries[lp.id] else { result.append(lp); continue }
+      // A versão do backup é mais nova: nome e faixas dela, mas faixas locais sem videoId ficam no fim.
+      var upd = lp
+      var ids = mp.tracks.map(localId)
+      for id in lp.trackIds where !ids.contains(id) {
+        let hasVideo = (tracksById[id]?.videoId).map { !$0.isEmpty } ?? false
+        if !hasVideo { ids.append(id) }
+      }
+      upd.name = mp.name
+      upd.trackIds = ids
+      upd.updatedAt = Self.date(ms: mp.updated)
+      if upd.artworkURL.isEmpty { upd.artworkURL = mp.tracks.compactMap(\.artworkUrl).first ?? "" }
+      result.append(upd)
+      summary.updatedPlaylists += 1
+    }
+    let have = Set(playlists.map(\.id))
+    for mp in merged.playlists where !have.contains(mp.id) {
+      result.append(MusicPlaylist(
+        id: mp.id, name: mp.name, artworkURL: mp.tracks.compactMap(\.artworkUrl).first ?? "",
+        trackIds: mp.tracks.map(localId), sourceBadge: "Lume",
+        createdAt: Self.date(ms: mp.created), updatedAt: Self.date(ms: mp.updated)))
+      summary.addedPlaylists += 1
+    }
+    if summary.addedPlaylists + summary.updatedPlaylists + summary.removedPlaylists > 0 { playlists = result }
+    deletedPlaylists = merged.deletedPlaylists
+
+    // Curtidas: mantém a ordem local e acrescenta as que faltam no fim.
+    var haveVideos = Set(favoriteIds.compactMap { tracksById[$0]?.videoId })
+    let haveIds = Set(favoriteIds)
+    for b in merged.liked where !haveVideos.contains(b.videoId) {
+      let id = localId(b)
+      if !haveIds.contains(id) { favoriteIds.append(id); summary.addedLiked += 1 }
+      haveVideos.insert(b.videoId)
+    }
+
+    // Seguidos
+    for a in merged.followed where !isFollowing(a) {
+      followedArtists.append(a)
+      summary.addedFollowed += 1
+    }
+
+    refreshBookkeeping()
+    if summary.changed || deletedPlaylists != local.deletedPlaylists { save() }
+    return summary
+  }
+}
+
+extension Notification.Name {
+  /// Playlists, curtidas ou artistas seguidos mudaram (o backup dispara 20 s depois).
+  static let lumeLibraryChanged = Notification.Name("lume.library.changed")
+  /// Um acesso vitalício foi ativado, transferido ou restaurado neste aparelho.
+  static let lumeLifetimeAdopted = Notification.Name("lume.access.lifetimeAdopted")
 }

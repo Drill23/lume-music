@@ -13,15 +13,19 @@
 		0969C55D35805EB2A7D6EF64 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83352AB6C71300BA7B8295E8 /* Models.swift */; };
 		0C524781045DDD9831C02355 /* PerfGovernor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AFA86B728C914AFB0434A30 /* PerfGovernor.swift */; };
 		0D2259F4ED0DEDC4F2A8451C /* CassetteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5482B7A3EDCC050038FD095B /* CassetteView.swift */; };
+		0EC6E79FC00A842D835479CE /* LumeWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE6166EEB20DA44E9F20464 /* LumeWidgetShared.swift */; };
 		0EC95692B34B95323ED0475E /* ArtworkResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B6234A0497A79A01A36BDAF /* ArtworkResolver.swift */; };
 		22A3B240A7EC01C207241C6F /* LumeTextures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE6AE4C9A881BDFB751C4D5 /* LumeTextures.swift */; };
 		24265E6B12C4D3887B16D4FA /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFB9B76B2E7C134B6A478588 /* LibraryStore.swift */; };
+		2F26CCE79633F24E78D50E1E /* ListenBrainzService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C354C314B83BD08537B803CD /* ListenBrainzService.swift */; };
 		2FFD7F1AFD5413217768A62D /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = D91B7F936D3EE4D0CF5943D4 /* Theme.swift */; };
 		3CEA4A08A9519D15CC88D4BD /* DownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39218C9770BEBBA8C8C0C24 /* DownloadManager.swift */; };
 		3D5DAA65574519B302CE52A3 /* AccessSelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBFF0F1E8F931D70293C615A /* AccessSelfTest.swift */; };
 		44486FCF9B32132FDD11A9EE /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 695F078AFA2C13F37E63160F /* HomeView.swift */; };
 		47A8B14C00335513B1D5449A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F7A44E4BAD812A89F923E7 /* SettingsView.swift */; };
 		4B84C125832D231773F5E824 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E1FE3239D1EA67CAE036AEA /* AudioPlayer.swift */; };
+		4D2DDFB10A6117321AC10303 /* SettingsBackupSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8500AFCDF5DBA9809F156BAE /* SettingsBackupSection.swift */; };
+		4DFADD89E254862350C7B0C7 /* LumeWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 35BF511BDADF343472A370B2 /* LumeWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		544636988281D04EE735AED0 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63982D712E1B8BD966D8D0BC /* UpdateService.swift */; };
 		55D973A70147E3EAD2966450 /* ImportHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0103EB46A704A6C256A96BE9 /* ImportHub.swift */; };
 		59F1685CF3F6BB3F58B54F0C /* PurchaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6814F9CA563E50E06013F7 /* PurchaseService.swift */; };
@@ -31,6 +35,8 @@
 		6ACDC5C2048480CE3A80F0A1 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CD336F821A1ECEFD8835C54 /* SearchView.swift */; };
 		6AD069CBDBBC8AA347633BE7 /* IntroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5002846355AECF20DC8647A /* IntroView.swift */; };
 		6D73F037CBE8C1F8ADA201FA /* ImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90ADB4F3520C970548C4135D /* ImportService.swift */; };
+		7020CF61EDC0E6D945E455BB /* LumeWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4367551857F35542897812A /* LumeWidget.swift */; };
+		727DF91152887EEDBB75E937 /* LibraryBackupModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ED694E45217E0E23611C40 /* LibraryBackupModel.swift */; };
 		7498D32D2311D0A0C983FE31 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 578C4F7AA45EF2D2094F63D9 /* LibraryView.swift */; };
 		76FAB4C663C3B25D269C8000 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20BB538C33F60C2F2EBCA51 /* RootView.swift */; };
 		78B6D85DCCC7184692E6A409 /* SoundFX.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02625F22D4999748DFDB8887 /* SoundFX.swift */; };
@@ -38,9 +44,11 @@
 		818F87A5E53BED1A6C4F7BEA /* OrientationKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57DAE3CE4753F147299D96B /* OrientationKit.swift */; };
 		8266DD4C831EF4F6CB41FB8A /* MusicEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6E1DD5A774CD60727B95A2 /* MusicEngine.swift */; };
 		86B57C60ED55CCD22F34D0C6 /* OnboardingLoading.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10F10EEF9970253B01560133 /* OnboardingLoading.swift */; };
+		93163ECE8EA521059AD1CEF1 /* LumeWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE6166EEB20DA44E9F20464 /* LumeWidgetShared.swift */; };
 		94E9E201E08B1912D64C94BA /* ChartsKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 501DE2850FDDBFC12B0DE4B4 /* ChartsKit.swift */; };
 		96F6369537FD78D3C2B31898 /* SearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3E52D081DA95C4A35E1157 /* SearchService.swift */; };
 		98CC27171494676861528840 /* CatalogExplorerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5117F85630AB294A77E4D4E5 /* CatalogExplorerService.swift */; };
+		A3647F8D1990AFC4E9CBA6CD /* SettingsScrobbleSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC3C9B495B2EBFB70A74EBB /* SettingsScrobbleSection.swift */; };
 		A7B1BA41041ED303BA24AA92 /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA641F404EC69C814F870E88 /* NowPlayingView.swift */; };
 		ABA5173790A2E59F8CD68D15 /* CassetteArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 158DB816C413E01CE20C52D2 /* CassetteArt.swift */; };
 		AFBB95E9EEF215B999F2657D /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 416CDD03F1EA830B82CF400B /* OnboardingView.swift */; };
@@ -51,19 +59,47 @@
 		BBD2A3B1AB0EA7AFA9F21D9E /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37D37E923300DB8005FF0415 /* Components.swift */; };
 		BC36D17423D97255628A1D8F /* HomeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7DD2CF94297B7FC3EE265C /* HomeStore.swift */; };
 		BE1174C414B67C131B9A6EAC /* ImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F23B94BEDC0D3DC3ACD7993 /* ImportView.swift */; };
+		C86B120C39186894E7092318 /* LibraryBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8F8B25206E0826AD7E039A5 /* LibraryBackupService.swift */; };
 		D551449D17360D14A5E8B025 /* LyricsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F860EC77A5EACFBE5371F5FD /* LyricsService.swift */; };
 		D8EFCBCBECA299E9317960F2 /* DetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2B6BAFF0BD0CEF83772657 /* DetailViews.swift */; };
 		E00DCE9A528F65A98A0A9971 /* LockScreenArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5050CDA3C331861ECE73F9AB /* LockScreenArtwork.swift */; };
 		E5067BB4EFF827E26FFDEDEE /* DiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58C07F3219CE189B07F16A7 /* DiscoveryService.swift */; };
+		ED3D324406DA06BC6528158D /* WidgetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFB9A15F703B5B542F001473 /* WidgetBridge.swift */; };
 		ED3D8210139D512BCDEC7E03 /* VisualizerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BC23F996659A219FBD02C73 /* VisualizerViews.swift */; };
 		F1DCA90A75F0146C1553D798 /* AccessService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97DBA4F28ECC1ECB21EC471A /* AccessService.swift */; };
 		F3E1FE91A67C6CA481BD1BCA /* CoverFlowDebug.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59F6C3533B8A757BAA5C2917 /* CoverFlowDebug.swift */; };
 		FA089D91CF82CA82BD4B3495 /* UpgradeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F40B1CA9D8060ADC88E88F1F /* UpgradeView.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		478AD9132851179ACDA82980 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 19A442080E81E5895F7E7A5F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 16AF73C22DEBA53288961767;
+			remoteInfo = LumeWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		FDFC0FCEFB69F89ED15046BF /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				4DFADD89E254862350C7B0C7 /* LumeWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		0103EB46A704A6C256A96BE9 /* ImportHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportHub.swift; sourceTree = "<group>"; };
 		02625F22D4999748DFDB8887 /* SoundFX.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundFX.swift; sourceTree = "<group>"; };
+		07ED694E45217E0E23611C40 /* LibraryBackupModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackupModel.swift; sourceTree = "<group>"; };
+		0AC3C9B495B2EBFB70A74EBB /* SettingsScrobbleSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScrobbleSection.swift; sourceTree = "<group>"; };
 		0BC23F996659A219FBD02C73 /* VisualizerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualizerViews.swift; sourceTree = "<group>"; };
 		0D34CA7EFF50F6C037109211 /* StageKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageKit.swift; sourceTree = "<group>"; };
 		10F10EEF9970253B01560133 /* OnboardingLoading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingLoading.swift; sourceTree = "<group>"; };
@@ -73,6 +109,7 @@
 		2A7DD2CF94297B7FC3EE265C /* HomeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeStore.swift; sourceTree = "<group>"; };
 		2F23B94BEDC0D3DC3ACD7993 /* ImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportView.swift; sourceTree = "<group>"; };
 		31F7A44E4BAD812A89F923E7 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		35BF511BDADF343472A370B2 /* LumeWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = LumeWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		37D37E923300DB8005FF0415 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		416CDD03F1EA830B82CF400B /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		4DB2A8B415C1F9799E01C2C0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -91,10 +128,13 @@
 		695F078AFA2C13F37E63160F /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		7CD336F821A1ECEFD8835C54 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		83352AB6C71300BA7B8295E8 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		8500AFCDF5DBA9809F156BAE /* SettingsBackupSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsBackupSection.swift; sourceTree = "<group>"; };
 		8B6234A0497A79A01A36BDAF /* ArtworkResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkResolver.swift; sourceTree = "<group>"; };
+		8BE4B0FCD403D6038E134868 /* LumeWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LumeWidget.entitlements; sourceTree = "<group>"; };
 		90ADB4F3520C970548C4135D /* ImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportService.swift; sourceTree = "<group>"; };
 		97DBA4F28ECC1ECB21EC471A /* AccessService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessService.swift; sourceTree = "<group>"; };
 		9AFA86B728C914AFB0434A30 /* PerfGovernor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerfGovernor.swift; sourceTree = "<group>"; };
+		A4367551857F35542897812A /* LumeWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumeWidget.swift; sourceTree = "<group>"; };
 		AFB9B76B2E7C134B6A478588 /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
 		B20BB538C33F60C2F2EBCA51 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		B24397E481BE31D37B7258EE /* LumeMusic.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LumeMusic.entitlements; sourceTree = "<group>"; };
@@ -105,7 +145,9 @@
 		BB9320A46E83B96A2F07243E /* CoverFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverFlowView.swift; sourceTree = "<group>"; };
 		BCD6B9C0BAC8ED7485F3AE07 /* ExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
 		BDD857E87EF620DBC84E179A /* TurntableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurntableView.swift; sourceTree = "<group>"; };
+		BFE6166EEB20DA44E9F20464 /* LumeWidgetShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumeWidgetShared.swift; sourceTree = "<group>"; };
 		C18472EDA0593B18CB8266B3 /* ChartsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartsService.swift; sourceTree = "<group>"; };
+		C354C314B83BD08537B803CD /* ListenBrainzService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListenBrainzService.swift; sourceTree = "<group>"; };
 		C58C07F3219CE189B07F16A7 /* DiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryService.swift; sourceTree = "<group>"; };
 		CE6814F9CA563E50E06013F7 /* PurchaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseService.swift; sourceTree = "<group>"; };
 		CF2B6BAFF0BD0CEF83772657 /* DetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailViews.swift; sourceTree = "<group>"; };
@@ -113,9 +155,11 @@
 		D91B7F936D3EE4D0CF5943D4 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		DBFF0F1E8F931D70293C615A /* AccessSelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessSelfTest.swift; sourceTree = "<group>"; };
 		E57DAE3CE4753F147299D96B /* OrientationKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationKit.swift; sourceTree = "<group>"; };
+		EFB9A15F703B5B542F001473 /* WidgetBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBridge.swift; sourceTree = "<group>"; };
 		F40B1CA9D8060ADC88E88F1F /* UpgradeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradeView.swift; sourceTree = "<group>"; };
 		F6720069CC078956451F7250 /* LumeMusic.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LumeMusic.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F860EC77A5EACFBE5371F5FD /* LyricsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsService.swift; sourceTree = "<group>"; };
+		F8F8B25206E0826AD7E039A5 /* LibraryBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackupService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -123,6 +167,8 @@
 			isa = PBXGroup;
 			children = (
 				D59E462047E4611AE9A570F5 /* App */,
+				D79D9B2B15E5DEE40575E3C7 /* LumeWidget */,
+				6BDB2696791FC4EDB1E9264C /* Shared */,
 				C0A5F29DFF2FA21DA241E511 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -135,10 +181,19 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		6BDB2696791FC4EDB1E9264C /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				BFE6166EEB20DA44E9F20464 /* LumeWidgetShared.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		C0A5F29DFF2FA21DA241E511 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				F6720069CC078956451F7250 /* LumeMusic.app */,
+				35BF511BDADF343472A370B2 /* LumeWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -171,8 +226,11 @@
 				90ADB4F3520C970548C4135D /* ImportService.swift */,
 				2F23B94BEDC0D3DC3ACD7993 /* ImportView.swift */,
 				B5002846355AECF20DC8647A /* IntroView.swift */,
+				07ED694E45217E0E23611C40 /* LibraryBackupModel.swift */,
+				F8F8B25206E0826AD7E039A5 /* LibraryBackupService.swift */,
 				AFB9B76B2E7C134B6A478588 /* LibraryStore.swift */,
 				578C4F7AA45EF2D2094F63D9 /* LibraryView.swift */,
+				C354C314B83BD08537B803CD /* ListenBrainzService.swift */,
 				5050CDA3C331861ECE73F9AB /* LockScreenArtwork.swift */,
 				56D61844C58DC2C00E9A3502 /* LumeChrome.swift */,
 				B24397E481BE31D37B7258EE /* LumeMusic.entitlements */,
@@ -190,6 +248,8 @@
 				B20BB538C33F60C2F2EBCA51 /* RootView.swift */,
 				BA3E52D081DA95C4A35E1157 /* SearchService.swift */,
 				7CD336F821A1ECEFD8835C54 /* SearchView.swift */,
+				8500AFCDF5DBA9809F156BAE /* SettingsBackupSection.swift */,
+				0AC3C9B495B2EBFB70A74EBB /* SettingsScrobbleSection.swift */,
 				31F7A44E4BAD812A89F923E7 /* SettingsView.swift */,
 				02625F22D4999748DFDB8887 /* SoundFX.swift */,
 				0D34CA7EFF50F6C037109211 /* StageKit.swift */,
@@ -198,24 +258,53 @@
 				63982D712E1B8BD966D8D0BC /* UpdateService.swift */,
 				F40B1CA9D8060ADC88E88F1F /* UpgradeView.swift */,
 				0BC23F996659A219FBD02C73 /* VisualizerViews.swift */,
+				EFB9A15F703B5B542F001473 /* WidgetBridge.swift */,
 				63238F2B881065C1AD31BAB8 /* Resources */,
 			);
 			path = App;
 			sourceTree = "<group>";
 		};
+		D79D9B2B15E5DEE40575E3C7 /* LumeWidget */ = {
+			isa = PBXGroup;
+			children = (
+				8BE4B0FCD403D6038E134868 /* LumeWidget.entitlements */,
+				A4367551857F35542897812A /* LumeWidget.swift */,
+			);
+			path = LumeWidget;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		16AF73C22DEBA53288961767 /* LumeWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CA884F8466CB65A55396CD82 /* Build configuration list for PBXNativeTarget "LumeWidget" */;
+			buildPhases = (
+				639BE645EBC228E4DFC47E60 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LumeWidget;
+			packageProductDependencies = (
+			);
+			productName = LumeWidget;
+			productReference = 35BF511BDADF343472A370B2 /* LumeWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		BC14EEAE06B0A2FDF195C61B /* LumeMusic */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 17C3A3C8E18017200915FD7C /* Build configuration list for PBXNativeTarget "LumeMusic" */;
 			buildPhases = (
 				189838F67689BAA1B29F369A /* Sources */,
 				BBD94EB5C6F98EA12312ED3B /* Resources */,
+				FDFC0FCEFB69F89ED15046BF /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				F1B12A1B43A8ECF984A3E25C /* PBXTargetDependency */,
 			);
 			name = LumeMusic;
 			packageProductDependencies = (
@@ -233,6 +322,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					16AF73C22DEBA53288961767 = {
+						DevelopmentTeam = 73HPGSC9QX;
+						ProvisioningStyle = Automatic;
+					};
 					BC14EEAE06B0A2FDF195C61B = {
 						DevelopmentTeam = 73HPGSC9QX;
 						ProvisioningStyle = Automatic;
@@ -254,6 +347,7 @@
 			projectRoot = "";
 			targets = (
 				BC14EEAE06B0A2FDF195C61B /* LumeMusic */,
+				16AF73C22DEBA53288961767 /* LumeWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -299,12 +393,16 @@
 				6D73F037CBE8C1F8ADA201FA /* ImportService.swift in Sources */,
 				BE1174C414B67C131B9A6EAC /* ImportView.swift in Sources */,
 				6AD069CBDBBC8AA347633BE7 /* IntroView.swift in Sources */,
+				727DF91152887EEDBB75E937 /* LibraryBackupModel.swift in Sources */,
+				C86B120C39186894E7092318 /* LibraryBackupService.swift in Sources */,
 				24265E6B12C4D3887B16D4FA /* LibraryStore.swift in Sources */,
 				7498D32D2311D0A0C983FE31 /* LibraryView.swift in Sources */,
+				2F26CCE79633F24E78D50E1E /* ListenBrainzService.swift in Sources */,
 				E00DCE9A528F65A98A0A9971 /* LockScreenArtwork.swift in Sources */,
 				7F672C5B0C529C0C07D064BB /* LumeChrome.swift in Sources */,
 				B960C6333B883BD86E67355C /* LumeMusicApp.swift in Sources */,
 				22A3B240A7EC01C207241C6F /* LumeTextures.swift in Sources */,
+				0EC6E79FC00A842D835479CE /* LumeWidgetShared.swift in Sources */,
 				D551449D17360D14A5E8B025 /* LyricsService.swift in Sources */,
 				0969C55D35805EB2A7D6EF64 /* Models.swift in Sources */,
 				8266DD4C831EF4F6CB41FB8A /* MusicEngine.swift in Sources */,
@@ -317,6 +415,8 @@
 				76FAB4C663C3B25D269C8000 /* RootView.swift in Sources */,
 				96F6369537FD78D3C2B31898 /* SearchService.swift in Sources */,
 				6ACDC5C2048480CE3A80F0A1 /* SearchView.swift in Sources */,
+				4D2DDFB10A6117321AC10303 /* SettingsBackupSection.swift in Sources */,
+				A3647F8D1990AFC4E9CBA6CD /* SettingsScrobbleSection.swift in Sources */,
 				47A8B14C00335513B1D5449A /* SettingsView.swift in Sources */,
 				78B6D85DCCC7184692E6A409 /* SoundFX.swift in Sources */,
 				B410F33101C6495CC67C85ED /* StageKit.swift in Sources */,
@@ -325,10 +425,28 @@
 				544636988281D04EE735AED0 /* UpdateService.swift in Sources */,
 				FA089D91CF82CA82BD4B3495 /* UpgradeView.swift in Sources */,
 				ED3D8210139D512BCDEC7E03 /* VisualizerViews.swift in Sources */,
+				ED3D324406DA06BC6528158D /* WidgetBridge.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		639BE645EBC228E4DFC47E60 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7020CF61EDC0E6D945E455BB /* LumeWidget.swift in Sources */,
+				93163ECE8EA521059AD1CEF1 /* LumeWidgetShared.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		F1B12A1B43A8ECF984A3E25C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 16AF73C22DEBA53288961767 /* LumeWidget */;
+			targetProxy = 478AD9132851179ACDA82980 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		29AFDAC0F8D593C95885096F /* Release */ = {
@@ -406,6 +524,7 @@
 				MARKETING_VERSION = 5.1.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.adriano.lumemusic.ios;
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) LUME_APP";
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -476,6 +595,26 @@
 			};
 			name = Debug;
 		};
+		78BFCCE2C3EA305949CF824A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = LumeWidget/LumeWidget.entitlements;
+				CURRENT_PROJECT_VERSION = 15;
+				INFOPLIST_FILE = LumeWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 5.1.8;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adriano.lumemusic.ios.LumeWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		C25CCB288E0F14372CBD6079 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -492,6 +631,27 @@
 				MARKETING_VERSION = 5.1.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.adriano.lumemusic.ios;
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) LUME_APP";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		CDA350E0F8C13A0A8FCC2187 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = LumeWidget/LumeWidget.entitlements;
+				CURRENT_PROJECT_VERSION = 15;
+				INFOPLIST_FILE = LumeWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 5.1.8;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adriano.lumemusic.ios.LumeWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -513,6 +673,15 @@
 			buildConfigurations = (
 				6178CFEF383A53E36B5C0037 /* Debug */,
 				29AFDAC0F8D593C95885096F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CA884F8466CB65A55396CD82 /* Build configuration list for PBXNativeTarget "LumeWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				78BFCCE2C3EA305949CF824A /* Debug */,
+				CDA350E0F8C13A0A8FCC2187 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

@@ -151,6 +151,10 @@ struct SettingsView: View {
       }
       .listRowBackground(Theme.canvasRaised)
 
+      SettingsScrobbleSection()
+
+      SettingsBackupSection()
+
       Section("Biblioteca") {
         NavigationLink(value: LumeRoute.replay) {
           Label("Lume Replay · Seu Resumo", systemImage: "sparkles")

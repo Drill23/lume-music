@@ -277,7 +277,96 @@ enum AccessSelfTest {
       expect("tolerância acaba depois de 24 h", !s4.inGrace && s4.needsCode)
     }
 
-    // 8d. Áudio 5.2: volume igual, limitador de pico, rampa e silêncio (matemática pura).
+    // 8d. Mesclagem da biblioteca (contrato 5.2 A) — pura, sem tocar a biblioteca real.
+    do {
+      func tr(_ v: String) -> BackupTrack { BackupTrack(videoId: v, title: "T\(v)", artist: "A") }
+      func pl(_ id: String, _ name: String, updated: Int64, _ vids: [String]) -> BackupPlaylist {
+        BackupPlaylist(id: id, name: name, created: 1000, updated: updated, tracks: vids.map(tr))
+      }
+      let local = LibraryV1(playlists: [pl("p1", "Local velha", updated: 100, ["a"]), pl("p2", "Só local", updated: 50, ["x"]), pl("p4", "Empate", updated: 300, ["l"])],
+                            liked: [tr("c"), tr("a")], followed: ["Anitta", "pabllo vittar"])
+      let remote = LibraryV1(playlists: [pl("p1", "Remota nova", updated: 200, ["a", "b"]), pl("p3", "Só remota", updated: 10, ["z"]), pl("p4", "Empate remota", updated: 300, ["r"])],
+                             liked: [tr("a"), tr("b"), tr("c")], followed: ["ANITTA", "Pabllo Vittar", "Iza"])
+      let m = LibraryMerge.merge(local: local, remote: remote)
+      expect("mesclagem: playlists por id (união)", m.playlists.map(\.id) == ["p1", "p2", "p4", "p3"])
+      expect("mesclagem: mesmo id fica a de updated maior (remota)", m.playlists.first { $0.id == "p1" }?.name == "Remota nova" && m.playlists.first { $0.id == "p1" }?.tracks.count == 2)
+      expect("mesclagem: empate de updated fica a local", m.playlists.first { $0.id == "p4" }?.name == "Empate")
+      let back = LibraryMerge.merge(local: remote, remote: local)
+      expect("mesclagem: a de updated maior vence também no sentido inverso", back.playlists.first { $0.id == "p1" }?.name == "Remota nova")
+      expect("mesclagem: curtidas por videoId, ordem local e as que faltam no fim", m.liked.map(\.videoId) == ["c", "a", "b"])
+      expect("mesclagem: seguidos sem diferenciar maiúsculas", m.followed == ["Anitta", "pabllo vittar", "Iza"])
+
+      // Playlist apagada (deletedPlaylists com `at` maior que `updated`) não volta; mais velha que o updated, não vale.
+      let t1 = LibraryV1(deletedPlaylists: [BackupTombstone(id: "p1", at: 500), BackupTombstone(id: "p3", at: 5)])
+      let m2 = LibraryMerge.merge(local: local, remote: LibraryV1(playlists: remote.playlists, deletedPlaylists: t1.deletedPlaylists))
+      expect("mesclagem: tombstone mais nova que o updated tira a playlist", !m2.playlists.contains { $0.id == "p1" })
+      expect("mesclagem: tombstone mais velha que o updated não apaga", m2.playlists.contains { $0.id == "p3" })
+      expect("mesclagem: tombstone vencida some, a vigente fica", m2.deletedPlaylists.map(\.id) == ["p1"])
+      let m3 = LibraryMerge.merge(local: LibraryV1(deletedPlaylists: [BackupTombstone(id: "p2", at: 900)]), remote: LibraryV1(playlists: [pl("p2", "Voltou?", updated: 800, ["q"])]))
+      expect("mesclagem: apagada localmente depois do updated remoto não volta", !m3.playlists.contains { $0.id == "p2" })
+      let none = LibraryMerge.merge(local: LibraryV1(), remote: LibraryV1())
+      expect("mesclagem: vazio com vazio é vazio", none.isEmpty && none.deletedPlaylists.isEmpty)
+      let now: Int64 = 400 * 86_400_000
+      let old = LibraryMerge.merge(local: LibraryV1(deletedPlaylists: [BackupTombstone(id: "zz", at: 1)]), remote: LibraryV1(), now: now)
+      expect("mesclagem: tombstone com mais de 120 dias é descartada", old.deletedPlaylists.isEmpty)
+
+      // JSON do Android (números decimais, campos opcionais faltando) é lido sem perder o resto.
+      let androidJSON = """
+      {"v":1,"exportedAt":1.76427E12,"platform":"android","app":"5.2.0",
+       "playlists":[{"id":"u1","name":"Treino","created":1764000000000,"updated":1764270000000.0,"tracks":[{"videoId":"dQw4w9WgXcQ","title":"X","artist":"Y","durationSec":213.0},{"title":"sem id"}]}],
+       "liked":[{"videoId":"abc","title":"L","artist":"M","album":"N","artworkUrl":"https://i/x.jpg"}],
+       "followed":["Anitta"]}
+      """
+      if let lib = try? JSONDecoder().decode(LibraryV1.self, from: Data(androidJSON.utf8)) {
+        expect("LibraryV1 lê JSON do Android (decimais e item quebrado ignorado)", lib.v == 1 && lib.platform == "android" && lib.playlists.first?.tracks.count == 1
+               && lib.playlists.first?.updated == 1764270000000 && lib.liked.first?.album == "N" && lib.deletedPlaylists.isEmpty)
+      } else { expect("LibraryV1 lê JSON do Android (decimais e item quebrado ignorado)", false) }
+      let fitted = local.fittedJSON().flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+      expect("LibraryV1 serializa com v = 1 e as chaves do contrato", (fitted?["v"] as? Int) == 1 && fitted?["playlists"] != nil && fitted?["deletedPlaylists"] != nil && fitted?["followed"] != nil)
+      var big = LibraryV1()
+      big.liked = (0..<8000).map { BackupTrack(videoId: "v\($0)", title: String(repeating: "t", count: 40), artist: "artista", album: "álbum", artworkUrl: "https://i.ytimg.com/vi/v\($0)/hqdefault.jpg") }
+      expect("biblioteca enorme perde capas e álbuns para caber em 1 MB", (big.fittedJSON()?.count ?? Int.max) <= LibraryV1.maxBytes)
+      big.liked = (0..<60000).map { BackupTrack(videoId: "video\($0)", title: "titulo", artist: "artista") }
+      expect("biblioteca gigante que não cabe devolve nil (413 evitado)", big.fittedJSON() == nil)
+    }
+
+    // 8e. ListenBrainz (contrato 5.2 B): regras e formato do envio.
+    do {
+      expect("scrobble: faixa de 200 s com 99 s não, com 100 s sim", !ListenBrainzRules.shouldScrobble(listened: 99, duration: 200) && ListenBrainzRules.shouldScrobble(listened: 100, duration: 200))
+      expect("scrobble: faixa longa vale 4 minutos", !ListenBrainzRules.shouldScrobble(listened: 239, duration: 900) && ListenBrainzRules.shouldScrobble(listened: 240, duration: 900))
+      expect("scrobble: faixa com menos de 30 s nunca", !ListenBrainzRules.shouldScrobble(listened: 29, duration: 29) && !ListenBrainzRules.shouldScrobble(listened: 20, duration: 20))
+      expect("scrobble: 30 s exatos contam com 15 s", ListenBrainzRules.shouldScrobble(listened: 15, duration: 30))
+      expect("scrobble: sem duração conhecida vale 4 minutos", !ListenBrainzRules.shouldScrobble(listened: 200, duration: 0) && ListenBrainzRules.shouldScrobble(listened: 240, duration: 0))
+      let item = ScrobbleItem(listenedAt: 1_764_000_000, artist: "Anitta", track: "Envolver", release: "Versions of Me", videoId: "dQw4w9WgXcQ", durationMs: 193_000)
+      let pn = ListenBrainzRules.body(type: "playing_now", items: [item], version: "5.2.0")
+      let pnEntry = (pn["payload"] as? [[String: Any]])?.first
+      expect("playing_now não leva listened_at", (pn["listen_type"] as? String) == "playing_now" && pnEntry?["listened_at"] == nil)
+      let sg = ListenBrainzRules.body(type: "single", items: [item], version: "5.2.0")
+      let e = (sg["payload"] as? [[String: Any]])?.first
+      let md = e?["track_metadata"] as? [String: Any]
+      let ai = md?["additional_info"] as? [String: Any]
+      expect("single leva listened_at, artista, faixa e álbum", (e?["listened_at"] as? Int) == 1_764_000_000 && (md?["artist_name"] as? String) == "Anitta" && (md?["track_name"] as? String) == "Envolver" && (md?["release_name"] as? String) == "Versions of Me")
+      expect("additional_info do contrato", (ai?["media_player"] as? String) == "Lume Music" && (ai?["submission_client"] as? String) == "Lume Music" && (ai?["submission_client_version"] as? String) == "5.2.0"
+             && (ai?["music_service"] as? String) == "youtube.com" && (ai?["origin_url"] as? String) == "https://music.youtube.com/watch?v=dQw4w9WgXcQ" && (ai?["duration_ms"] as? Int) == 193_000)
+      var q: [ScrobbleItem] = []
+      for i in 0..<520 { q = ListenBrainzRules.enqueue(ScrobbleItem(listenedAt: i, artist: "a", track: "t"), to: q) }
+      expect("fila offline guarda no máximo 500 (descarta as mais antigas)", q.count == 500 && q.first?.listenedAt == 20 && q.last?.listenedAt == 519)
+    }
+
+    // 8f. Texto do último backup.
+    do {
+      var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "America/Sao_Paulo")!
+      let now = cal.date(from: DateComponents(year: 2026, month: 11, day: 27, hour: 22, minute: 5))!
+      let today = cal.date(from: DateComponents(year: 2026, month: 11, day: 27, hour: 21, minute: 40))!
+      let yest = cal.date(from: DateComponents(year: 2026, month: 11, day: 26, hour: 8, minute: 3))!
+      let older = cal.date(from: DateComponents(year: 2026, month: 11, day: 3, hour: 9, minute: 30))!
+      expect("último backup: hoje às 21:40", LibraryBackupService.lastBackupText(today, now: now, calendar: cal) == "Último backup: hoje às 21:40")
+      expect("último backup: ontem às 08:03", LibraryBackupService.lastBackupText(yest, now: now, calendar: cal) == "Último backup: ontem às 08:03")
+      expect("último backup: dia 03/11 às 09:30", LibraryBackupService.lastBackupText(older, now: now, calendar: cal) == "Último backup: 03/11 às 09:30")
+      expect("último backup: nenhum", LibraryBackupService.lastBackupText(nil) == "Nenhum backup ainda")
+    }
+
+    // 8e. Áudio 5.2: volume igual, limitador de pico, rampa e silêncio (matemática pura).
     for (name, ok) in LoudnessSelfTest.cases() { expect(name, ok) }
 
     // 9. Utilidades.
