@@ -25,6 +25,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -128,6 +129,7 @@ fun SettingsScreen(bottomInset: Dp) {
     var confirmCache by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         DetailHeader("Ajustes")
+        val accessActive = com.adriano.lumemusic.access.Access.service.state.collectAsState().value is com.adriano.lumemusic.access.AccessState.Active
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(22.dp)) {
             item { AccessStatusCard() }
             item {
@@ -198,7 +200,7 @@ fun SettingsScreen(bottomInset: Dp) {
                     LinkRow("person.2", "Artistas seguidos", "${s.followedArtists.size}") { AppModel.select(com.adriano.lumemusic.data.AppTab.LIBRARY) }
                 }
             }
-            item { SettingsBackupSection() }
+            if (accessActive) item { SettingsBackupSection() }
             item { SettingsScrobbleSection() }
             item {
                 Card("Armazenamento & Offline") {

@@ -21,7 +21,7 @@ object AccessConfig {
     /** Vazio = portão desligado até a config remota informar a URL do painel. */
     const val DEFAULT_API_BASE = ""
     const val CONFIG_URL = "https://raw.githubusercontent.com/Drill23/lume-music/main/config/painel.json"
-    const val APP_VERSION = "5.1.0"
+    val APP_VERSION: String = com.adriano.lumemusic.BuildConfig.VERSION_NAME.removeSuffix("-debug")
     const val PLATFORM = "android"
     const val CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
     const val CHECK_INTERVAL_MS = 6 * 3600_000L
