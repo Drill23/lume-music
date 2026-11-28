@@ -90,7 +90,15 @@ data class MusicPlaylist(
     val trackIds: List<String> = emptyList(),
     val sourceBadge: String = "Lume",
     val createdAt: Long = System.currentTimeMillis(),
-)
+    /** Última alteração (ms). 0 = playlist antiga, vale [createdAt]. Usado na mesclagem do backup da biblioteca. */
+    val updatedAt: Long = 0L,
+) {
+    val lastChange: Long get() = maxOf(updatedAt, createdAt)
+}
+
+/** Playlist apagada (lápide) para o backup não ressuscitá-la em outro aparelho. */
+@Serializable
+data class DeletedPlaylist(val id: String, val at: Long)
 
 @Serializable
 data class LyricLine(

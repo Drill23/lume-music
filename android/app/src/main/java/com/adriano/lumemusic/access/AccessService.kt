@@ -117,6 +117,8 @@ class AccessService(
     private val hw: () -> String = { "" },
 ) {
     private val trialMutex = kotlinx.coroutines.sync.Mutex()
+    /** Chamado depois que um vitalício é ativado, transferido ou restaurado neste aparelho (dispara a restauração da biblioteca). */
+    @Volatile var onLifetimeAdopted: ((AccessInfo) -> Unit)? = null
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     private val _state = MutableStateFlow<AccessState>(AccessState.Open)
     val state: StateFlow<AccessState> = _state
@@ -356,6 +358,7 @@ class AccessService(
         rememberLifetime(info)
         store.put(K_LAST_CHECK, now().toString())
         _state.value = AccessState.Active(info)
+        if (info.lifetime) try { onLifetimeAdopted?.invoke(info) } catch (_: Exception) {}
     }
 
     /** POST que devolve o fluxo do activate (activate, restore, transfer): adota o token e o estado. */

@@ -27,6 +27,8 @@ class LumeApp : Application(), SingletonImageLoader.Factory {
         com.adriano.lumemusic.ui.HomeStore.init(this)
         Access.init(this)
         AudioPlayer.init(this)
+        com.adriano.lumemusic.data.LibraryBackup.init(this)
+        com.adriano.lumemusic.data.ListenBrainz.init(this)
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =

@@ -118,6 +118,8 @@ object Access {
         } catch (_: Exception) { "" }
         service = AccessService(KeystoreSecureStore(app), http, deviceSeed = { seed }, lifetimeStore = PrefsStore(app, "lume_lifetime"), hw = { hw })
         service.loadInitialState()
+        // Vitalício ativado/transferido/restaurado: junta a biblioteca guardada no painel com a local (nunca apaga nada).
+        service.onLifetimeAdopted = { com.adriano.lumemusic.data.LibraryBackup.onLifetimeActivated() }
         Purchase.init(app, http)
     }
 }

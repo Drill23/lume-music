@@ -53,6 +53,7 @@ private data class Snapshot(
     val playerSurface: String = PlayerSurfaceTab.ARTWORK.raw,
     val lyricsFontScale: Float = 1f,
     val lockArtStyle: String = LockArtStyle.AUTOMATIC.raw,
+    val deletedPlaylists: List<DeletedPlaylist> = emptyList(),
 )
 
 /**
@@ -84,6 +85,8 @@ object LibraryStore {
     var seenReleaseIds by mutableStateOf<Set<String>>(emptySet()); private set
     var savedAlbums by mutableStateOf<List<AlbumShowcase>>(emptyList()); private set
     var totalListeningSeconds by mutableStateOf(0.0); private set
+    /** Lápides de playlists apagadas (backup da biblioteca). */
+    var deletedPlaylists by mutableStateOf<List<DeletedPlaylist>>(emptyList()); private set
 
     // Preferências
     var visualizerStyle by Saved(VisualizerStyle.ARES)
@@ -234,7 +237,7 @@ object LibraryStore {
             Haptics.success()
             if (autoDownloadFavorites && !isDownloaded(track.id)) DownloadManager.download(track)
         }
-        save()
+        save(); LibraryBackup.markChanged()
     }
 
     fun recordPlay(track: Track) {
@@ -272,9 +275,11 @@ object LibraryStore {
         registerAll(tracks)
         val ids = tracks.map { it.id }.distinct()
         val cover = artworkURL.ifEmpty { tracks.firstOrNull { it.artworkURL.isNotEmpty() }?.artworkURL ?: "" }
-        val pl = MusicPlaylist(name = name, subtitle = subtitle, artworkURL = cover, trackIds = ids, sourceBadge = sourceBadge)
+        val now = System.currentTimeMillis()
+        val pl = MusicPlaylist(name = name, subtitle = subtitle, artworkURL = cover, trackIds = ids, sourceBadge = sourceBadge, createdAt = now, updatedAt = now)
         playlists = listOf(pl) + playlists
-        save()
+        deletedPlaylists = deletedPlaylists.filter { it.id != pl.id }
+        save(); LibraryBackup.markChanged()
         return pl
     }
 
@@ -287,24 +292,27 @@ object LibraryStore {
         val updated = pl.copy(
             trackIds = pl.trackIds + track.id,
             artworkURL = if (pl.artworkURL.isEmpty() && track.artworkURL.isNotEmpty()) track.artworkURL else pl.artworkURL,
+            updatedAt = System.currentTimeMillis(),
         )
         playlists = playlists.toMutableList().also { it[idx] = updated }
-        save()
+        save(); LibraryBackup.markChanged()
     }
 
     fun removeTrack(trackId: String, playlistId: String) {
-        playlists = playlists.map { if (it.id == playlistId) it.copy(trackIds = it.trackIds.filter { t -> t != trackId }) else it }
-        save()
+        playlists = playlists.map { if (it.id == playlistId) it.copy(trackIds = it.trackIds.filter { t -> t != trackId }, updatedAt = System.currentTimeMillis()) else it }
+        save(); LibraryBackup.markChanged()
     }
 
     fun deletePlaylist(playlistId: String) {
+        if (playlists.none { it.id == playlistId }) return
         playlists = playlists.filter { it.id != playlistId }
-        save()
+        deletedPlaylists = (deletedPlaylists.filter { it.id != playlistId } + DeletedPlaylist(playlistId, System.currentTimeMillis())).takeLast(500)
+        save(); LibraryBackup.markChanged()
     }
 
     fun renamePlaylist(playlistId: String, name: String) {
-        playlists = playlists.map { if (it.id == playlistId) it.copy(name = name) else it }
-        save()
+        playlists = playlists.map { if (it.id == playlistId) it.copy(name = name, updatedAt = System.currentTimeMillis()) else it }
+        save(); LibraryBackup.markChanged()
     }
 
     fun reorderPlaylist(playlistId: String, from: Int, to: Int) {
@@ -314,16 +322,93 @@ object LibraryStore {
                 if (from !in ids.indices) return@map it
                 val item = ids.removeAt(from)
                 ids.add(to.coerceIn(0, ids.size), item)
-                it.copy(trackIds = ids)
+                it.copy(trackIds = ids, updatedAt = System.currentTimeMillis())
             }
         }
-        save()
+        save(); LibraryBackup.markChanged()
     }
 
     fun markDownloaded(track: Track) {
         register(track)
         downloadedIds = downloadedIds + track.id
         save()
+    }
+
+    // ---------- Backup da biblioteca (contrato 5.2 A) ----------
+
+    private fun videoIdOf(t: Track): String? = t.videoId?.takeIf { it.isNotBlank() }
+
+    private fun lbTrack(t: Track, vid: String) = LbTrack(
+        videoId = vid, title = t.title, artist = t.artist, album = t.album.ifEmpty { null },
+        durationSec = if (t.duration > 0) Math.round(t.duration).toInt() else null, artworkUrl = t.artworkURL.ifEmpty { null },
+    )
+
+    /** Biblioteca no formato LibraryV1. Faixas sem videoId (arquivos do aparelho) não entram. */
+    fun exportLibrary(): LibraryV1 {
+        fun tracksOf(ids: List<String>): List<LbTrack> {
+            val seen = HashSet<String>()
+            return ids.mapNotNull { id -> tracksById[id]?.let { t -> videoIdOf(t)?.takeIf { seen.add(it) }?.let { vid -> lbTrack(t, vid) } } }
+        }
+        return LibraryV1(
+            exportedAt = System.currentTimeMillis(), platform = "android", app = com.adriano.lumemusic.access.AccessConfig.APP_VERSION,
+            playlists = playlists.map { LbPlaylist(it.id, it.name, it.createdAt, it.lastChange, tracksOf(it.trackIds)) },
+            liked = tracksOf(favoriteIds),
+            followed = followedArtists,
+            deletedPlaylists = deletedPlaylists.map { LbDeleted(it.id, it.at) },
+        )
+    }
+
+    /**
+     * Aplica uma biblioteca JÁ MESCLADA (LibraryMerge) sem apagar nada local: faixas sem videoId continuam nas playlists,
+     * a ordem local é mantida e o que vem de fora entra no fim. Devolve true se algo mudou.
+     */
+    fun applyMerged(m: LibraryV1): Boolean {
+        val before = listOf(playlists, favoriteIds, followedArtists, deletedPlaylists)
+        val byVid = HashMap<String, String>()
+        for (t in tracksById.values) videoIdOf(t)?.let { byVid.putIfAbsent(it, t.id) }
+        fun localId(lt: LbTrack): String {
+            byVid[lt.videoId]?.let { return it }
+            if (tracksById.containsKey(lt.videoId)) { byVid[lt.videoId] = lt.videoId; return lt.videoId }
+            val t = newTrack(
+                videoId = lt.videoId, title = lt.title, artist = lt.artist, album = lt.album ?: "",
+                duration = (lt.durationSec ?: 0).toDouble(), artworkURL = lt.artworkUrl ?: "",
+            )
+            register(t); byVid[lt.videoId] = t.id
+            return t.id
+        }
+        fun cover(ids: List<String>) = ids.firstNotNullOfOrNull { tracksById[it]?.artworkURL?.takeIf { u -> u.isNotEmpty() } } ?: ""
+
+        val mergedById = m.playlists.associateBy { it.id }
+        val localIds = playlists.map { it.id }.toSet()
+        val out = ArrayList<MusicPlaylist>()
+        for (lp in playlists) {
+            val mp = mergedById[lp.id] ?: continue   // apagada por lápide mais nova
+            if (mp.updated > lp.lastChange) {
+                val keepLocal = lp.trackIds.filter { id -> tracksById[id]?.let { videoIdOf(it) == null } ?: false }
+                val ids = (mp.tracks.map(::localId) + keepLocal).distinct()
+                out += lp.copy(name = mp.name.ifEmpty { lp.name }, trackIds = ids, createdAt = mp.created.takeIf { it > 0 } ?: lp.createdAt,
+                    updatedAt = mp.updated, artworkURL = lp.artworkURL.ifEmpty { cover(ids) })
+            } else out += lp
+        }
+        for (mp in m.playlists) if (mp.id !in localIds) {
+            val ids = mp.tracks.map(::localId).distinct()
+            out += MusicPlaylist(id = mp.id, name = mp.name.ifEmpty { "Playlist" }, artworkURL = cover(ids), trackIds = ids,
+                createdAt = mp.created.takeIf { it > 0 } ?: mp.updated, updatedAt = mp.updated)
+        }
+        playlists = out
+        deletedPlaylists = m.deletedPlaylists.map { DeletedPlaylist(it.id, it.at) }.takeLast(500)
+
+        val fav = favoriteIds.toMutableList(); val favSet = fav.toHashSet()
+        for (lt in m.liked) { val id = localId(lt); if (favSet.add(id)) fav.add(id) }
+        favoriteIds = fav
+
+        val fol = followedArtists.toMutableList()
+        for (f in m.followed) if (fol.none { it.equals(f, ignoreCase = true) }) fol.add(f)
+        followedArtists = fol
+
+        val changed = before != listOf(playlists, favoriteIds, followedArtists, deletedPlaylists)
+        if (changed) save()
+        return changed
     }
 
     // ---------- Artistas ----------
@@ -335,7 +420,7 @@ object LibraryStore {
         if (clean.isEmpty()) return
         if (isFollowing(clean)) followedArtists = followedArtists.filter { !it.equals(clean, ignoreCase = true) }
         else { followedArtists = listOf(clean) + followedArtists; Haptics.success() }
-        save()
+        save(); LibraryBackup.markChanged()
     }
 
     fun markReleasesSeen(ids: Collection<String>) { seenReleaseIds = seenReleaseIds + ids; save() }
@@ -450,6 +535,7 @@ object LibraryStore {
             playerSurface = PlayerSurfaceTab.fromRaw(snap.playerSurface)
             lyricsFontScale = snap.lyricsFontScale
             lockArtStyle = LockArtStyle.fromRaw(snap.lockArtStyle)
+            deletedPlaylists = snap.deletedPlaylists
         } catch (_: Exception) {}
     }
 
@@ -461,7 +547,7 @@ object LibraryStore {
             visualizerStyle.raw, soundProfile.raw, animatedArtEnabled, autoTranslateLyrics, followedArtists, playCounts,
             seenReleaseIds.toList(), savedAlbums, customEQGains, crossfadeSeconds, offlineMode, autoDownloadFavorites,
             totalListeningSeconds, turntableFinish.raw, vinylEdition.raw, turntable3D, cassetteStyle.raw, introEnabled,
-            playerSurface.raw, lyricsFontScale, lockArtStyle.raw,
+            playerSurface.raw, lyricsFontScale, lockArtStyle.raw, deletedPlaylists,
         )
         saveJob?.cancel()
         saveJob = scope.launch {

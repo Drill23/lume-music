@@ -2,4 +2,11 @@
 <resources>
     <string name="app_name">Lume Music</string>
     <string name="notif_channel_downloads">Downloads offline</string>
+    <string name="widget_description_4x1">Música atual com anterior, tocar/pausar e próxima.</string>
+    <string name="widget_description_4x2">Capa grande, música atual e controles de reprodução.</string>
+    <string name="widget_prev">Anterior</string>
+    <string name="widget_play_pause">Tocar ou pausar</string>
+    <string name="widget_next">Próxima</string>
+    <string name="widget_idle_title">Lume Music</string>
+    <string name="widget_idle_subtitle">Toque para abrir</string>
 </resources>

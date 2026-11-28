@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="lume_canvas">#09090B</color>
+    <color name="widget_text">#FFF5F5F7</color>
+    <color name="widget_text_secondary">#FFAEAEB2</color>
+    <color name="widget_icon">#FFF5F5F7</color>
 </resources>
