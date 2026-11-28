@@ -1,20 +1,20 @@
 {
-  "versionName": "5.2.3",
-  "build": 19,
+  "versionName": "5.2.4",
+  "build": 20,
   "mandatory": false,
-  "notes": "• Correção definitiva do travamento ao finalizar downloads e muito mais fluidez com bibliotecas grandes",
+  "notes": "• Correção do botão X no Cover Flow do iPhone, melhorias de toque e estabilidade geral",
   "android": {
-    "build": 19,
-    "versionName": "5.2.3",
+    "build": 20,
+    "versionName": "5.2.4",
     "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-Android.apk",
     "notes": "• Início e downloads mais leves com bibliotecas grandes (mixes em cache e regex pré-compilada)\n• Downloads offline rápidos, sem travar em 95–99% e sem reiniciar a faixa tocando\n• Busca progressiva, avisos visíveis por cima do player e correções gerais",
     "mandatory": false
   },
   "ios": {
-    "build": 19,
-    "versionName": "5.2.3",
+    "build": 20,
+    "versionName": "5.2.4",
     "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-iPhone.ipa",
-    "notes": "• Corrigido definitivamente o travamento total do player ao finalizar downloads (loop infinito no RootView + recálculo pesado da HomeView)\n• Áudio offline agora salva em .m4a só de áudio via passthrough em ~130 ms sem interferir na reprodução\n• Fechar o player agora é instantâneo (0,3 ms) mesmo baixando faixas em bibliotecas grandes\n• Biblioteca e menus de faixas isolados para zero travamentos durante downloads",
+    "notes": "• Corrigido o botão X para sair do Cover Flow no modo vertical (estágio 3D não rouba mais o toque da barra superior nem trava o fechamento)\n• Corrigida a separação de modais em tela cheia e fechamento imediato do Cover Flow e do player\n• Correção definitiva do travamento ao finalizar downloads e áudio offline .m4a puro via passthrough",
     "mandatory": false
   }
 }

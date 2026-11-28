@@ -1,3 +1,4 @@
+import Combine
 import QuartzCore
 import SwiftUI
 
@@ -127,6 +128,29 @@ final class CoverFlowTrackStore: ObservableObject {
   }
 }
 
+/// Observa mudanças do feed e da biblioteca uma única vez (sem recriar publishers Combine dentro do `body`).
+@MainActor
+final class CoverFlowDataObserver: ObservableObject {
+  private var cancellables: Set<AnyCancellable> = []
+
+  func start(onFeed: @escaping () -> Void, onLibrary: @escaping () -> Void) {
+    cancellables.removeAll()
+    AppModel.shared.$feed
+      .dropFirst()
+      .receive(on: DispatchQueue.main)
+      .sink { _ in onFeed() }
+      .store(in: &cancellables)
+    LibraryStore.shared.objectWillChange
+      .debounce(for: .seconds(1), scheduler: DispatchQueue.main)
+      .sink { _ in onLibrary() }
+      .store(in: &cancellables)
+  }
+
+  func stop() {
+    cancellables.removeAll()
+  }
+}
+
 // MARK: - Tela
 
 struct CoverFlowScreen: View {
@@ -140,6 +164,7 @@ struct CoverFlowScreen: View {
   @StateObject private var selection = CoverFlowSelection()
   @StateObject private var trackStore = CoverFlowTrackStore()
   @StateObject private var motion = MotionOrientationMonitor()
+  @StateObject private var dataObserver = CoverFlowDataObserver()
 
   enum Source: String, CaseIterable, Identifiable {
     case releases = "Lançamentos"
@@ -178,11 +203,17 @@ struct CoverFlowScreen: View {
     .environment(\.colorScheme, .dark)
     .statusBarHidden(forcedLandscape)
     .onAppear {
+      closing = false
       rebuild()
       motion.start()
+      dataObserver.start(
+        onFeed: { rebuild() },
+        onLibrary: { if source == .library { rebuild() } }
+      )
       runDebugHooks()
     }
     .onDisappear {
+      dataObserver.stop()
       position.stop()
       motion.stop()
       if forcedLandscape || OrientationLock.shared.mask != OrientationLock.defaultMask {
@@ -195,10 +226,6 @@ struct CoverFlowScreen: View {
       selection.index = 0
       position.snap(to: 0)
       rebuild()
-    }
-    .onReceive(AppModel.shared.$feed.dropFirst()) { _ in rebuild() }
-    .onReceive(LibraryStore.shared.objectWillChange.debounce(for: .seconds(1), scheduler: DispatchQueue.main)) { _ in
-      if source == .library { rebuild() }
     }
   }
 
@@ -223,18 +250,31 @@ struct CoverFlowScreen: View {
   }
 
   private func close() {
-    guard !closing else { return }
+    let alreadyClosing = closing
     closing = true
+    position.stop()
     motion.stop()
+    dataObserver.stop()
     Haptics.light()
     selection.flippedId = nil
-    if forcedLandscape {
+    let finish: @MainActor () -> Void = {
+      AppModel.shared.showCoverFlow = false
+      dismiss()
+    }
+    if forcedLandscape && !alreadyClosing {
       forcedLandscape = false
       OrientationLock.shared.lockPortrait()
-      // Dá tempo da interface girar de volta antes de fechar a cobertura.
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { dismiss() }
+      // Dá tempo da interface girar de volta antes de fechar; um segundo toque no X fecha imediatamente.
+      Task { @MainActor in
+        try? await Task.sleep(for: .milliseconds(250))
+        finish()
+      }
     } else {
-      dismiss()
+      forcedLandscape = false
+      if OrientationLock.shared.mask != OrientationLock.defaultMask {
+        OrientationLock.shared.lockPortrait()
+      }
+      finish()
     }
   }
 
@@ -422,19 +462,13 @@ struct CoverFlowLandscapeLayout: View {
     let captionH: CGFloat = 56
     ZStack(alignment: .top) {
       CoverFlowStage(items: items, m: m, position: position, selection: selection, tracks: tracks)
-      if items.isEmpty { CoverFlowEmpty(source: source) }
-      HStack(spacing: 12) {
-        GlassIconButton(systemName: "xmark", size: 44, iconSize: 17, foreground: .white, action: onClose)
-        Spacer(minLength: 0)
-        CoverFlowSourcePicker(source: $source)
-        Spacer(minLength: 0)
-        GlassIconButton(systemName: "play.fill", size: 44, iconSize: 17, foreground: .white, action: onPlay)
+        .zIndex(selection.flippedId != nil ? 10 : 0)
+
+      if items.isEmpty {
+        CoverFlowEmpty(source: source)
+          .allowsHitTesting(false)
+          .zIndex(1)
       }
-      .padding(.horizontal, 16)
-      .padding(.top, 8)
-      .opacity(selection.flippedId == nil ? 1 : 0.0)
-      .allowsHitTesting(selection.flippedId == nil)
-      .animation(.easeOut(duration: 0.2), value: selection.flippedId)
 
       if !items.isEmpty {
         CoverFlowCaption(items: items, selection: selection)
@@ -443,8 +477,24 @@ struct CoverFlowLandscapeLayout: View {
           .opacity(selection.flippedId == nil ? 1 : 0)
           .animation(.easeOut(duration: 0.2), value: selection.flippedId)
           .allowsHitTesting(false)
+          .zIndex(4)
       }
 
+      HStack(spacing: 12) {
+        GlassIconButton(systemName: "xmark", size: 44, iconSize: 17, foreground: .white, action: onClose)
+          .accessibilityLabel("Fechar")
+        Spacer(minLength: 0)
+        CoverFlowSourcePicker(source: $source)
+        Spacer(minLength: 0)
+        GlassIconButton(systemName: "play.fill", size: 44, iconSize: 17, foreground: .white, action: onPlay)
+          .accessibilityLabel("Tocar")
+      }
+      .padding(.horizontal, 16)
+      .padding(.top, 8)
+      .opacity(selection.flippedId == nil ? 1 : 0.0)
+      .allowsHitTesting(selection.flippedId == nil)
+      .animation(.easeOut(duration: 0.2), value: selection.flippedId)
+      .zIndex(20)
     }
     .frame(width: size.width, height: size.height, alignment: .top)
   }
@@ -470,23 +520,15 @@ struct CoverFlowPortraitLayout: View {
     let panelY = sliderY + 40
     let panelH = max(120, size.height - panelY - 8)
     ZStack(alignment: .top) {
-      VStack(spacing: 8) {
-        HStack {
-          GlassIconButton(systemName: "xmark", size: 44, iconSize: 17, foreground: .white, action: onClose)
-          Spacer()
-          Text("Cover Flow")
-            .font(Theme.rounded(17, .semibold))
-            .foregroundStyle(.white)
-          Spacer()
-          GlassIconButton(systemName: "play.fill", size: 44, iconSize: 17, foreground: .white, action: onPlay)
-        }
-        .padding(.horizontal, 16)
-        CoverFlowSourcePicker(source: $source)
-      }
-      .padding(.top, 4)
+      // Estágio abaixo dos controles quando nenhuma capa está virada (evita engolir toques do X, scrubber e lista).
+      CoverFlowStage(items: items, m: m, position: position, selection: selection, tracks: tracks)
+        .zIndex(selection.flippedId != nil ? 10 : 0)
 
       if items.isEmpty {
-        CoverFlowEmpty(source: source).padding(.top, m.coverTop)
+        CoverFlowEmpty(source: source)
+          .padding(.top, m.coverTop)
+          .allowsHitTesting(false)
+          .zIndex(1)
       } else {
         CoverFlowCaption(items: items, selection: selection)
           .frame(height: captionH)
@@ -494,18 +536,38 @@ struct CoverFlowPortraitLayout: View {
           .opacity(selection.flippedId == nil ? 1 : 0)
           .allowsHitTesting(false)
           .animation(.easeOut(duration: 0.2), value: selection.flippedId)
+          .zIndex(4)
 
         CoverFlowScrubber(count: items.count, position: position, selection: selection)
           .padding(.horizontal, 28)
           .padding(.top, sliderY)
+          .zIndex(5)
 
         CoverFlowTrackPanel(items: items, selection: selection, store: tracks)
           .frame(height: panelH)
           .padding(.horizontal, 16)
           .padding(.top, panelY)
+          .zIndex(5)
       }
 
-      CoverFlowStage(items: items, m: m, position: position, selection: selection, tracks: tracks)
+      // Barra superior sempre acima de tudo para o X, Play e abas funcionarem em qualquer estado.
+      VStack(spacing: 8) {
+        HStack {
+          GlassIconButton(systemName: "xmark", size: 44, iconSize: 17, foreground: .white, action: onClose)
+            .accessibilityLabel("Fechar")
+          Spacer()
+          Text("Cover Flow")
+            .font(Theme.rounded(17, .semibold))
+            .foregroundStyle(.white)
+          Spacer()
+          GlassIconButton(systemName: "play.fill", size: 44, iconSize: 17, foreground: .white, action: onPlay)
+            .accessibilityLabel("Tocar")
+        }
+        .padding(.horizontal, 16)
+        CoverFlowSourcePicker(source: $source)
+      }
+      .padding(.top, 4)
+      .zIndex(20)
     }
     .frame(width: size.width, height: size.height, alignment: .top)
   }
@@ -625,11 +687,15 @@ struct CoverFlowStage: View {
     let pos = position.value
     let current = currentIndex(pos)
     ZStack(alignment: .top) {
-      // Área de arraste/toque em todo o palco (um toque no fundo desvira a capa).
-      Color.clear
-        .frame(width: m.width, height: max(0, m.interactBottom - m.interactTop))
+      // Área de arraste/toque do palco (e fundo escuro ao virar a capa para desvirar com um toque fora).
+      let isFlippedAny = selection.flippedId != nil
+      let tapTop: CGFloat = (isFlippedAny && m.backAspect > 1.2) ? 0 : m.interactTop
+      let tapHeight: CGFloat = isFlippedAny ? max(0, m.height - tapTop) : max(0, m.interactBottom - m.interactTop)
+      Color.black.opacity(isFlippedAny ? 0.55 : 0.001)
+        .frame(width: m.width, height: tapHeight)
         .contentShape(Rectangle())
-        .offset(y: m.interactTop)
+        .offset(y: tapTop)
+        .animation(.easeOut(duration: 0.22), value: isFlippedAny)
         .onTapGesture { unflip() }
 
       CoverFlowFloor(width: m.width, cover: m.cover)
@@ -1255,8 +1321,10 @@ struct CoverFlowRotatePrompt: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
 
       GlassIconButton(systemName: "xmark", size: 44, iconSize: 17, foreground: .white, action: onClose)
+        .accessibilityLabel("Fechar")
         .padding(.leading, 16)
         .padding(.top, 4)
+        .zIndex(20)
     }
   }
 }

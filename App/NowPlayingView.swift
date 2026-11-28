@@ -70,6 +70,7 @@ struct NowPlayingView: View {
       .onEnded { v in
         if v.translation.height > 120 || v.predictedEndTranslation.height > 320 {
           Haptics.light()
+          app.showPlayer = false
           dismiss()
         } else {
           withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) { dragY = 0 }
@@ -83,7 +84,11 @@ struct NowPlayingView: View {
     VStack(spacing: 12) {
       Capsule().fill(Theme.text.opacity(0.28)).frame(width: 40, height: 5)
       HStack {
-        GlassIconButton(systemName: "chevron.down", size: 44) { dismiss() }
+        GlassIconButton(systemName: "chevron.down", size: 44) {
+          app.showPlayer = false
+          dismiss()
+        }
+        .accessibilityLabel("Fechar player")
         Spacer()
         VStack(spacing: 1) {
           Text("TOCANDO AGORA")

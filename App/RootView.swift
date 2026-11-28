@@ -277,6 +277,7 @@ final class AppModel: ObservableObject {
         return
       }
     }
+    showCoverFlow = false
     showPlayer = true
   }
 
@@ -293,6 +294,7 @@ final class AppModel: ObservableObject {
     player.autoplayRadio = true
     player.play(seed, in: [seed])
     showToast("Lume Flow ligado · rádio infinita a partir de \(seed.artist)")
+    showCoverFlow = false
     showPlayer = true
   }
 
@@ -408,9 +410,14 @@ struct RootView: View {
     .fullScreenCover(isPresented: $app.showPlayer) {
       NowPlayingView()
     }
-    .fullScreenCover(isPresented: $app.showCoverFlow) {
-      CoverFlowScreen()
-    }
+    // Separa os dois fullScreenCover em nós distintos para o SwiftUI nunca conflitar no dismiss do Cover Flow.
+    .background(
+      Color.clear
+        .allowsHitTesting(false)
+        .fullScreenCover(isPresented: $app.showCoverFlow) {
+          CoverFlowScreen()
+        }
+    )
     .sheet(item: $app.playlistPickerTrack) { tr in
       AddToPlaylistSheet(track: tr)
         .presentationDetents([.medium, .large])
