@@ -34,6 +34,14 @@ enum StageDebug {
       PlaybackClock.shared.duration = 215
       PlaybackClock.shared.currentTime = (Double(value("-LMProgress") ?? "0.3") ?? 0.3) * 215
       player.isPlaying = (value("-LMPlaying") ?? "1") == "1"
+      // Letra de demonstração (texto original, só para prints do palco "Letra"; a faixa de teste é fictícia).
+      if value("-LMLyricsDemo") != nil {
+        let demo = ["Acendo a luz do quarto escuro", "e o som desenha o seu lugar", "cada batida, um passo seguro",
+                    "cada silêncio, um jeito de voltar", "Noite estrelada, fica mais um pouco", "deixa o refrão girar",
+                    "no vidro frio da madrugada", "a gente aprende a brilhar"]
+        let lines = demo.enumerated().map { LyricLine(id: $0.offset, time: 52 + Double($0.offset) * 4.5, text: $0.element, translated: nil) }
+        player.lyrics = LyricsBundle(trackKey: track.id, synced: true, lines: lines, source: "Lume", translatedToPT: false)
+      }
       app.playerStyle = tab == .lyrics ? .artwork : tab
       app.playerTab = tab
       app.showPlayer = true
