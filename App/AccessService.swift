@@ -1246,6 +1246,7 @@ struct AccessStatusCard: View {
     }
     .padding(18)
     .frame(maxWidth: .infinity, alignment: .leading)
+    .environment(\.lumeFlatGlass, true)   // botões dentro do cartão de vidro: sem vidro sobre vidro
     .glass(24)
     .sheet(item: $sheet) { s in
       switch s {

@@ -305,6 +305,7 @@ struct PlayerStylePicker: View {
       }
       .padding(.horizontal, 20)
       .padding(.vertical, 8)
+      .environment(\.lumeFlatGlass, true)   // 5 cartões numa lista rolando: superfície leve em vez de 5 vidros
     }
     .scrollClipDisabled()
   }

@@ -1,5 +1,7 @@
 package com.adriano.lumemusic.ui.screens
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -130,9 +132,12 @@ fun SettingsScreen(bottomInset: Dp) {
     Column(Modifier.fillMaxSize()) {
         DetailHeader("Ajustes")
         val accessActive = com.adriano.lumemusic.access.Access.service.state.collectAsState().value is com.adriano.lumemusic.access.AccessState.Active
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-            item { AccessStatusCard() }
-            item {
+        // Ajustes é uma página finita: Column com rolagem compõe tudo uma vez só. A LazyColumn recompunha cada cartão
+        // gigante (vários chips + vidro) toda vez que ele voltava à tela, e a rolagem travava (23% de quadros perdidos).
+        androidx.compose.runtime.CompositionLocalProvider(com.adriano.lumemusic.ui.theme.LocalFlatGlass provides true) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = bottomInset), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+            AccessStatusCard()
+            run {
                 Card("Tocando agora") {
                     Section("Estilo do Tocando agora", "Escolha como a capa aparece na tela de reprodução.") {
                         ChipsRow(listOf(PlayerSurfaceTab.ARTWORK, PlayerSurfaceTab.VINYL, PlayerSurfaceTab.CASSETTE, PlayerSurfaceTab.WAVES).map { it.raw to it }, AppModel.playerStyle) { AppModel.playerStyle = it }
@@ -149,7 +154,7 @@ fun SettingsScreen(bottomInset: Dp) {
                     ToggleRow("sparkles", "Abertura animada", null, s.introEnabled) { s.introEnabled = it }
                 }
             }
-            item {
+            run {
                 Card("Áudio") {
                     ToggleRow("infinity", "Rádio automática", "Continua tocando músicas parecidas quando a fila acaba", AudioPlayer.autoplayRadio) { AudioPlayer.autoplayRadio = it }
                     CardDivider()
@@ -163,14 +168,14 @@ fun SettingsScreen(bottomInset: Dp) {
                     LinkRow("moon.zzz.fill", "Timer de dormir", AudioPlayer.sleepTimerOption.takeIf { it != SleepTimerOption.OFF }?.label) { AppModel.tabletSheet = "sleep" }
                 }
             }
-            item {
+            run {
                 Card("Letras e capas") {
                     ToggleRow("photo.on.rectangle.angled", "Capas animadas", "Usa as capas em movimento do Apple Music quando existirem", s.animatedArtEnabled) { s.animatedArtEnabled = it }
                     CardDivider()
                     ToggleRow("translate", "Traduzir letras automaticamente", "Mostra a tradução em português abaixo de cada linha", s.autoTranslateLyrics) { s.autoTranslateLyrics = it }
                 }
             }
-            item {
+            run {
                 Card("Estúdio Vinil & K7") {
                     Section("Acabamento do toca-discos") { ChipsRow(TurntableFinish.entries.map { it.raw to it }, s.turntableFinish) { s.turntableFinish = it } }
                     CardDivider(false)
@@ -181,7 +186,7 @@ fun SettingsScreen(bottomInset: Dp) {
                     Section("Estilo da fita K7") { ChipsRow(CassetteStyle.entries.map { it.raw to it }, s.cassetteStyle) { s.cassetteStyle = it } }
                 }
             }
-            item {
+            run {
                 Card("Tela de bloqueio") {
                     Section("Arte da tela de bloqueio", "Com o celular bloqueado aparece o disco de vinil ou a fita K7 com a capa da música. No Automático, segue o estilo do Tocando agora.") {
                         ChipsRow(LockArtStyle.entries.map { it.title to it }, s.lockArtStyle) {
@@ -191,7 +196,7 @@ fun SettingsScreen(bottomInset: Dp) {
                     }
                 }
             }
-            item {
+            run {
                 Card("Biblioteca") {
                     LinkRow("sparkles", "Lume Replay · Seu Resumo") { AppModel.push(LumeRoute.Replay) }
                     CardDivider()
@@ -200,9 +205,9 @@ fun SettingsScreen(bottomInset: Dp) {
                     LinkRow("person.2", "Artistas seguidos", "${s.followedArtists.size}") { AppModel.select(com.adriano.lumemusic.data.AppTab.LIBRARY) }
                 }
             }
-            if (accessActive) item { SettingsBackupSection() }
-            item { SettingsScrobbleSection() }
-            item {
+            if (accessActive) SettingsBackupSection()
+            SettingsScrobbleSection()
+            run {
                 Card("Armazenamento & Offline") {
                     ToggleRow("airplane", "Modo offline", "Toca apenas músicas baixadas", s.offlineMode) { s.offlineMode = it }
                     CardDivider()
@@ -213,7 +218,7 @@ fun SettingsScreen(bottomInset: Dp) {
                     LinkRow("trash", "Limpar cache de imagens e letras") { confirmCache = true }
                 }
             }
-            item {
+            run {
                 Card("Sobre") {
                     LinkRow(
                         "system.update",
@@ -236,6 +241,7 @@ fun SettingsScreen(bottomInset: Dp) {
                     }
                 }
             }
+        }
         }
     }
     if (confirmCache) AlertDialog(

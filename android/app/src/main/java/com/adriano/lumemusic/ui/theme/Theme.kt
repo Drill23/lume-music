@@ -25,6 +25,8 @@ import java.util.Locale
 
 val LocalDark = staticCompositionLocalOf { false }
 val LocalHaze = staticCompositionLocalOf<HazeState?> { null }
+/** Vidro leve (sem degradês nem sombra): telas com dezenas de superfícies, como os Ajustes, rolam lisas. */
+val LocalFlatGlass = staticCompositionLocalOf { false }
 
 fun hex(v: Long, alpha: Float = 1f): Color = Color(
     red = ((v shr 16) and 0xFF) / 255f,

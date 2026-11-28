@@ -1,20 +1,20 @@
 {
-  "versionName": "5.2.0",
-  "build": 16,
+  "versionName": "5.2.1",
+  "build": 17,
   "mandatory": false,
-  "notes": "• Volume igual, backup das playlists, widget, ListenBrainz e mais",
+  "notes": "• Ajustes mais fluidos + novidades da 5.2",
   "android": {
-    "build": 16,
-    "versionName": "5.2.0",
+    "build": 17,
+    "versionName": "5.2.1",
     "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-Android.apk",
-    "notes": "• Volume igual entre as músicas, com limitador de pico\n• Pular silêncio do começo e do fim das faixas (opcional)\n• Backup das playlists, curtidas e artistas junto com o seu acesso\n• Widget na tela inicial e Android Auto\n• ListenBrainz: registre o que você ouve",
+    "notes": "• Ajustes muito mais leves e fluidos ao rolar\n• Volume igual entre as músicas, com limitador de pico\n• Pular silêncio do começo e do fim das faixas (opcional)\n• Backup das playlists, curtidas e artistas junto com o seu acesso\n• Widget na tela inicial e Android Auto\n• ListenBrainz: registre o que você ouve",
     "mandatory": false
   },
   "ios": {
-    "build": 16,
-    "versionName": "5.2.0",
+    "build": 17,
+    "versionName": "5.2.1",
     "url": "https://github.com/Drill23/lume-music/releases/latest/download/Lume-Music-iPhone.ipa",
-    "notes": "• Volume igual entre as músicas, com limitador de pico\n• Pular silêncio do começo e do fim das faixas (opcional)\n• Backup das playlists, curtidas e artistas junto com o seu acesso\n• Widget na tela inicial (instalando pelo SideStore)\n• ListenBrainz: registre o que você ouve",
+    "notes": "• Ajustes muito mais leves e fluidos ao rolar\n• Volume igual entre as músicas, com limitador de pico\n• Pular silêncio do começo e do fim das faixas (opcional)\n• Backup das playlists, curtidas e artistas junto com o seu acesso\n• Widget na tela inicial (instalando pelo SideStore)\n• ListenBrainz: registre o que você ouve",
     "mandatory": false
   }
 }

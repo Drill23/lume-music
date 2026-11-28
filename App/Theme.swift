@@ -145,15 +145,36 @@ enum Haptics {
 
 // MARK: - Liquid Glass
 
+/// Desliga o vidro dentro de outro vidro (Apple: "não empilhe vidro sobre vidro"). Cada `glassEffect` é uma
+/// passada de GPU; dezenas delas numa lista rolando travam a tela (Ajustes com o cartão do Vitalício).
+private struct LumeFlatGlassKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+  var lumeFlatGlass: Bool {
+    get { self[LumeFlatGlassKey.self] }
+    set { self[LumeFlatGlassKey.self] = newValue }
+  }
+}
+
 /// Native iOS 26+ Liquid Glass (`glassEffect`) with a frosted-material fallback for iOS 18–25.
+/// Com `lumeFlatGlass` (vidro dentro de vidro / listas longas) vira uma superfície translúcida leve, sem blur.
 struct GlassSurface<S: Shape>: ViewModifier {
   let shape: S
   var tint: Color? = nil
   var interactive: Bool = false
   var clear: Bool = false
+  @Environment(\.lumeFlatGlass) private var flat
 
   func body(content: Content) -> some View {
-    if #available(iOS 26.0, *) {
+    if flat {
+      content
+        .background {
+          ZStack {
+            shape.fill(Theme.fillStrong)
+            if let tint { shape.fill(tint.opacity(0.16)) }
+          }
+        }
+        .overlay(shape.stroke(Theme.hairline, lineWidth: 0.7))
+    } else if #available(iOS 26.0, *) {
       content.glassEffect(glass, in: shape)
     } else {
       content

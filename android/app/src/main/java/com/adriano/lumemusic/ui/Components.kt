@@ -70,6 +70,7 @@ import com.adriano.lumemusic.data.LibraryStore
 import com.adriano.lumemusic.data.Track
 import com.adriano.lumemusic.platform.Haptics
 import com.adriano.lumemusic.ui.theme.LocalDark
+import com.adriano.lumemusic.ui.theme.LocalFlatGlass
 import com.adriano.lumemusic.ui.theme.LocalHaze
 import com.adriano.lumemusic.ui.theme.Theme
 import com.adriano.lumemusic.ui.theme.hex
@@ -97,6 +98,14 @@ fun Modifier.glass(
 ): Modifier {
     val dark = LocalDark.current
     val haze = LocalHaze.current
+    if (LocalFlatGlass.current && !blur) {
+        // Superfície leve: 1 preenchimento + 1 borda sólida (sem shaders de degradê nem sombra a cada quadro).
+        val flatFill = if (dark) Color.White.copy(alpha = 0.085f) else Color.White.copy(alpha = 0.72f)
+        val flatStroke = if (dark) Color.White.copy(alpha = 0.14f) else Color.Black.copy(alpha = 0.06f)
+        var f = this.clip(shape).background(flatFill)
+        if (tint != null) f = f.background(tint.copy(alpha = 0.18f))
+        return f.border(0.8.dp, flatStroke, shape)
+    }
     val fill = if (dark) Color.White.copy(alpha = if (blur) 0.05f else 0.09f) else Color.White.copy(alpha = if (blur) 0.42f else 0.64f)
     val strokeColors = if (dark) listOf(Color.White.copy(0.34f), Color.White.copy(0.07f), Color.White.copy(0.18f))
     else listOf(Color.White.copy(0.95f), Color.Black.copy(0.035f), Color.Black.copy(0.07f))
@@ -151,7 +160,7 @@ fun PrismChip(title: String, active: Boolean, icon: String? = null, onClick: () 
     ) {
         Row(
             Modifier.height(38.dp)
-                .then(if (active) Modifier.shadow(7.dp, shape, spotColor = Theme.rose.copy(0.38f)).clip(shape).background(Theme.prismDiagonal).border(0.8.dp, Color.White.copy(0.55f), shape)
+                .then(if (active) (if (LocalFlatGlass.current) Modifier else Modifier.shadow(7.dp, shape, spotColor = Theme.rose.copy(0.38f))).clip(shape).background(Theme.prismDiagonal).border(0.8.dp, Color.White.copy(0.55f), shape)
                 else Modifier.glass(shape))
                 .padding(horizontal = 15.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
